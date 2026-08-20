@@ -34,6 +34,11 @@ yarn-error.log*
 .env*
 !.env.example
 
+# auto-generated config files
+config-database.js
+config-gemini.js
+config-sending.js
+
 # vercel
 .vercel
 
