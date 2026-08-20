@@ -1,0 +1,24 @@
+{
+  "name": "my-sms-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "node init-configs.js && next build --webpack",
+    "start": "next start",
+    "generate-config": "node init-configs.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "jose": "^6.2.9",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.9.3",
+    "next": "16.3.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "tailwindcss": "^4"
+  }
+}

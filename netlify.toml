@@ -1,0 +1,24 @@
+# Netlify Configuration (for Admin Panel deployment - Free Tier)
+# This deploys the SAME Next.js repo to Netlify as the Admin Panel.
+# User Panel goes to Vercel; Admin Panel goes to Netlify — same GitHub repo.
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Next.js runtime plugin is auto-installed by Netlify when it detects Next.js.
+# The @netlify/plugin-nextjs plugin handles SSR/ISR/API routes automatically.
+
+# Redirect API routes to Netlify Functions (handled by plugin automatically)
+# No manual redirects needed — the plugin reads .next/manifests.
+
+# Security: protect config files from public access (they contain placeholders only,
+# real keys are added via Admin Panel at runtime, stored in MongoDB)
+[[redirects]]
+  from = "/config-*.js"
+  to = "/404"
+  status = 404
+  force = false
