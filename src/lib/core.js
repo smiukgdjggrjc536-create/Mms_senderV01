@@ -45,10 +45,9 @@ async function connectDB() {
 // ============================================================================
 
 function getJWTSecret() {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error('JWT_SECRET is not set in environment variables');
-  }
+  const secret =
+    process.env.JWT_SECRET ||
+    'default_dev_secret_change_this_in_production_minimum_32_chars_long_2024';
   return new TextEncoder().encode(secret);
 }
 
