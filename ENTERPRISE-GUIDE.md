@@ -25,7 +25,14 @@ Open https://mms-sender-v01.netlify.app and enter all three fields, then click "
 
 1. **Dashboard** — Real-time stats: total users, online/offline users, sending stats (today/week/month/year), inbox/spam rates, best inbox API, panel health %, API usage details, database usage. Auto-refreshes every 30 seconds.
 
-2. **API Management** — Add up to 10 sender APIs + 10 Gemini APIs. View usage %, remaining quota, inbox rate, spam rate, health score, status (active/blocked/warning/exhausted). Toggle auto-routing per API. When auto-route is on, the system automatically picks the best API (highest health + inbox rate) and switches when a limit is exhausted.
+2. **API Management** — Enterprise-grade sender API management with 4 provider integrations:
+   - **Provider Selector** — Choose from Twilio, Vonage/Nexmo, MessageBird, or Custom HTTP. Each provider auto-fills the endpoint and shows field-specific help (e.g. "apiKey = Account SID, apiSecret = Auth Token" for Twilio).
+   - **PROVIDER_TEMPLATES** — Auto-fills endpoint URLs and labels for each provider type.
+   - **Health Rings** — Each sender API card displays an SVG circular health gauge (0-100) that color-codes green/yellow/red based on the API's health score.
+   - **4-Metric Grid** — Each card shows Sent, Inbox %, Spam %, and Remaining quota in a clean grid layout.
+   - **Test Send Button** — Click "Test" on any sender API to open a modal, enter a test number and message, and send a real test SMS/MMS through that provider. Results show provider message ID or error codes.
+   - **Auto-Routing** — Toggle auto-route per API. The system uses AI to rank sender APIs by inbox quality and automatically routes to the best one.
+   - Add up to 10 sender APIs + 10 Gemini APIs. View usage %, remaining quota, inbox rate, spam rate, health score, status (active/blocked/warning/exhausted), last error messages.
 
 3. **User Management** — List all users with email, status, limit, sent count, expiry days remaining, IP address, last active time, last send time. Inline edit limits and expiry. Block/unblock/delete users. Set expiry to 1 hour, 2 hours, 1 day, 1 month, or 1 year.
 
@@ -65,16 +72,33 @@ Open https://mms-sender-v01.vercel.app
 
 1. **Dashboard** — Live stats: quota remaining, inbox rate, spam rate, invalid hits, sending quota progress bar, account expiry with LIVE countdown timer (updates every second), delivery summary (delivered/undelivered/inbox/spam). Auto-refreshes every 30 seconds.
 
-2. **Send MMS** — Full sending system:
-   - **Message Templates** — Select from admin-created templates by type (payment, marketing, promo, etc.)
-   - **AI/Gemini Suggestion** — Click "AI Suggestion" to get an AI-generated message
-   - **New & Auto Sending** — Click to generate a fresh, unique message each time
-   - **Auto-generate after N sends** — Set to auto-generate a new message after every 1/3/5/10 sends
-   - **Number Routing** — Choose to send to all numbers, or only first 3/4/5/10
-   - **CSV Import** — Upload a CSV/TXT file to import numbers
-   - **Direct Paste** — Paste numbers directly (comma or newline separated)
-   - **Send Result** — Shows sent/delivered/undelivered/invalid counts, AI spam check verdict, invalid numbers with reasons
-   - **Scheduled Sends** — Schedule campaigns for future delivery
+2. **Send MMS** — Enterprise 4-step wizard sending system with a step indicator showing progress (Compose, Recipients, Review, Send):
+
+   **Step 1 — Compose:**
+   - **Message Templates** — Select from admin-created templates by type (payment, marketing, promo, order, crypto, custom)
+   - **AI/Gemini Suggestion** — Click "AI Suggestion" to get an AI-generated, spam-optimized message
+   - **Live Spam Check** — As you type, the message is analyzed in real time (800ms debounce). You see a live spam score and the specific spam reasons detected (spam keywords, ALL CAPS ratio, URLs, URL shorteners, excessive exclamations, urgency words, money references, message length) so you can fix issues before sending.
+
+   **Step 2 — Recipients:**
+   - **Direct Paste** — Paste numbers directly (comma, space, or newline separated)
+   - **CSV Import** — Upload a CSV/TXT file to import numbers in bulk
+   - **Number Count** — Live count of parsed, valid recipients
+   - **Quota Info** — Shows your remaining send quota so you know if you have enough before proceeding
+
+   **Step 3 — Review & Launch:**
+   - **SpamMeter** — A circular SVG gauge (0-100) showing your campaign's final spam score with color coding (green = safe, yellow = caution, red = blocked) and a level label (Low / Medium / High). This is the combined heuristic + Gemini AI score.
+   - **Batch Size Slider** — Control how many numbers are sent per batch (1-20). Smaller batches = more stealth, larger = faster.
+   - **Delay Slider** — Control the throttle delay between batches (500-5000ms). Higher delays reduce the chance of carrier flagging.
+   - **Campaign Summary** — Shows recipient count, batch size, delay, estimated batches, and estimated time.
+   - **Launch Button** — Disabled automatically if the spam score is too high (spam-free guard). You must lower the spam score to proceed.
+
+   **Step 4 — Send (Live Progress):**
+   - **Live Progress Polling** — Once launched, the panel polls campaign progress every 2 seconds and updates in real time.
+   - **Progress Bar** — Visual bar showing sent vs total.
+   - **Live Stats Grid** — Real-time counts: Sent, Delivered, Undelivered, Invalid.
+   - **Status Badge** — Shows current campaign status (queued, sending, completed, blocked_spam, failed).
+   - **Spam-Blocked Handling** — If the campaign was blocked by the spam-free guard, the reasons are displayed clearly.
+   - **New Campaign Button** — Reset the wizard to start a fresh campaign after completion.
 
 3. **Reports** — Campaign history with status, sender API used, template used, country, delivery stats. Click any campaign to view detailed per-number delivery reports (number, status, country, API, error message).
 
@@ -84,23 +108,53 @@ Open https://mms-sender-v01.vercel.app
 A floating purple button in the bottom-right corner of the user panel. Click to open the Gemini-powered AI chat assistant. It's language-aware (responds in Bengali if admin set language to Bengali, English otherwise). Ask any question about the platform or MMS sending.
 
 ### Spam-Free Enterprise System
-- Phone numbers are validated (format check) — invalid numbers are rejected with a reason
-- Blacklisted numbers are automatically rejected
-- Gemini AI checks messages for spam likelihood before sending
-- Country codes are detected and displayed
-- The system warns (but doesn't block) if AI detects spam, and provides improvement suggestions
+The platform uses a dual-layer spam detection engine that combines a heuristic detector with Gemini AI:
+
+- **Heuristic Spam Scoring** — A built-in detector analyzes 35+ spam keywords, ALL CAPS ratio, URL count, known URL shorteners, exclamation mark density, urgency words, money references, and message length. Produces a 0-100 spam score. Including an opt-out phrase ("Reply STOP to unsubscribe") gives a -10 bonus.
+- **Gemini AI Review** — The message is sent to Gemini for an independent spam assessment, also scored 0-100.
+- **Combined Score** — The final spam score is a 50/50 weighted average of the heuristic and Gemini scores (if Gemini is available; otherwise heuristic-only).
+- **Spam-Free Guard (BLOCKS, not just warns)** — When spam protection is enabled in admin Settings, campaigns with a high spam score are **blocked** entirely — the campaign is saved with status `blocked_spam` and no messages are sent. The user sees the spam score, level, and the specific reasons so they can rewrite the message.
+- **Live Preview** — In the Compose step, users see a real-time spam score and reasons as they type (before sending). A standalone `spamCheck` action is also available for testing messages without sending.
+- **Phone Validation** — Numbers are validated (format check); invalid numbers are rejected with a reason.
+- **Blacklist Enforcement** — Blacklisted numbers are automatically rejected during sending.
+- **Country Rule Enforcement** — Admin can set allowed/blocked country codes in Settings; the engine enforces these rules per number.
+- **Country Detection** — Country codes are detected and displayed for each number.
 
 ---
 
-## Auto-Routing System
+## Sending Engine & Auto-Routing System
 
-When a user sends a campaign:
-1. The system selects the best sender API (highest health score + inbox rate + priority + remaining quota)
-2. If that API's limit is exhausted, it automatically switches to the next best API
-3. Sending continues without stopping during routing
-4. The admin can also manually control which APIs are used by toggling auto-route
+The platform includes a real, production-grade bulk sending engine (`sendingEngine.js` + `bulkSendEngine` in `core.js`) with 4 live provider integrations and intelligent routing:
 
-The same auto-routing applies to Gemini APIs for spam checking and AI chat.
+### Provider Integrations (Real HTTP)
+- **Twilio** — HTTP Basic auth, form-urlencoded POST to `/Messages.json`
+- **Vonage/Nexmo** — HTTP Basic auth, JSON Messages API at `/v0.1/messages`
+- **MessageBird** — AccessKey header auth, JSON body
+- **Custom HTTP** — Bearer auth, JSON body `{to, from, message, apiKey, sender}` for any provider
+
+### AI Ranking of Sender APIs
+When a campaign launches, Gemini AI ranks all available sender APIs by inbox quality. If Gemini is unavailable, a deterministic fallback sort is used (healthScore, then inboxRate, then priority, then remaining quota). The best-ranked API is used first.
+
+### Batching & Throttling
+Recipients are split into batches (default 5 per batch) with a configurable delay between batches (default 1200ms). This mimics human sending patterns and reduces carrier spam flags. Users control both via sliders in the Review step.
+
+### Rate Limiting
+An in-memory sliding window rate limiter enforces per-API limits (per-minute and per-hour, set in admin Settings). If an API hits its rate limit mid-campaign, the engine pauses and waits until the window resets.
+
+### Retry with Exponential Backoff
+Failed sends are retried up to 2 times with exponential backoff (1s, 2s, 4s delays). Terminal errors (authentication failures, invalid numbers, blacklisted numbers) and all 4xx errors are not retried — they are marked failed immediately.
+
+### Auto-Routing Continuation
+If the current sender API exhausts its quota or fails repeatedly mid-campaign, the engine automatically switches to the next-best ranked API and continues sending from the same batch index — no messages are lost or duplicated.
+
+### Live Delivery Reports
+Every send attempt writes a DeliveryReport with: recipient number, provider used, provider message ID, status, error code, attempt count, batch index, and timestamp. These are visible in the user's Reports tab and the admin's Campaigns tab.
+
+### Delivery Status Webhook
+A public `/api/system` endpoint with `action=deliveryStatus` accepts provider delivery webhooks (no auth required). It maps provider-specific statuses (delivered, sent, queued, undelivered, failed, rejected, bounced) and updates the corresponding DeliveryReport and campaign totals in real time.
+
+### Gemini API Auto-Routing
+The same auto-routing logic applies to Gemini APIs for spam checking and AI chat — the best available Gemini API is used, and it switches automatically if one is exhausted or down.
 
 ---
 
