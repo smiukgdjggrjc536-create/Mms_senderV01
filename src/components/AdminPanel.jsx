@@ -220,174 +220,341 @@ function AdminDashboard({ user, onLogout, onRefresh }) {
 // ============================================================================
 function Spinner() { return <div className="flex items-center justify-center py-12"><div className="w-8 h-8 border-3 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div></div>; }
 
-// Enterprise StatCard — gradient top bar, glow shadow, optional icon
-function StatCard({ label, value, sub, color, icon }) {
-  const palette = {
-    blue:   { bar: 'from-blue-400 to-blue-600',   glow: 'shadow-blue-500/20',   text: 'text-blue-400',   ring: 'ring-blue-700/30' },
-    green:  { bar: 'from-green-400 to-green-600', glow: 'shadow-green-500/20',  text: 'text-green-400',  ring: 'ring-green-700/30' },
-    red:    { bar: 'from-red-400 to-red-600',     glow: 'shadow-red-500/20',    text: 'text-red-400',    ring: 'ring-red-700/30' },
-    yellow: { bar: 'from-yellow-400 to-yellow-600', glow: 'shadow-yellow-500/20', text: 'text-yellow-400', ring: 'ring-yellow-700/30' },
-    purple: { bar: 'from-purple-400 to-purple-600', glow: 'shadow-purple-500/20', text: 'text-purple-400', ring: 'ring-purple-700/30' },
-    cyan:   { bar: 'from-cyan-400 to-cyan-600',   glow: 'shadow-cyan-500/20',   text: 'text-cyan-400',   ring: 'ring-cyan-700/30' },
-  };
-  const p = palette[color] || palette.blue;
+// ============================================================================
+// ENTERPRISE DASHBOARD — sleek, modern, data-dense, no ugly boxes
+// Reusable visual primitives
+// ============================================================================
+
+// Thin progress bar (used inside cards/rows)
+function ProgressBar({ percent, color }) {
+  const c = color || (percent > 80 ? 'from-red-500 to-rose-500' : percent > 50 ? 'from-amber-400 to-orange-500' : 'from-emerald-400 to-teal-500');
   return (
-    <div className={`relative bg-slate-900/60 border border-slate-800 rounded-xl p-4 pt-5 overflow-hidden ring-1 ${p.ring} shadow-lg ${p.glow} transition hover:scale-[1.02] hover:${p.glow}`}>
-      <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${p.bar}`} />
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">{label}</p>
-          <p className={`text-2xl font-bold mt-1 ${p.text}`}>{value}</p>
-          {sub && <p className="text-xs text-gray-500 mt-1">{sub}</p>}
-        </div>
-        {icon && <div className={`text-2xl ${p.text} opacity-80`}>{icon}</div>}
-      </div>
+    <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
+      <div className={`h-full rounded-full bg-gradient-to-r ${c} transition-all duration-700`} style={{ width: `${Math.min(100, percent)}%` }} />
     </div>
   );
 }
 
-// Progress bar
-function ProgressBar({ percent, color }) {
-  const c = color || (percent > 80 ? 'bg-red-500' : percent > 50 ? 'bg-yellow-500' : 'bg-green-500');
-  return <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden"><div className={`${c} h-full rounded-full transition-all`} style={{width: `${Math.min(100, percent)}%`}}></div></div>;
+// Compact KPI tile — flat, glassy, subtle left accent. NOT the old bulky box.
+function Kpi({ label, value, sub, tone = 'slate', live, trend }) {
+  const tones = {
+    slate:  { accent: 'bg-slate-600',   value: 'text-white',      glow: '' },
+    green:  { accent: 'bg-emerald-500',  value: 'text-emerald-300', glow: 'shadow-emerald-500/10' },
+    red:    { accent: 'bg-rose-500',     value: 'text-rose-300',    glow: 'shadow-rose-500/10' },
+    amber:  { accent: 'bg-amber-500',    value: 'text-amber-300',   glow: 'shadow-amber-500/10' },
+    blue:   { accent: 'bg-sky-500',      value: 'text-sky-300',     glow: 'shadow-sky-500/10' },
+    violet: { accent: 'bg-violet-500',   value: 'text-violet-300',  glow: 'shadow-violet-500/10' },
+    cyan:   { accent: 'bg-cyan-500',     value: 'text-cyan-300',    glow: 'shadow-cyan-500/10' },
+  };
+  const t = tones[tone] || tones.slate;
+  return (
+    <div className={`relative bg-slate-900/50 border border-slate-800/80 rounded-lg px-4 py-3 overflow-hidden hover:border-slate-700 transition-colors`}>
+      <span className={`absolute left-0 top-0 bottom-0 w-0.5 ${t.accent}`} />
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] text-slate-500 font-medium uppercase tracking-wide truncate">{label}</p>
+        {live && <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />LIVE</span>}
+      </div>
+      <div className="flex items-baseline gap-2 mt-1">
+        <p className={`text-2xl font-semibold tabular-nums ${t.value} leading-none`}>{value}</p>
+        {trend != null && <span className={`text-[11px] font-semibold ${trend >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{trend >= 0 ? '▲' : '▼'} {Math.abs(trend)}%</span>}
+      </div>
+      {sub && <p className="text-[11px] text-slate-600 mt-1 truncate">{sub}</p>}
+    </div>
+  );
+}
+
+// Radial gauge (pure SVG) for percentage metrics like inbox rate / panel health
+function RadialGauge({ value, label, sub, color = '#34d399', size = 120 }) {
+  const r = size / 2 - 8;
+  const c = 2 * Math.PI * r;
+  const off = c - (Math.min(100, Math.max(0, value)) / 100) * c;
+  return (
+    <div className="flex flex-col items-center">
+      <div className="relative" style={{ width: size, height: size }}>
+        <svg width={size} height={size} className="-rotate-90">
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#1e293b" strokeWidth="7" />
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth="7" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={off} style={{ transition: 'stroke-dashoffset 0.8s ease' }} />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-2xl font-bold text-white tabular-nums leading-none">{value}%</span>
+        </div>
+      </div>
+      <p className="text-xs text-slate-400 font-medium mt-2">{label}</p>
+      {sub && <p className="text-[10px] text-slate-600">{sub}</p>}
+    </div>
+  );
+}
+
+// Horizontal bar row (for API usage list — clean, no boxes)
+function UsageRow({ name, type, used, limit, percent, status, extras, last }) {
+  const statusMap = {
+    active:  { dot: 'bg-emerald-400', txt: 'text-emerald-400' },
+    warning: { dot: 'bg-amber-400', txt: 'text-amber-400' },
+    blocked: { dot: 'bg-rose-400', txt: 'text-rose-400' },
+    paused:  { dot: 'bg-slate-500', txt: 'text-slate-500' },
+  };
+  const s = statusMap[status] || statusMap.paused;
+  return (
+    <div className={`py-3 ${last ? '' : 'border-b border-slate-800/60'}`}>
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className={`w-1.5 h-1.5 rounded-full ${s.dot} flex-none`} />
+          <span className="text-sm text-slate-200 font-medium truncate">{name}</span>
+          <span className="text-[10px] text-slate-600 uppercase tracking-wide flex-none">{type}</span>
+        </div>
+        <span className={`text-[10px] font-semibold ${s.txt} uppercase flex-none`}>{status}</span>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="flex-1"><ProgressBar percent={percent} /></div>
+        <span className="text-[11px] text-slate-500 tabular-nums flex-none w-24 text-right">{used}/{limit}</span>
+      </div>
+      {extras && <div className="flex gap-4 mt-1.5 text-[10px] text-slate-600">{extras}</div>}
+    </div>
+  );
+}
+
+// Live online-user pill list (uses users.withDetails)
+function UserPresenceList({ users, limit = 8 }) {
+  const sorted = [...(users || [])].sort((a, b) => {
+    if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1;
+    return (b.lastActiveAt || 0) - (a.lastActiveAt || 0);
+  }).slice(0, limit);
+  if (sorted.length === 0) return <p className="text-xs text-slate-600 py-4 text-center">No users yet.</p>;
+  return (
+    <div className="divide-y divide-slate-800/50">
+      {sorted.map((u) => (
+        <div key={u._id || u.email} className="flex items-center gap-3 py-2.5">
+          <span className={`w-2 h-2 rounded-full flex-none ${u.isOnline ? 'bg-emerald-400 shadow-emerald-400/50 shadow-sm animate-pulse' : 'bg-slate-700'}`} />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-slate-200 font-medium truncate">{u.email}</p>
+            <p className="text-[10px] text-slate-600">last active {u.lastActiveAgo || '—'}</p>
+          </div>
+          <div className="flex-none text-right">
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase ${u.status === 'active' ? 'bg-emerald-500/10 text-emerald-400' : u.status === 'suspended' ? 'bg-rose-500/10 text-rose-400' : 'bg-slate-700/40 text-slate-400'}`}>{u.status}</span>
+            {u.sentCount != null && <p className="text-[10px] text-slate-600 mt-0.5">{u.sentCount} sent</p>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Mini bar chart (pure divs) for sending trend
+function MiniBars({ values, labels }) {
+  const max = Math.max(1, ...values);
+  return (
+    <div className="flex items-end gap-2 h-20">
+      {values.map((v, i) => (
+        <div key={i} className="flex-1 flex flex-col items-center gap-1">
+          <div className="w-full flex items-end justify-center" style={{ height: '100%' }}>
+            <div className="w-full max-w-[28px] rounded-t bg-gradient-to-t from-sky-600/40 to-sky-400 transition-all duration-700" style={{ height: `${(v / max) * 100}%`, minHeight: v > 0 ? '4px' : '2px' }} title={`${labels[i]}: ${v}`} />
+          </div>
+          <span className="text-[9px] text-slate-600 uppercase">{labels[i]}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Section wrapper with header + optional action
+function Section({ title, subtitle, action, children, className = '' }) {
+  return (
+    <section className={`bg-slate-900/40 border border-slate-800/70 rounded-xl p-4 ${className}`}>
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-200">{title}</h3>
+          {subtitle && <p className="text-[11px] text-slate-600 mt-0.5">{subtitle}</p>}
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
 }
 
 // ============================================================================
-// DASHBOARD TAB
+// ENTERPRISE DASHBOARD TAB — replaces old boxy dashboard
+// Same data shape (getDashboardStats), fully backward compatible.
 // ============================================================================
 function DashboardTab() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
     const data = await api('getDashboardStats');
-    if (data.success) setStats(data.stats);
+    if (data.success) { setStats(data.stats); setLastUpdated(new Date()); }
     setLoading(false);
   }, []);
 
   useEffect(() => { load(); const interval = setInterval(load, 30000); return () => clearInterval(interval); }, [load]);
 
-  if (loading) return <Spinner />;
-  if (!stats) return <p className="text-gray-500">Failed to load stats</p>;
+  if (loading && !stats) return <Spinner />;
+  if (!stats) return <p className="text-slate-500">Failed to load stats.</p>;
+
+  const ph = stats.apiHealth.panelHealth;
+  const healthColor = ph > 70 ? '#34d399' : ph > 40 ? '#fbbf24' : '#fb7185';
+  const healthTone = ph > 70 ? 'green' : ph > 40 ? 'amber' : 'red';
+  const onlinePct = stats.users.total > 0 ? Math.round((stats.users.online / stats.users.total) * 100) : 0;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-white">Dashboard</h2>
-        <button onClick={load} className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300"><Icon.Refresh />Refresh</button>
+    <div className="space-y-5">
+      {/* ── Top bar: title + live status + refresh ── */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /> Operations Overview
+          </h2>
+          <p className="text-[11px] text-slate-600 mt-0.5">
+            {lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString()} · auto-refresh 30s` : 'Auto-refresh every 30s'}
+          </p>
+        </div>
+        <button onClick={load} className="flex items-center gap-2 text-xs text-slate-400 hover:text-sky-400 bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-1.5 transition">
+          <Icon.Refresh /> Refresh
+        </button>
       </div>
 
-      {/* User Status */}
-      <div>
-        <h3 className="text-sm font-semibold text-gray-400 uppercase mb-3">User Status</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard label="Total Users" value={stats.users.total} color="blue" />
-          <StatCard label="Online Now" value={stats.users.online} color="green" sub="Active in last 5 min" />
-          <StatCard label="Offline" value={stats.users.offline} color="yellow" />
-          <StatCard label="Suspended" value={stats.users.suspended} color="red" />
-        </div>
+      {/* ── Row 1: Primary KPIs (6 compact tiles, replacing ugly boxes) ── */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <Kpi label="Total Users" value={stats.users.total} sub={`${stats.users.suspended} suspended`} tone="blue" />
+        <Kpi label="Online Now" value={stats.users.online} sub={`${onlinePct}% of total`} tone="green" live />
+        <Kpi label="Sent Today" value={stats.sending.today} sub={`${stats.sending.running} running`} tone="cyan" />
+        <Kpi label="Delivered" value={stats.inboxSpam.totalDelivered} sub={`${stats.inboxSpam.totalUndelivered} undelivered`} tone="violet" />
+        <Kpi label="Spam Blocked" value={stats.inboxSpam.totalSpam} sub={`${stats.inboxSpam.spamRate}% rate`} tone="red" />
+        <Kpi label="APIs Healthy" value={`${stats.apiHealth.good.length}/${stats.apiHealth.good.length + stats.apiHealth.warning.length + stats.apiHealth.blocked.length}`} sub={`${stats.apiHealth.blocked.length} blocked`} tone={stats.apiHealth.blocked.length > 0 ? 'amber' : 'green'} />
       </div>
 
-      {/* Sending Status */}
-      <div>
-        <h3 className="text-sm font-semibold text-gray-400 uppercase mb-3">Sending Status</h3>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <StatCard label="Today" value={stats.sending.today} color="cyan" />
-          <StatCard label="This Week" value={stats.sending.week} color="cyan" />
-          <StatCard label="This Month" value={stats.sending.month} color="blue" />
-          <StatCard label="This Year" value={stats.sending.year} color="purple" />
-          <StatCard label="Running Now" value={stats.sending.running} color="green" />
-        </div>
+      {/* ── Row 2: 3-column hero — Inbox gauge | Panel health gauge | Sending trend ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Inbox quality */}
+        <Section title="Delivery Quality" subtitle={`${stats.inboxSpam.totalSent} total messages sent`}>
+          <div className="flex items-center gap-4">
+            <RadialGauge value={stats.inboxSpam.inboxRate} label="Inbox Rate" sub={`${stats.inboxSpam.totalInbox} inbox`} color="#34d399" />
+            <div className="flex-1 space-y-2">
+              <div className="flex items-center justify-between text-xs"><span className="text-slate-500">Spam rate</span><span className="text-rose-400 font-semibold">{stats.inboxSpam.spamRate}%</span></div>
+              <ProgressBar percent={stats.inboxSpam.spamRate} color="from-rose-500 to-red-500" />
+              <div className="flex items-center justify-between text-xs pt-1"><span className="text-slate-500">Invalid numbers</span><span className="text-slate-300">{stats.inboxSpam.totalInvalid}</span></div>
+              {stats.apiHealth.bestSenderForInbox && (
+                <div className="mt-2 pt-2 border-t border-slate-800/60">
+                  <p className="text-[10px] text-slate-600 uppercase tracking-wide">Best sender</p>
+                  <p className="text-sm text-emerald-300 font-medium">{stats.apiHealth.bestSenderForInbox.name} · {stats.apiHealth.bestSenderForInbox.inboxRate}%</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </Section>
+
+        {/* Panel health */}
+        <Section title="Platform Health" subtitle="Aggregated API health score">
+          <div className="flex items-center gap-4">
+            <RadialGauge value={ph} label="Panel Health" color={healthColor} />
+            <div className="flex-1 space-y-2">
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="bg-emerald-500/5 border border-emerald-700/20 rounded-md py-2"><p className="text-lg font-semibold text-emerald-300">{stats.apiHealth.good.length}</p><p className="text-[9px] text-slate-600 uppercase">Good</p></div>
+                <div className="bg-amber-500/5 border border-amber-700/20 rounded-md py-2"><p className="text-lg font-semibold text-amber-300">{stats.apiHealth.warning.length}</p><p className="text-[9px] text-slate-600 uppercase">Warn</p></div>
+                <div className="bg-rose-500/5 border border-rose-700/20 rounded-md py-2"><p className="text-lg font-semibold text-rose-300">{stats.apiHealth.blocked.length}</p><p className="text-[9px] text-slate-600 uppercase">Blocked</p></div>
+              </div>
+              {(stats.apiHealth.blocked.length > 0 || stats.apiHealth.warning.length > 0) ? (
+                <p className="text-[10px] text-slate-600 pt-1">
+                  {stats.apiHealth.blocked.length > 0 && <span className="text-rose-400/80">⚠ {stats.apiHealth.blocked.map(a => a.name).join(', ')} blocked. </span>}
+                  {stats.apiHealth.warning.length > 0 && <span className="text-amber-400/80">⚠ {stats.apiHealth.warning.map(a => a.name).join(', ')} need attention.</span>}
+                </p>
+              ) : (
+                <p className="text-[10px] text-emerald-400/70 pt-1">✓ All APIs operating normally.</p>
+              )}
+            </div>
+          </div>
+        </Section>
+
+        {/* Sending trend */}
+        <Section title="Sending Volume" subtitle="Messages sent by period">
+          <MiniBars values={[stats.sending.today, Math.round(stats.sending.week / 7), Math.round(stats.sending.month / 30), stats.sending.year]} labels={['Day', 'Avg/D', 'Avg/D', 'Year']} />
+          <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-800/60">
+            <div><p className="text-[10px] text-slate-600 uppercase">This week</p><p className="text-sm text-slate-200 font-semibold">{stats.sending.week}</p></div>
+            <div><p className="text-[10px] text-slate-600 uppercase">Running now</p><p className="text-sm text-emerald-300 font-semibold flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />{stats.sending.running} campaigns</p></div>
+          </div>
+        </Section>
       </div>
 
-      {/* Inbox / Spam */}
-      <div>
-        <h3 className="text-sm font-semibold text-gray-400 uppercase mb-3">Inbox & Spam Report</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard label="Inbox Rate" value={`${stats.inboxSpam.inboxRate}%`} color="green" sub={`${stats.inboxSpam.totalInbox} inbox`} />
-          <StatCard label="Spam Rate" value={`${stats.inboxSpam.spamRate}%`} color="red" sub={`${stats.inboxSpam.totalSpam} spam`} />
-          <StatCard label="Delivered" value={stats.inboxSpam.totalDelivered} color="blue" />
-          <StatCard label="Undelivered" value={stats.inboxSpam.totalUndelivered} color="yellow" />
-          {stats.apiHealth.bestSenderForInbox && <StatCard label="Best Inbox API" value={stats.apiHealth.bestSenderForInbox.name} color="green" sub={`${stats.apiHealth.bestSenderForInbox.inboxRate}% inbox`} />}
-        </div>
+      {/* ── Row 3: API usage (clean rows, no boxes) + Live users ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* API usage — spans 2 cols */}
+        <Section
+          className="lg:col-span-2"
+          title="API Usage & Routing"
+          subtitle="Sender + Gemini AI — live consumption"
+          action={<span className="text-[10px] text-slate-600">{stats.apiHealth.senderApis.length + stats.apiHealth.geminiApis.length} APIs</span>}
+        >
+          {stats.apiHealth.senderApis.length === 0 && stats.apiHealth.geminiApis.length === 0 ? (
+            <p className="text-xs text-slate-600 py-6 text-center">No APIs configured. Add them in <span className="text-sky-400">API Management</span>.</p>
+          ) : (
+            <div>
+              {stats.apiHealth.senderApis.map((a, i) => (
+                <UsageRow
+                  key={a.id}
+                  name={a.name}
+                  type="Sender"
+                  used={a.used}
+                  limit={a.limit}
+                  percent={a.usagePercent}
+                  status={a.status}
+                  last={i === stats.apiHealth.senderApis.length - 1 && stats.apiHealth.geminiApis.length === 0}
+                  extras={[
+                    <span key="in">Inbox {a.inboxRate}%</span>,
+                    <span key="sp">Spam {a.spamRate}%</span>,
+                    <span key="hl">Health {a.healthScore}%</span>,
+                    a.autoRoute && <span key="ar" className="text-sky-400/70">Auto-route</span>,
+                  ]}
+                />
+              ))}
+              {stats.apiHealth.geminiApis.map((a, i) => (
+                <UsageRow
+                  key={a.id}
+                  name={a.name}
+                  type="Gemini AI"
+                  used={a.used}
+                  limit={a.limit}
+                  percent={a.usagePercent}
+                  status={a.status}
+                  last={i === stats.apiHealth.geminiApis.length - 1}
+                  extras={[<span key="hl">Health {a.healthScore}%</span>, a.autoRoute && <span key="ar" className="text-sky-400/70">Auto-route</span>]}
+                />
+              ))}
+            </div>
+          )}
+        </Section>
+
+        {/* Live users */}
+        <Section
+          title="Live User Presence"
+          subtitle={`${stats.users.online} online of ${stats.users.total}`}
+          action={<span className="flex items-center gap-1 text-[10px] text-emerald-400"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />{onlinePct}%</span>}
+        >
+          <UserPresenceList users={stats.users.withDetails} />
+        </Section>
       </div>
 
-      {/* Panel & API Health */}
-      <div>
-        <h3 className="text-sm font-semibold text-gray-400 uppercase mb-3">Panel & API Health</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-          <StatCard label="Panel Health" value={`${stats.apiHealth.panelHealth}%`} color={stats.apiHealth.panelHealth > 70 ? 'green' : stats.apiHealth.panelHealth > 40 ? 'yellow' : 'red'} />
-          <StatCard label="Blocked APIs" value={stats.apiHealth.blocked.length} color="red" />
-          <StatCard label="Warning APIs" value={stats.apiHealth.warning.length} color="yellow" />
-          <StatCard label="Good APIs" value={stats.apiHealth.good.length} color="green" />
-        </div>
-        {stats.apiHealth.blocked.length > 0 && (
-          <div className="bg-red-900/20 border border-red-800/30 rounded-lg p-3 mb-2">
-            <p className="text-red-400 text-sm font-semibold mb-1">Blocked APIs:</p>
-            <p className="text-red-300 text-xs">{stats.apiHealth.blocked.map(a => `${a.name} (${a.type})`).join(', ')}</p>
+      {/* ── Row 4: Database usage (clean rows) ── */}
+      <Section title="Database Connections" subtitle="MongoDB storage utilization">
+        {stats.database.length === 0 ? (
+          <p className="text-xs text-slate-600 py-3 text-center">Using default MongoDB connection.</p>
+        ) : (
+          <div>
+            {stats.database.map((db, i) => (
+              <UsageRow
+                key={db.id}
+                name={`${db.label}${db.isActive ? ' · Active' : ''}`}
+                type="MongoDB"
+                used={`${db.storageUsed}MB`}
+                limit={`${db.storageLimit}MB`}
+                percent={db.usagePercent}
+                status={db.isActive ? 'active' : 'paused'}
+                last={i === stats.database.length - 1}
+              />
+            ))}
           </div>
         )}
-        {stats.apiHealth.warning.length > 0 && (
-          <div className="bg-yellow-900/20 border border-yellow-800/30 rounded-lg p-3 mb-2">
-            <p className="text-yellow-400 text-sm font-semibold mb-1">Warning APIs (may have issues):</p>
-            <p className="text-yellow-300 text-xs">{stats.apiHealth.warning.map(a => `${a.name} (${a.type})`).join(', ')}</p>
-          </div>
-        )}
-        {stats.apiHealth.good.length > 0 && (
-          <div className="bg-green-900/20 border border-green-800/30 rounded-lg p-3">
-            <p className="text-green-400 text-sm font-semibold mb-1">Working well:</p>
-            <p className="text-green-300 text-xs">{stats.apiHealth.good.map(a => a.inboxRate != null ? `${a.name} (${a.inboxRate}% inbox)` : `${a.name} (${a.type})`).join(', ')}</p>
-          </div>
-        )}
-      </div>
-
-      {/* API Usage Details */}
-      <div>
-        <h3 className="text-sm font-semibold text-gray-400 uppercase mb-3">API Usage Details</h3>
-        <div className="space-y-3">
-          {stats.apiHealth.senderApis.map(a => (
-            <div key={a.id} className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium text-white">{a.name} <span className="text-xs text-gray-500">(Sender)</span></span>
-                <span className={`text-xs px-2 py-0.5 rounded ${a.status === 'active' ? 'bg-green-900/40 text-green-400' : a.status === 'warning' ? 'bg-yellow-900/40 text-yellow-400' : a.status === 'blocked' ? 'bg-red-900/40 text-red-400' : 'bg-gray-800 text-gray-500'}`}>{a.status}</span>
-              </div>
-              <div className="flex gap-4 text-xs text-gray-500 mb-2">
-                <span>Used: {a.used}/{a.limit}</span><span>Inbox: {a.inboxRate}%</span><span>Spam: {a.spamRate}%</span><span>Health: {a.healthScore}%</span>
-              </div>
-              <ProgressBar percent={a.usagePercent} />
-            </div>
-          ))}
-          {stats.apiHealth.geminiApis.map(a => (
-            <div key={a.id} className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium text-white">{a.name} <span className="text-xs text-gray-500">(Gemini AI)</span></span>
-                <span className={`text-xs px-2 py-0.5 rounded ${a.status === 'active' ? 'bg-green-900/40 text-green-400' : a.status === 'warning' ? 'bg-yellow-900/40 text-yellow-400' : 'bg-gray-800 text-gray-500'}`}>{a.status}</span>
-              </div>
-              <div className="flex gap-4 text-xs text-gray-500 mb-2"><span>Used: {a.used}/{a.limit}</span><span>Health: {a.healthScore}%</span></div>
-              <ProgressBar percent={a.usagePercent} />
-            </div>
-          ))}
-          {stats.apiHealth.senderApis.length === 0 && stats.apiHealth.geminiApis.length === 0 && <p className="text-gray-600 text-sm">No APIs configured. Add APIs in API Management tab.</p>}
-        </div>
-      </div>
-
-      {/* Database Usage */}
-      <div>
-        <h3 className="text-sm font-semibold text-gray-400 uppercase mb-3">Database Usage</h3>
-        <div className="space-y-3">
-          {stats.database.map(db => (
-            <div key={db.id} className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium text-white">{db.label} {db.isActive && <span className="text-xs text-green-400">(Active)</span>}</span>
-                <span className="text-xs text-gray-500">{db.storageUsed}MB / {db.storageLimit}MB</span>
-              </div>
-              <ProgressBar percent={db.usagePercent} />
-            </div>
-          ))}
-          {stats.database.length === 0 && <p className="text-gray-600 text-sm">Using default MongoDB connection.</p>}
-        </div>
-      </div>
+      </Section>
     </div>
   );
 }
