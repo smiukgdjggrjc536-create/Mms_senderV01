@@ -11,65 +11,46 @@ import path from 'path';
 const ENV_MONGODB_URI =
   process.env.MONGODB_URI || 'mongodb://localhost:27017/sms_campaign_db';
 
-const cached = { conn: null, promise: null, uri: null };
-
-async function getActiveMongoURI() {
-  try {
-    // If already connected, return cached URI
-    if (cached.uri) return cached.uri;
-
-    // Try to read active connection from database
-    // We need a temporary connection using ENV URI to read the config
-    if (mongoose.connection.readyState === 0) {
-      // Not connected — connect with ENV URI temporarily
-      const opts = { bufferCommands: false };
-      await mongoose.connect(ENV_MONGODB_URI, opts);
-    }
-
-    const MongoConnection =
-      mongoose.models.MongoConnection ||
-      mongoose.model(
-        'MongoConnection',
-        new mongoose.Schema({
-          label: { type: String, required: true },
-          uri: { type: String, required: true },
-          isActive: { type: Boolean, default: false },
-          createdAt: { type: Date, default: Date.now },
-        })
-      );
-
-    const active = await MongoConnection.findOne({ isActive: true });
-    if (active && active.uri) {
-      cached.uri = active.uri;
-      return active.uri;
-    }
-
-    // No active connection in DB — use ENV URI
-    cached.uri = ENV_MONGODB_URI;
-    return ENV_MONGODB_URI;
-  } catch (err) {
-    // If anything fails, fall back to ENV URI
-    return ENV_MONGODB_URI;
-  }
-}
+const cached = { conn: null, promise: null };
 
 async function connectDB() {
   if (cached.conn) {
     return cached.conn;
   }
 
-  const uri = await getActiveMongoURI();
-
-  if (!cached.promise || cached.uri !== uri) {
-    cached.promise = null;
-    cached.uri = uri;
+  if (!cached.promise) {
     const opts = {
       bufferCommands: false,
     };
 
     cached.promise = mongoose
-      .connect(uri, opts)
-      .then((mongooseInstance) => {
+      .connect(ENV_MONGODB_URI, opts)
+      .then(async (mongooseInstance) => {
+        // After connecting with ENV URI, check if there's an active
+        // MongoConnection in the database that we should switch to
+        try {
+          const MongoConnectionModel =
+            mongoose.models.MongoConnection ||
+            mongoose.model(
+              'MongoConnection',
+              new mongoose.Schema({
+                label: { type: String, required: true },
+                uri: { type: String, required: true },
+                isActive: { type: Boolean, default: false },
+                createdAt: { type: Date, default: Date.now },
+              })
+            );
+
+          const active = await MongoConnectionModel.findOne({ isActive: true });
+          if (active && active.uri && active.uri !== ENV_MONGODB_URI) {
+            // Switch to the active database URI
+            await mongoose.disconnect();
+            return mongoose.connect(active.uri, opts);
+          }
+        } catch (err) {
+          // If checking active connection fails, continue with ENV URI
+          // This is fine — the ENV URI is always the fallback
+        }
         return mongooseInstance;
       });
   }
@@ -94,9 +75,11 @@ async function reconnectDB(newUri) {
     // ignore disconnect errors
   }
   cached.conn = null;
-  cached.promise = null;
-  cached.uri = newUri;
-  return connectDB();
+  cached.promise = mongoose
+    .connect(newUri, { bufferCommands: false })
+    .then((instance) => instance);
+  cached.conn = await cached.promise;
+  return cached.conn;
 }
 
 // ============================================================================
@@ -263,7 +246,6 @@ function jsonResponse(data, status = 200) {
 export {
   connectDB,
   reconnectDB,
-  getActiveMongoURI,
   getJWTSecret,
   createToken,
   verifyToken,
