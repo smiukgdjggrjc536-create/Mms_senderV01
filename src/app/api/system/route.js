@@ -741,11 +741,20 @@ export async function POST(req) {
     // ================================================================
 
     if (action === 'getAppSettings') {
-      const auth = await verifyAny(req);
-      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      // Public — returns platform name, description, contact info (safe for login page)
       await connectDB();
       const settings = await getAppSettings();
-      return jsonResponse({ success: true, settings });
+      // Only expose public fields (no sensitive alert config etc.)
+      const publicSettings = {
+        platformName: settings.platformName,
+        logoUrl: settings.logoUrl,
+        description: settings.description,
+        whatsapp: settings.whatsapp,
+        email: settings.email,
+        phone: settings.phone,
+        language: settings.language,
+      };
+      return jsonResponse({ success: true, settings: publicSettings });
     }
 
     if (action === 'updateAppSettings') {
