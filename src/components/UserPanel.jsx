@@ -30,6 +30,7 @@ const Icon = {
   Inbox: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-3.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 007.586 13H4" /></svg>,
   Shield: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>,
   Bolt: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>,
+  Activity: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>,
   Upload: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>,
   Trash: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>,
 };
@@ -631,23 +632,83 @@ function DashboardTab({ stats, loading, now, language }) {
 // ================================================================
 // SEND TAB — templates, AI suggestion, auto-new, number routing, direct paste
 // ================================================================
+// ================================================================
+// SPAM METER — SVG circular gauge (0-100)
+// ================================================================
+function SpamMeter({ score, level }) {
+  const size = 120;
+  const r = (size - 16) / 2;
+  const c = 2 * Math.PI * r;
+  const pct = Math.max(0, Math.min(100, score));
+  const dash = (pct / 100) * c;
+  const color = level === 'high' ? '#ef4444' : level === 'moderate' ? '#eab308' : '#22c55e';
+  const label = level === 'high' ? 'HIGH SPAM RISK' : level === 'moderate' ? 'MODERATE RISK' : 'CLEAN';
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <svg width={size} height={size}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#1e293b" strokeWidth="8" />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth="8"
+          strokeDasharray={`${dash} ${c}`} strokeLinecap="round"
+          transform={`rotate(-90 ${size / 2} ${size / 2})`} className="transition-all duration-700" />
+        <text x="50%" y="48%" textAnchor="middle" dominantBaseline="middle" className="fill-white text-3xl font-bold">{pct}</text>
+        <text x="50%" y="65%" textAnchor="middle" dominantBaseline="middle" className="fill-gray-500 text-[9px] uppercase">spam score</text>
+      </svg>
+      <span className="text-xs font-bold" style={{ color }}>{label}</span>
+    </div>
+  );
+}
+
+// ================================================================
+// STEP INDICATOR — shows 4 wizard steps with progress
+// ================================================================
+function StepIndicator({ current, steps }) {
+  return (
+    <div className="flex items-center justify-between mb-6 px-2">
+      {steps.map((s, i) => (
+        <div key={i} className="flex items-center flex-1 last:flex-none">
+          <div className="flex items-center gap-2">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition ${
+              i < current ? 'bg-green-600 text-white' : i === current ? 'bg-purple-600 text-white ring-4 ring-purple-500/20' : 'bg-gray-800 text-gray-500'
+            }`}>
+              {i < current ? <Icon.Check className="w-4 h-4" /> : i + 1}
+            </div>
+            <span className={`text-xs font-medium hidden sm:inline ${i <= current ? 'text-gray-200' : 'text-gray-600'}`}>{s}</span>
+          </div>
+          {i < steps.length - 1 && <div className={`flex-1 h-0.5 mx-2 transition ${i < current ? 'bg-green-600' : 'bg-gray-800'}`} />}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ================================================================
+// SEND TAB — Enterprise 4-Step Wizard
+//   Step 1: Compose (message + AI + templates + live spam preview)
+//   Step 2: Recipients (numbers + CSV import + routing)
+//   Step 3: Review (spam meter + batch/delay controls + summary)
+//   Step 4: Send (live progress polling)
+// ================================================================
 function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, language }) {
+  const [step, setStep] = useState(0); // 0=compose, 1=recipients, 2=review, 3=send
   const [message, setMessage] = useState('');
   const [numbersText, setNumbersText] = useState('');
-  const [sendType, setSendType] = useState('manual'); // manual | template | ai | auto
+  const [sendType, setSendType] = useState('manual');
   const [templateUsed, setTemplateUsed] = useState(null);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [loading, setLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState('');
-  const [aiVerdict, setAiVerdict] = useState('');
-  const [routeCount, setRouteCount] = useState(0); // 0 = all, or 3/4/5/10
+  const [spamPreview, setSpamPreview] = useState(null); // {score, level, reasons}
+  const [spamChecking, setSpamChecking] = useState(false);
+  const [batchSize, setBatchSize] = useState(5);
+  const [delayMs, setDelayMs] = useState(1200);
   const [result, setResult] = useState(null);
-  const [autoNew, setAutoNew] = useState(false);
-  const [generateAfterN, setGenerateAfterN] = useState(0);
-  const [sendCounter, setSendCounter] = useState(0);
+  const [progress, setProgress] = useState(null); // live campaign progress
+  const [progressTimer, setProgressTimer] = useState(null);
 
   const remaining = stats ? Math.max((stats.limit || 0) - (stats.sent || 0), 0) : 0;
+  const steps = ['Compose', 'Recipients', 'Review', 'Send'];
+  const parsedNumbers = numbersText.split(/[\n,\s]/).map(n => n.trim()).filter(Boolean);
 
   const handleTemplateSelect = (tmpl) => {
     setSelectedTemplate(tmpl);
@@ -656,160 +717,134 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
     setTemplateUsed(tmpl.name);
   };
 
-  const handleAiSuggest = async () => {
-    setAiLoading(true);
-    setAiSuggestion('');
-    setAiVerdict('');
+  // Live spam check (calls spamCheck action — no send)
+  const handleSpamCheck = async () => {
+    if (!message.trim()) return;
+    setSpamChecking(true);
     try {
       const res = await fetch('/api/system', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          action: 'aiChat',
-          language,
-          message: `I need an effective MMS marketing message. Context: ${message ? 'Drafting from this: ' + message : 'Create a new one'}. Give me a short, spam-free, engaging message in ${language === 'bn' ? 'Bengali' : 'English'}. Just give the message text, nothing else.`,
-        }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ action: 'spamCheck', message }),
       });
       const data = await res.json();
       if (data.success) {
-        setAiSuggestion(data.reply);
-        setAiVerdict('ai_generated');
-      } else {
-        onSent(data.error || 'AI suggestion failed', 'error');
+        setSpamPreview({ score: data.spamScore, level: data.spamLevel, reasons: data.spamReasons, aiReview: data.aiReview });
       }
-    } catch {
-      onSent('Network error', 'error');
-    }
+    } catch { /* ignore */ }
+    setSpamChecking(false);
+  };
+
+  // Auto-check spam when message changes (debounced)
+  useEffect(() => {
+    if (!message.trim() || message.length < 10) { setSpamPreview(null); return; }
+    const t = setTimeout(handleSpamCheck, 800);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [message]);
+
+  const handleAiSuggest = async () => {
+    setAiLoading(true); setAiSuggestion('');
+    try {
+      const res = await fetch('/api/system', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({
+          action: 'aiChat', language,
+          message: `I need an effective, spam-free MMS marketing message in ${language === 'bn' ? 'Bengali' : 'English'}. ${message ? 'Improve this draft: ' + message : 'Create a new one'}. Keep it under 160 chars. Just the message text.`,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) setAiSuggestion(data.reply);
+      else onSent(data.error || 'AI suggestion failed', 'error');
+    } catch { onSent('Network error', 'error'); }
     setAiLoading(false);
   };
 
   const handleApplyAi = () => {
-    if (aiSuggestion) {
-      setMessage(aiSuggestion);
-      setSendType('ai');
-      setAiSuggestion('');
-    }
-  };
-
-  const handleAutoNew = async () => {
-    setAiLoading(true);
-    setAutoNew(true);
-    try {
-      const res = await fetch('/api/system', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          action: 'aiChat',
-          language,
-          message: `Generate a fresh, unique, spam-free MMS marketing message in ${language === 'bn' ? 'Bengali' : 'English'}. Make it different from typical marketing spam. Keep it under 160 characters. Only output the message.`,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setMessage(data.reply);
-        setSendType('auto');
-      } else {
-        onSent(data.error || 'Auto-generate failed', 'error');
-      }
-    } catch {
-      onSent('Network error', 'error');
-    }
-    setAutoNew(false);
-    setAiLoading(false);
+    if (aiSuggestion) { setMessage(aiSuggestion); setSendType('ai'); setAiSuggestion(''); }
   };
 
   const handleBulkImport = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const file = e.target.files[0]; if (!file) return;
     const text = await file.text();
     try {
       const res = await fetch('/api/system', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
         body: JSON.stringify({ action: 'bulkImport', csvData: text }),
       });
       const data = await res.json();
-      if (data.success) {
-        setNumbersText(data.numbers.join(', '));
-        onSent(`Imported ${data.count} numbers`, 'success');
-      } else {
-        onSent(data.error || 'Import failed', 'error');
-      }
-    } catch {
-      onSent('Import error', 'error');
-    }
+      if (data.success) { setNumbersText(data.numbers.join('\n')); onSent(`Imported ${data.count} numbers`, 'success'); }
+      else onSent(data.error || 'Import failed', 'error');
+    } catch { onSent('Import error', 'error'); }
     e.target.value = '';
   };
 
-  const handleSend = async (e) => {
-    e.preventDefault();
+  // Live progress polling
+  const pollProgress = (campaignId) => {
+    if (progressTimer) clearInterval(progressTimer);
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch('/api/system', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+          body: JSON.stringify({ action: 'getCampaignProgress', campaignId }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          setProgress(data.campaign);
+          if (data.campaign.status === 'sent' || data.campaign.status === 'partial' || data.campaign.status === 'failed' || data.campaign.status === 'blocked_spam') {
+            clearInterval(timer);
+            setProgressTimer(null);
+          }
+        }
+      } catch { /* ignore */ }
+    }, 2000);
+    setProgressTimer(timer);
+  };
+
+  useEffect(() => () => { if (progressTimer) clearInterval(progressTimer); }, [progressTimer]);
+
+  const handleSend = async () => {
     if (!message.trim()) { onSent('Please enter a message', 'error'); return; }
-    if (!numbersText.trim()) { onSent('Please enter recipient numbers', 'error'); return; }
-
-    // Parse numbers — split by comma, newline, or space
-    let nums = numbersText.split(/[\n,]/).map(n => n.trim()).filter(Boolean);
-    // Number routing
-    if (routeCount > 0 && nums.length > routeCount) {
-      nums = nums.slice(0, routeCount);
-    }
-    if (nums.length === 0) { onSent('No valid numbers', 'error'); return; }
-
-    setLoading(true);
-    setResult(null);
+    if (parsedNumbers.length === 0) { onSent('No valid numbers', 'error'); return; }
+    const nums = parsedNumbers.slice(0, remaining);
+    setLoading(true); setResult(null); setProgress(null);
     try {
       const res = await fetch('/api/system', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
         body: JSON.stringify({
-          action: 'sendCampaign',
-          message,
-          numbers: nums,
-          sendType,
-          templateUsed,
+          action: 'sendCampaign', message, numbers: nums, sendType, templateUsed,
+          options: { batchSize, delayMs },
         }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        const invalidInfo = data.totalInvalid > 0 ? ` | ${data.totalInvalid} invalid rejected` : '';
-        const aiInfo = data.aiSuggestion ? ` | AI: ${data.aiSuggestion.substring(0, 60)}` : '';
-        onSent(`Sent ${data.totalSent} via ${data.senderApiUsed} — ${data.totalDelivered} delivered, ${data.totalUndelivered} undelivered${invalidInfo}${aiInfo}`, 'success');
+        const invalidInfo = data.totalInvalid > 0 ? ` | ${data.totalInvalid} invalid` : '';
+        onSent(`Sent ${data.totalSent} via ${data.senderApiUsed} — ${data.totalDelivered} delivered, ${data.totalUndelivered} undelivered${invalidInfo}`, 'success');
         setResult(data);
-        setSendCounter(prev => prev + 1);
-        // Auto-new after N sends
-        if (generateAfterN > 0 && (sendCounter + 1) % generateAfterN === 0) {
-          handleAutoNew();
-        } else if (autoNew) {
-          handleAutoNew();
-        }
-        // Clear on success
-        if (!autoNew && generateAfterN === 0) {
-          setMessage('');
-        }
-        setNumbersText('');
+        // Start live polling
+        if (data.campaignId) pollProgress(data.campaignId);
+      } else if (data.blocked) {
+        onSent('⚠ Message blocked by spam protection. Rewrite your content.', 'error');
+        setResult({ blocked: true, spamScore: data.spamScore, spamReasons: data.spamReasons });
       } else {
         onSent(data.error || 'Failed to send', 'error');
-        if (data.invalidNumbers) {
-          setResult({ invalidNumbers: data.invalidNumbers });
-        }
+        if (data.invalidNumbers) setResult({ invalidNumbers: data.invalidNumbers });
       }
-    } catch {
-      onSent('Network error', 'error');
-    }
+    } catch { onSent('Network error', 'error'); }
     setLoading(false);
   };
 
   const templateTypes = [
-    { key: 'payment', label: 'Payment' },
-    { key: 'marketing', label: 'Marketing' },
-    { key: 'promo', label: 'Promo' },
-    { key: 'order', label: 'Order' },
-    { key: 'crypto', label: 'Crypto' },
-    { key: 'custom', label: 'Custom' },
+    { key: 'payment', label: 'Payment' }, { key: 'marketing', label: 'Marketing' },
+    { key: 'promo', label: 'Promo' }, { key: 'order', label: 'Order' },
+    { key: 'crypto', label: 'Crypto' }, { key: 'custom', label: 'Custom' },
   ];
+
+  const canProceed = () => {
+    if (step === 0) return message.trim().length > 0;
+    if (step === 1) return parsedNumbers.length > 0;
+    if (step === 2) return true;
+    return false;
+  };
 
   return (
     <div className="space-y-6">
@@ -819,214 +854,281 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
         You have <span className="font-bold text-white">{remaining}</span> sends remaining
       </div>
 
-      {/* Templates */}
-      {templates.length > 0 && (
-        <div className="bg-gray-900/60 rounded-xl p-5 border border-gray-800">
-          <h3 className="text-sm font-semibold text-gray-200 mb-3 flex items-center gap-2">
-            <Icon.Sparkle className="w-4 h-4 text-purple-400" /> Message Templates
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {templateTypes.map(tt => {
-              const tmpls = templates.filter(t => t.type === tt.key);
-              if (tmpls.length === 0) return null;
-              return tmpls.map(t => (
-                <button
-                  key={t._id}
-                  onClick={() => handleTemplateSelect(t)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                    selectedTemplate?._id === t._id
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'
-                  }`}
-                >
-                  {tt.label}: {t.name}
-                </button>
-              ));
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* AI suggestion + auto-new */}
+      {/* Wizard card */}
       <div className="bg-gray-900/60 rounded-xl p-5 border border-gray-800">
-        <h3 className="text-sm font-semibold text-gray-200 mb-3 flex items-center gap-2">
-          <Icon.Sparkle className="w-4 h-4 text-indigo-400" /> AI / Gemini Assistant
+        <h3 className="text-sm font-semibold text-gray-200 mb-4 flex items-center gap-2">
+          <Icon.Send className="w-4 h-4 text-purple-400" /> Bulk Send Wizard
         </h3>
-        <div className="flex flex-wrap gap-2 mb-3">
-          <button
-            onClick={handleAiSuggest}
-            disabled={aiLoading}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition"
-          >
-            {aiLoading ? <Spinner /> : <Icon.Sparkle className="w-4 h-4" />}
-            AI Suggestion
-          </button>
-          <button
-            onClick={handleAutoNew}
-            disabled={aiLoading}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:opacity-90 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition"
-          >
-            {aiLoading ? <Spinner /> : <Icon.Bolt className="w-4 h-4" />}
-            New & Auto Sending
-          </button>
-        </div>
-        {aiSuggestion && (
-          <div className="mt-3 p-3 bg-indigo-900/20 border border-indigo-500/20 rounded-lg">
-            <p className="text-sm text-gray-300 mb-2">{aiSuggestion}</p>
-            <button
-              onClick={handleApplyAi}
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium"
-            >
-              Use this message
-            </button>
+        <StepIndicator current={step} steps={steps} />
+
+        {/* STEP 1: COMPOSE */}
+        {step === 0 && (
+          <div className="space-y-4">
+            {/* Templates */}
+            {templates.length > 0 && (
+              <div>
+                <p className="text-xs text-gray-500 mb-2 flex items-center gap-1"><Icon.Sparkle className="w-3 h-3 text-purple-400" /> Templates</p>
+                <div className="flex flex-wrap gap-2">
+                  {templateTypes.map(tt => templates.filter(t => t.type === tt.key).map(t => (
+                    <button key={t._id} onClick={() => handleTemplateSelect(t)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${selectedTemplate?._id === t._id ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'}`}>
+                      {tt.label}: {t.name}
+                    </button>
+                  )))}
+                </div>
+              </div>
+            )}
+
+            {/* AI buttons */}
+            <div className="flex flex-wrap gap-2">
+              <button onClick={handleAiSuggest} disabled={aiLoading}
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition">
+                {aiLoading ? <Spinner /> : <Icon.Sparkle className="w-4 h-4" />} AI Suggestion
+              </button>
+            </div>
+            {aiSuggestion && (
+              <div className="p-3 bg-indigo-900/20 border border-indigo-500/20 rounded-lg">
+                <p className="text-sm text-gray-300 mb-2">{aiSuggestion}</p>
+                <button onClick={handleApplyAi} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium">Use this message</button>
+              </div>
+            )}
+
+            {/* Message textarea */}
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Message Content</label>
+              <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={4}
+                placeholder="Type your MMS message, or use a template / AI suggestion..."
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none text-sm"
+                maxLength={500} />
+              <div className="flex justify-between items-center mt-1">
+                <p className="text-xs text-gray-500">{message.length}/500</p>
+                {spamChecking && <p className="text-xs text-gray-500 animate-pulse">Checking spam...</p>}
+                {spamPreview && !spamChecking && (
+                  <p className={`text-xs font-medium ${spamPreview.level === 'high' ? 'text-red-400' : spamPreview.level === 'moderate' ? 'text-yellow-400' : 'text-green-400'}`}>
+                    Spam: {spamPreview.score}/100 — {spamPreview.level}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Spam reasons preview */}
+            {spamPreview && spamPreview.reasons && spamPreview.reasons.length > 0 && (
+              <div className="p-3 bg-yellow-900/20 border border-yellow-700/30 rounded-lg">
+                <p className="text-xs text-yellow-400 font-medium mb-1">Spam risk factors:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {spamPreview.reasons.map((r, i) => (
+                    <span key={i} className="text-xs bg-yellow-900/30 px-2 py-0.5 rounded text-yellow-300">{r}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <button onClick={() => setStep(1)} disabled={!canProceed()}
+                className="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white rounded-lg text-sm font-medium transition">
+                Next: Recipients →
+              </button>
+            </div>
           </div>
         )}
-        {/* Generate after N sends */}
-        <div className="mt-3 flex items-center gap-2 text-xs text-gray-400">
-          <label>Auto-generate fresh message after every</label>
-          <select
-            value={generateAfterN}
-            onChange={(e) => setGenerateAfterN(Number(e.target.value))}
-            className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-gray-200"
-          >
-            <option value={0}>Off</option>
-            <option value={1}>1 send</option>
-            <option value={3}>3 sends</option>
-            <option value={5}>5 sends</option>
-            <option value={10}>10 sends</option>
-          </select>
-          <span>sends</span>
-        </div>
+
+        {/* STEP 2: RECIPIENTS */}
+        {step === 1 && (
+          <div className="space-y-4">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm text-gray-400">Recipient Numbers <span className="text-gray-600">(comma, newline, or space separated)</span></label>
+                <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer hover:text-gray-300">
+                  <Icon.Upload className="w-4 h-4" /> CSV Import
+                  <input type="file" accept=".csv,.txt" onChange={handleBulkImport} className="hidden" />
+                </label>
+              </div>
+              <textarea value={numbersText} onChange={(e) => setNumbersText(e.target.value)} rows={5}
+                placeholder="+1234567890\n+9876543210\n..."
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none text-sm font-mono" />
+              <p className="text-xs text-gray-500 mt-1">
+                {parsedNumbers.length} numbers detected · {Math.min(parsedNumbers.length, remaining)} will be sent (quota: {remaining})
+              </p>
+            </div>
+            <div className="flex justify-between">
+              <button onClick={() => setStep(0)} className="px-5 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition">← Back</button>
+              <button onClick={() => setStep(2)} disabled={!canProceed()}
+                className="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white rounded-lg text-sm font-medium transition">
+                Next: Review →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 3: REVIEW */}
+        {step === 2 && (
+          <div className="space-y-4">
+            <div className="grid md:grid-cols-2 gap-4">
+              {/* Spam meter */}
+              <div className="bg-gray-800/40 rounded-xl p-4 flex flex-col items-center justify-center">
+                <p className="text-xs text-gray-500 mb-2 uppercase tracking-wider">Spam Analysis</p>
+                {spamPreview ? (
+                  <SpamMeter score={spamPreview.score} level={spamPreview.level} />
+                ) : (
+                  <button onClick={handleSpamCheck} disabled={spamChecking}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-sm">
+                    {spamChecking ? 'Checking...' : 'Check Spam Score'}
+                  </button>
+                )}
+                {spamPreview && spamPreview.level === 'high' && (
+                  <p className="text-xs text-red-400 mt-2 text-center">⚠ This message will be blocked by spam protection. Rewrite it.</p>
+                )}
+              </div>
+
+              {/* Send configuration */}
+              <div className="bg-gray-800/40 rounded-xl p-4 space-y-3">
+                <p className="text-xs text-gray-500 uppercase tracking-wider">Send Configuration</p>
+                <div>
+                  <label className="text-xs text-gray-400 flex justify-between"><span>Batch Size</span><span className="text-gray-500">{batchSize} per batch</span></label>
+                  <input type="range" min="1" max="20" value={batchSize} onChange={(e) => setBatchSize(Number(e.target.value))} className="w-full accent-purple-500" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 flex justify-between"><span>Delay Between Batches</span><span className="text-gray-500">{(delayMs / 1000).toFixed(1)}s</span></label>
+                  <input type="range" min="500" max="5000" step="100" value={delayMs} onChange={(e) => setDelayMs(Number(e.target.value))} className="w-full accent-purple-500" />
+                </div>
+                <p className="text-[10px] text-gray-600">Smaller batches + longer delays = better inbox delivery & spam-free sending.</p>
+              </div>
+            </div>
+
+            {/* Summary */}
+            <div className="bg-gray-800/40 rounded-xl p-4">
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Campaign Summary</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div><p className="text-xs text-gray-500">Recipients</p><p className="text-lg font-bold text-white">{Math.min(parsedNumbers.length, remaining)}</p></div>
+                <div><p className="text-xs text-gray-500">Batch Size</p><p className="text-lg font-bold text-cyan-400">{batchSize}</p></div>
+                <div><p className="text-xs text-gray-500">Delay</p><p className="text-lg font-bold text-cyan-400">{(delayMs / 1000).toFixed(1)}s</p></div>
+                <div><p className="text-xs text-gray-500">Est. Batches</p><p className="text-lg font-bold text-purple-400">{Math.ceil(Math.min(parsedNumbers.length, remaining) / batchSize)}</p></div>
+              </div>
+              <div className="mt-3 p-2 bg-gray-900/50 rounded text-xs text-gray-400">
+                <p className="text-gray-500 mb-1">Message preview:</p>
+                {message.substring(0, 120)}{message.length > 120 ? '...' : ''}
+              </div>
+            </div>
+
+            <div className="flex justify-between">
+              <button onClick={() => setStep(1)} className="px-5 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition">← Back</button>
+              <button onClick={() => { setStep(3); handleSend(); }}
+                disabled={loading || remaining <= 0 || (spamPreview && spamPreview.level === 'high')}
+                className="px-6 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-40 text-white rounded-lg text-sm font-bold transition flex items-center gap-2">
+                {loading ? <Spinner /> : <Icon.Send className="w-4 h-4" />} Launch Campaign
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 4: SEND / LIVE PROGRESS */}
+        {step === 3 && (
+          <div className="space-y-4">
+            {loading && (
+              <div className="text-center py-8">
+                <Spinner />
+                <p className="text-sm text-gray-400 mt-3">Launching campaign...</p>
+              </div>
+            )}
+
+            {/* Live progress */}
+            {progress && !loading && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold text-gray-200 flex items-center gap-2">
+                    <Icon.Activity className="w-4 h-4 text-purple-400" /> Live Progress
+                  </h4>
+                  <span className={`text-xs px-2 py-1 rounded font-medium ${
+                    progress.status === 'sent' ? 'bg-green-900/40 text-green-400' :
+                    progress.status === 'partial' ? 'bg-yellow-900/40 text-yellow-400' :
+                    progress.status === 'failed' ? 'bg-red-900/40 text-red-400' :
+                    progress.status === 'blocked_spam' ? 'bg-red-900/40 text-red-400' :
+                    'bg-blue-900/40 text-blue-400 animate-pulse'
+                  }`}>{progress.status}</span>
+                </div>
+
+                {/* Progress bar */}
+                <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden">
+                  <div className="bg-gradient-to-r from-purple-500 to-indigo-500 h-full rounded-full transition-all duration-500"
+                    style={{ width: `${progress.totalSent > 0 ? Math.round((progress.totalSent / Math.max(progress.totalSent + progress.totalUndelivered, 1)) * 100) : 0}%` }} />
+                </div>
+
+                {/* Stats grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="bg-gray-800/50 rounded-lg p-3 text-center">
+                    <div className="text-xl font-bold text-white">{progress.totalSent}</div>
+                    <div className="text-xs text-gray-500">Sent</div>
+                  </div>
+                  <div className="bg-gray-800/50 rounded-lg p-3 text-center">
+                    <div className="text-xl font-bold text-green-400">{progress.totalDelivered}</div>
+                    <div className="text-xs text-gray-500">Delivered</div>
+                  </div>
+                  <div className="bg-gray-800/50 rounded-lg p-3 text-center">
+                    <div className="text-xl font-bold text-red-400">{progress.totalUndelivered}</div>
+                    <div className="text-xs text-gray-500">Undelivered</div>
+                  </div>
+                  <div className="bg-gray-800/50 rounded-lg p-3 text-center">
+                    <div className="text-xl font-bold text-yellow-400">{progress.totalInvalid || 0}</div>
+                    <div className="text-xs text-gray-500">Invalid</div>
+                  </div>
+                </div>
+
+                {progress.senderApiName && (
+                  <p className="text-xs text-gray-500">Sender API: <span className="text-cyan-400">{progress.senderApiName}</span> · Batch: {progress.batchSize} · Delay: {(progress.delayMs / 1000).toFixed(1)}s</p>
+                )}
+
+                {/* Blocked spam */}
+                {progress.status === 'blocked_spam' && (
+                  <div className="p-3 bg-red-900/30 border border-red-700/30 rounded-lg text-sm text-red-300">
+                    ⚠ Campaign blocked by spam protection (score: {progress.spamScore}). Rewrite your message.
+                  </div>
+                )}
+
+                {/* Done actions */}
+                {(progress.status === 'sent' || progress.status === 'partial' || progress.status === 'failed') && (
+                  <div className="flex gap-2">
+                    {result && result.campaignId && (
+                      <button onClick={() => onCampaignClick(result.campaignId)} className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition">
+                        View Delivery Details
+                      </button>
+                    )}
+                    <button onClick={() => { setStep(0); setMessage(''); setNumbersText(''); setResult(null); setProgress(null); setSpamPreview(null); }}
+                      className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition">
+                      New Campaign
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Error / blocked result */}
+            {result && result.blocked && !progress && !loading && (
+              <div className="p-4 bg-red-900/30 border border-red-700/30 rounded-lg">
+                <p className="text-sm font-bold text-red-300 mb-2">⚠ Message Blocked — Spam Protection</p>
+                <p className="text-xs text-red-400 mb-2">Spam score: {result.spamScore}/100</p>
+                {result.spamReasons && (
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    {result.spamReasons.map((r, i) => <span key={i} className="text-xs bg-red-900/40 px-2 py-0.5 rounded text-red-300">{r}</span>)}
+                  </div>
+                )}
+                <button onClick={() => setStep(0)} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm">← Rewrite Message</button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Campaign form */}
-      <form onSubmit={handleSend} className="bg-gray-900/60 rounded-xl p-5 border border-gray-800 space-y-4">
-        <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2">
-          <Icon.Send className="w-4 h-4 text-purple-400" /> Compose & Send
-        </h3>
-
-        {/* Message */}
-        <div>
-          <label className="block text-sm text-gray-400 mb-1">Message Content</label>
-          <textarea
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            rows={4}
-            placeholder="Type your MMS message here, or use a template / AI suggestion above..."
-            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none text-sm"
-            maxLength={500}
-          />
-          <p className="text-xs text-gray-500 mt-1 text-right">{message.length}/500</p>
-        </div>
-
-        {/* Numbers — direct paste + routing */}
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <label className="block text-sm text-gray-400">Recipient Numbers <span className="text-gray-600">(comma or newline separated)</span></label>
-            <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer hover:text-gray-300">
-              <Icon.Upload className="w-4 h-4" /> CSV Import
-              <input type="file" accept=".csv,.txt" onChange={handleBulkImport} className="hidden" />
-            </label>
-          </div>
-          <textarea
-            value={numbersText}
-            onChange={(e) => setNumbersText(e.target.value)}
-            rows={3}
-            placeholder="Paste numbers directly: +1234567890, +9876543210, ..."
-            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none text-sm font-mono"
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            {numbersText.split(/[\n,]/).filter(n => n.trim()).length} numbers detected
-          </p>
-        </div>
-
-        {/* Number routing */}
-        <div>
-          <label className="block text-sm text-gray-400 mb-1.5">Number Routing</label>
-          <div className="flex flex-wrap gap-2">
-            {[
-              { v: 0, l: 'All' },
-              { v: 3, l: 'First 3' },
-              { v: 4, l: 'First 4' },
-              { v: 5, l: 'First 5' },
-              { v: 10, l: 'First 10' },
-            ].map(({ v, l }) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => setRouteCount(v)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                  routeCount === v ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'
-                }`}
-              >
-                {l}
-              </button>
+      {/* Invalid numbers (from failed send) */}
+      {result && result.invalidNumbers && result.invalidNumbers.length > 0 && step !== 3 && (
+        <div className="bg-gray-900/60 rounded-xl p-5 border border-gray-800">
+          <p className="text-xs text-red-400 font-medium mb-1">Invalid numbers rejected:</p>
+          <div className="flex flex-wrap gap-1.5">
+            {result.invalidNumbers.map((inv, i) => (
+              <span key={i} className="text-xs bg-red-900/30 border border-red-700/30 px-2 py-1 rounded text-red-300">
+                {inv.number || inv} {inv.reason ? `(${inv.reason})` : ''}
+              </span>
             ))}
           </div>
-        </div>
-
-        {/* Send button */}
-        <button
-          type="submit"
-          disabled={loading || remaining <= 0}
-          className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 text-white rounded-lg font-semibold transition text-sm flex items-center justify-center gap-2"
-        >
-          {loading ? <Spinner /> : <Icon.Send className="w-5 h-5" />}
-          {loading ? 'Processing...' : 'Send Campaign'}
-        </button>
-      </form>
-
-      {/* Send result */}
-      {result && (
-        <div className="bg-gray-900/60 rounded-xl p-5 border border-gray-800">
-          <h3 className="text-sm font-semibold text-gray-200 mb-3 flex items-center gap-2">
-            <Icon.Report className="w-4 h-4 text-green-400" /> Send Result
-          </h3>
-          {result.totalSent !== undefined && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-              <div className="bg-gray-800/50 rounded-lg p-3 text-center">
-                <div className="text-xl font-bold text-white">{result.totalSent}</div>
-                <div className="text-xs text-gray-500">Sent</div>
-              </div>
-              <div className="bg-gray-800/50 rounded-lg p-3 text-center">
-                <div className="text-xl font-bold text-green-400">{result.totalDelivered}</div>
-                <div className="text-xs text-gray-500">Delivered</div>
-              </div>
-              <div className="bg-gray-800/50 rounded-lg p-3 text-center">
-                <div className="text-xl font-bold text-red-400">{result.totalUndelivered}</div>
-                <div className="text-xs text-gray-500">Undelivered</div>
-              </div>
-              <div className="bg-gray-800/50 rounded-lg p-3 text-center">
-                <div className="text-xl font-bold text-yellow-400">{result.totalInvalid}</div>
-                <div className="text-xs text-gray-500">Invalid</div>
-              </div>
-            </div>
-          )}
-          {result.aiSuggestion && (
-            <div className="mt-2 p-3 bg-indigo-900/20 border border-indigo-500/20 rounded-lg text-xs text-gray-300">
-              <span className="text-indigo-400 font-medium">AI Spam Check: </span>{result.aiSuggestion}
-            </div>
-          )}
-          {result.invalidNumbers && result.invalidNumbers.length > 0 && (
-            <div className="mt-3">
-              <p className="text-xs text-red-400 font-medium mb-1">Invalid numbers rejected:</p>
-              <div className="flex flex-wrap gap-1.5">
-                {result.invalidNumbers.map((inv, i) => (
-                  <span key={i} className="text-xs bg-red-900/30 border border-red-700/30 px-2 py-1 rounded text-red-300">
-                    {inv.number || inv} {inv.reason ? `(${inv.reason})` : ''}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-          {result.campaignId && (
-            <button
-              onClick={() => onCampaignClick(result.campaignId)}
-              className="mt-3 text-xs text-purple-400 hover:text-purple-300 underline"
-            >
-              View delivery details
-            </button>
-          )}
         </div>
       )}
     </div>

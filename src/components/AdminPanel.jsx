@@ -24,6 +24,9 @@ const Icon = {
   Trash: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>),
   Check: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>),
   Logout: () => (<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>),
+  Send: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>),
+  Activity: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>),
+  Zap: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>),
 };
 
 // ============================================================================
@@ -217,14 +220,28 @@ function AdminDashboard({ user, onLogout, onRefresh }) {
 // ============================================================================
 function Spinner() { return <div className="flex items-center justify-center py-12"><div className="w-8 h-8 border-3 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div></div>; }
 
-// StatCard component
-function StatCard({ label, value, sub, color }) {
-  const colors = { blue: 'from-blue-500/20 to-blue-600/5 border-blue-700/30 text-blue-400', green: 'from-green-500/20 to-green-600/5 border-green-700/30 text-green-400', red: 'from-red-500/20 to-red-600/5 border-red-700/30 text-red-400', yellow: 'from-yellow-500/20 to-yellow-600/5 border-yellow-700/30 text-yellow-400', purple: 'from-purple-500/20 to-purple-600/5 border-purple-700/30 text-purple-400', cyan: 'from-cyan-500/20 to-cyan-600/5 border-cyan-700/30 text-cyan-400' };
+// Enterprise StatCard — gradient top bar, glow shadow, optional icon
+function StatCard({ label, value, sub, color, icon }) {
+  const palette = {
+    blue:   { bar: 'from-blue-400 to-blue-600',   glow: 'shadow-blue-500/20',   text: 'text-blue-400',   ring: 'ring-blue-700/30' },
+    green:  { bar: 'from-green-400 to-green-600', glow: 'shadow-green-500/20',  text: 'text-green-400',  ring: 'ring-green-700/30' },
+    red:    { bar: 'from-red-400 to-red-600',     glow: 'shadow-red-500/20',    text: 'text-red-400',    ring: 'ring-red-700/30' },
+    yellow: { bar: 'from-yellow-400 to-yellow-600', glow: 'shadow-yellow-500/20', text: 'text-yellow-400', ring: 'ring-yellow-700/30' },
+    purple: { bar: 'from-purple-400 to-purple-600', glow: 'shadow-purple-500/20', text: 'text-purple-400', ring: 'ring-purple-700/30' },
+    cyan:   { bar: 'from-cyan-400 to-cyan-600',   glow: 'shadow-cyan-500/20',   text: 'text-cyan-400',   ring: 'ring-cyan-700/30' },
+  };
+  const p = palette[color] || palette.blue;
   return (
-    <div className={`bg-gradient-to-br ${colors[color] || colors.blue} border rounded-xl p-4`}>
-      <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">{label}</p>
-      <p className={`text-2xl font-bold mt-1 ${colors[color]?.split(' ').find(c=>c.startsWith('text-')) || 'text-blue-400'}`}>{value}</p>
-      {sub && <p className="text-xs text-gray-500 mt-1">{sub}</p>}
+    <div className={`relative bg-slate-900/60 border border-slate-800 rounded-xl p-4 pt-5 overflow-hidden ring-1 ${p.ring} shadow-lg ${p.glow} transition hover:scale-[1.02] hover:${p.glow}`}>
+      <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${p.bar}`} />
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">{label}</p>
+          <p className={`text-2xl font-bold mt-1 ${p.text}`}>{value}</p>
+          {sub && <p className="text-xs text-gray-500 mt-1">{sub}</p>}
+        </div>
+        {icon && <div className={`text-2xl ${p.text} opacity-80`}>{icon}</div>}
+      </div>
     </div>
   );
 }
@@ -384,8 +401,45 @@ function ApiManagementTab() {
   const [loading, setLoading] = useState(true);
   const [showSenderForm, setShowSenderForm] = useState(false);
   const [showGeminiForm, setShowGeminiForm] = useState(false);
-  const [senderForm, setSenderForm] = useState({ name: '', provider: 'custom', apiKey: '', apiSecret: '', endpoint: '', limit: 1000, priority: 0 });
+  const [senderForm, setSenderForm] = useState({ name: '', provider: 'custom', apiKey: '', apiSecret: '', endpoint: '', senderId: '', limit: 1000, priority: 0 });
   const [geminiForm, setGeminiForm] = useState({ name: '', apiKey: '', model: 'gemini-1.5-flash', limit: 1500, priority: 0 });
+  const [testing, setTesting] = useState(null);     // apiId being tested
+  const [testResult, setTestResult] = useState({});  // { [apiId]: {success, ...} }
+  const [testModal, setTestModal] = useState(null);  // { api, number, message }
+
+  // Provider templates — auto-fill endpoint + fields when provider changes
+  const PROVIDER_TEMPLATES = {
+    twilio: {
+      label: 'Twilio',
+      endpoint: 'https://api.twilio.com/2010-04-01',
+      needsSecret: true,
+      secretLabel: 'Auth Token',
+      keyLabel: 'Account SID',
+      help: 'apiKey = Account SID, apiSecret = Auth Token, senderId = Twilio phone number (e.g. +1234567890)',
+    },
+    vonage: {
+      label: 'Vonage / Nexmo',
+      endpoint: 'https://api.nexmo.com',
+      needsSecret: true,
+      secretLabel: 'API Signature Secret',
+      keyLabel: 'API Key',
+      help: 'apiKey = API Key, apiSecret = API Secret. Vonage Messages API v0.1 is used automatically.',
+    },
+    messagebird: {
+      label: 'MessageBird',
+      endpoint: 'https://rest.messagebird.com',
+      needsSecret: false,
+      keyLabel: 'Access Key (live_...)',
+      help: 'apiKey = MessageBird Access Key. senderId = originator (e.g. +1234567890 or a text sender).',
+    },
+    custom: {
+      label: 'Custom HTTP',
+      endpoint: '',
+      needsSecret: false,
+      keyLabel: 'API Key / Bearer Token',
+      help: 'Any HTTP endpoint. Body sent as JSON: {to, from, message, apiKey, sender}. Bearer auth header.',
+    },
+  };
 
   const load = async () => {
     setLoading(true);
@@ -397,10 +451,15 @@ function ApiManagementTab() {
 
   useEffect(() => { load(); }, []);
 
+  const onProviderChange = (provider) => {
+    const tmpl = PROVIDER_TEMPLATES[provider] || PROVIDER_TEMPLATES.custom;
+    setSenderForm((f) => ({ ...f, provider, endpoint: tmpl.endpoint || f.endpoint }));
+  };
+
   const addSender = async (e) => {
     e.preventDefault();
     const data = await api('addSenderApi', senderForm);
-    if (data.success) { setShowSenderForm(false); setSenderForm({ name: '', provider: 'custom', apiKey: '', apiSecret: '', endpoint: '', limit: 1000, priority: 0 }); load(); }
+    if (data.success) { setShowSenderForm(false); setSenderForm({ name: '', provider: 'custom', apiKey: '', apiSecret: '', endpoint: '', senderId: '', limit: 1000, priority: 0 }); load(); }
     else alert(data.error);
   };
 
@@ -411,7 +470,59 @@ function ApiManagementTab() {
     else alert(data.error);
   };
 
+  const runTest = async () => {
+    if (!testModal) return;
+    setTesting(testModal.api._id);
+    setTestResult((r) => ({ ...r, [testModal.api._id]: null }));
+    const data = await api('testSenderApi', { apiId: testModal.api._id, testNumber: testModal.number, testMessage: testModal.message });
+    setTestResult((r) => ({ ...r, [testModal.api._id]: data }));
+    setTesting(null);
+    if (data.success) { setTestModal(null); load(); }
+  };
+
   if (loading) return <Spinner />;
+
+  const tmpl = PROVIDER_TEMPLATES[senderForm.provider] || PROVIDER_TEMPLATES.custom;
+
+  // Health ring — SVG circular gauge (0-100)
+  const HealthRing = ({ score, size = 48 }) => {
+    const r = (size - 6) / 2;
+    const c = 2 * Math.PI * r;
+    const pct = Math.max(0, Math.min(100, score));
+    const dash = (pct / 100) * c;
+    const color = pct > 70 ? '#22c55e' : pct > 40 ? '#eab308' : '#ef4444';
+    return (
+      <svg width={size} height={size} className="flex-shrink-0">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#1e293b" strokeWidth="4" />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth="4"
+          strokeDasharray={`${dash} ${c}`} strokeLinecap="round"
+          transform={`rotate(-90 ${size / 2} ${size / 2})`} className="transition-all duration-500" />
+        <text x="50%" y="55%" textAnchor="middle" dominantBaseline="middle" className="fill-white text-[11px] font-bold">{pct}</text>
+      </svg>
+    );
+  };
+
+  // 4-metric mini-grid for each sender API
+  const ApiMetrics = ({ a }) => (
+    <div className="grid grid-cols-4 gap-2 mt-3">
+      <div className="bg-slate-800/50 rounded-lg p-2 text-center">
+        <p className="text-[10px] text-gray-500 uppercase">Sent</p>
+        <p className="text-sm font-bold text-white">{a.totalSent}</p>
+      </div>
+      <div className="bg-slate-800/50 rounded-lg p-2 text-center">
+        <p className="text-[10px] text-gray-500 uppercase">Inbox</p>
+        <p className="text-sm font-bold text-green-400">{a.inboxRate}%</p>
+      </div>
+      <div className="bg-slate-800/50 rounded-lg p-2 text-center">
+        <p className="text-[10px] text-gray-500 uppercase">Spam</p>
+        <p className="text-sm font-bold text-red-400">{a.spamRate}%</p>
+      </div>
+      <div className="bg-slate-800/50 rounded-lg p-2 text-center">
+        <p className="text-[10px] text-gray-500 uppercase">Left</p>
+        <p className="text-sm font-bold text-cyan-400">{a.remaining}</p>
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -423,41 +534,103 @@ function ApiManagementTab() {
           <h3 className="text-lg font-semibold text-gray-300">Sender APIs <span className="text-sm text-gray-500">({senderApis.length}/10)</span></h3>
           {senderApis.length < 10 && <button onClick={() => setShowSenderForm(!showSenderForm)} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm px-3 py-1.5 rounded-lg transition"><Icon.Plus />Add Sender API</button>}
         </div>
+
+        {/* Add Sender Form — enterprise with provider selector */}
         {showSenderForm && (
-          <form onSubmit={addSender} className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 mb-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-            <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Name" value={senderForm.name} onChange={e => setSenderForm({...senderForm, name: e.target.value})} required />
-            <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Provider (twilio/vonage/custom)" value={senderForm.provider} onChange={e => setSenderForm({...senderForm, provider: e.target.value})} />
-            <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="API Key" value={senderForm.apiKey} onChange={e => setSenderForm({...senderForm, apiKey: e.target.value})} required />
-            <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="API Secret (optional)" value={senderForm.apiSecret} onChange={e => setSenderForm({...senderForm, apiSecret: e.target.value})} />
-            <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Endpoint URL" value={senderForm.endpoint} onChange={e => setSenderForm({...senderForm, endpoint: e.target.value})} />
-            <input type="number" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Limit" value={senderForm.limit} onChange={e => setSenderForm({...senderForm, limit: parseInt(e.target.value)})} />
-            <input type="number" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Priority (higher=preferred)" value={senderForm.priority} onChange={e => setSenderForm({...senderForm, priority: parseInt(e.target.value)})} />
-            <button type="submit" className="bg-green-600 hover:bg-green-500 text-white text-sm px-4 py-2 rounded-lg transition col-span-full md:col-span-1">Save Sender API</button>
+          <form onSubmit={addSender} className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 mb-3 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Name (e.g. Twilio Primary)" value={senderForm.name} onChange={e => setSenderForm({...senderForm, name: e.target.value})} required />
+              {/* Provider selector dropdown */}
+              <select className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={senderForm.provider} onChange={e => onProviderChange(e.target.value)}>
+                {Object.entries(PROVIDER_TEMPLATES).map(([k, v]) => (
+                  <option key={k} value={k}>{v.label}</option>
+                ))}
+              </select>
+              <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder={tmpl.keyLabel || 'API Key'} value={senderForm.apiKey} onChange={e => setSenderForm({...senderForm, apiKey: e.target.value})} required />
+              {tmpl.needsSecret && (
+                <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder={tmpl.secretLabel || 'API Secret'} value={senderForm.apiSecret} onChange={e => setSenderForm({...senderForm, apiSecret: e.target.value})} />
+              )}
+              <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Endpoint URL" value={senderForm.endpoint} onChange={e => setSenderForm({...senderForm, endpoint: e.target.value})} />
+              <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Sender ID / From number" value={senderForm.senderId} onChange={e => setSenderForm({...senderForm, senderId: e.target.value})} />
+              <input type="number" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Limit (total sends)" value={senderForm.limit} onChange={e => setSenderForm({...senderForm, limit: parseInt(e.target.value) || 0})} />
+              <input type="number" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Priority (higher=preferred)" value={senderForm.priority} onChange={e => setSenderForm({...senderForm, priority: parseInt(e.target.value) || 0})} />
+            </div>
+            {tmpl.help && <p className="text-xs text-gray-500 bg-slate-800/40 rounded-lg p-2">💡 {tmpl.help}</p>}
+            <button type="submit" className="bg-green-600 hover:bg-green-500 text-white text-sm px-4 py-2 rounded-lg transition">Save Sender API</button>
           </form>
         )}
-        <div className="space-y-2">
-          {senderApis.map(a => (
-            <div key={a._id} className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
-              <div className="flex justify-between items-center">
-                <div>
-                  <span className="text-sm font-medium text-white">{a.name}</span>
-                  <span className="text-xs text-gray-500 ml-2">{a.provider}</span>
-                  <span className={`ml-2 text-xs px-2 py-0.5 rounded ${a.status === 'active' ? 'bg-green-900/40 text-green-400' : a.status === 'warning' ? 'bg-yellow-900/40 text-yellow-400' : 'bg-red-900/40 text-red-400'}`}>{a.status}</span>
+
+        {/* Sender API cards — enterprise with health ring + 4-metric grid + test send */}
+        <div className="space-y-3">
+          {senderApis.map(a => {
+            const tr = testResult[a._id];
+            return (
+              <div key={a._id} className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+                <div className="flex justify-between items-start">
+                  <div className="flex items-center gap-3">
+                    <HealthRing score={a.healthScore} />
+                    <div>
+                      <span className="text-sm font-bold text-white">{a.name}</span>
+                      <span className="ml-2 text-xs px-2 py-0.5 rounded bg-blue-900/40 text-blue-400 uppercase">{(PROVIDER_TEMPLATES[a.provider] || {}).label || a.provider}</span>
+                      <span className={`ml-2 text-xs px-2 py-0.5 rounded ${a.status === 'active' ? 'bg-green-900/40 text-green-400' : a.status === 'warning' ? 'bg-yellow-900/40 text-yellow-400' : 'bg-red-900/40 text-red-400'}`}>{a.status}</span>
+                      {a.autoRoute && <span className="ml-2 text-xs text-cyan-400">⚡Auto-Route</span>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {/* Test Send button */}
+                    <button onClick={() => setTestModal({ api: a, number: '', message: 'Test from MMS Sender' })} className="flex items-center gap-1 bg-cyan-600/80 hover:bg-cyan-500 text-white text-xs px-2.5 py-1 rounded-lg transition">
+                      <Icon.Send /> Test
+                    </button>
+                    <label className="flex items-center gap-1 text-xs text-gray-500"><input type="checkbox" checked={a.autoRoute} onChange={async (e) => { await api('setAutoRoute', { id: a._id, type: 'sender', autoRoute: e.target.checked }); load(); }} />Auto</label>
+                    <button onClick={async () => { if (confirm('Delete this API?')) { await api('deleteSenderApi', { id: a._id }); load(); } }} className="text-red-400 hover:text-red-300"><Icon.Trash /></button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-1 text-xs text-gray-500"><input type="checkbox" checked={a.autoRoute} onChange={async (e) => { await api('setAutoRoute', { id: a._id, type: 'sender', autoRoute: e.target.checked }); load(); }} />Auto-Route</label>
-                  <button onClick={async () => { if (confirm('Delete this API?')) { await api('deleteSenderApi', { id: a._id }); load(); } }} className="text-red-400 hover:text-red-300"><Icon.Trash /></button>
+
+                <ApiMetrics a={a} />
+
+                {/* Usage bar */}
+                <div className="mt-3">
+                  <div className="flex justify-between text-xs text-gray-500 mb-1"><span>Usage</span><span>{a.used}/{a.limit}</span></div>
+                  <ProgressBar percent={a.limit > 0 ? Math.round((a.used / a.limit) * 100) : 0} />
                 </div>
+
+                {a.lastError && <p className="text-xs text-red-400/70 mt-2">⚠ Last error: {a.lastError}</p>}
+
+                {/* Test result display */}
+                {tr && (
+                  <div className={`mt-2 text-xs rounded-lg p-2 ${tr.success ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
+                    {tr.success ? `✓ Test sent — Provider Msg ID: ${tr.providerMsgId || 'N/A'}` : `✗ Failed: ${tr.errorMessage || 'Unknown error'}${tr.errorCode ? ` (code ${tr.errorCode})` : ''}`}
+                  </div>
+                )}
               </div>
-              <div className="flex gap-4 text-xs text-gray-500 mt-2">
-                <span>Used: {a.used}/{a.limit}</span><span>Remaining: {a.remaining}</span><span>Inbox: {a.inboxRate}%</span><span>Spam: {a.spamRate}%</span><span>Health: {a.healthScore}%</span>
-              </div>
-              <div className="mt-2"><ProgressBar percent={a.limit > 0 ? Math.round((a.used / a.limit) * 100) : 0} /></div>
+            );
+          })}
+          {senderApis.length === 0 && (
+            <div className="bg-slate-900/30 border border-dashed border-slate-700 rounded-xl p-8 text-center">
+              <p className="text-gray-500 text-sm mb-2">No sender APIs configured.</p>
+              <p className="text-gray-600 text-xs">Add a Twilio, Vonage, MessageBird, or custom HTTP sender to start sending real MMS/SMS.</p>
             </div>
-          ))}
-          {senderApis.length === 0 && <p className="text-gray-600 text-sm py-4 text-center">No sender APIs. Add one to start sending.</p>}
+          )}
         </div>
       </div>
+
+      {/* Test Send Modal */}
+      {testModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setTestModal(null)}>
+          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md space-y-3" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-white">Test Send — {testModal.api.name}</h3>
+            <p className="text-xs text-gray-500">Provider: {(PROVIDER_TEMPLATES[testModal.api.provider] || {}).label || testModal.api.provider}</p>
+            <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Test number (E.164, e.g. +1234567890)" value={testModal.number} onChange={e => setTestModal({ ...testModal, number: e.target.value })} />
+            <textarea className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm h-20" placeholder="Test message" value={testModal.message} onChange={e => setTestModal({ ...testModal, message: e.target.value })} />
+            <div className="flex gap-2">
+              <button onClick={runTest} disabled={testing === testModal.api._id || !testModal.number} className="flex-1 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg transition flex items-center justify-center gap-1.5">
+                {testing === testModal.api._id ? 'Sending…' : <><Icon.Send /> Send Test</>}
+              </button>
+              <button onClick={() => setTestModal(null)} className="bg-slate-700 hover:bg-slate-600 text-white text-sm px-4 py-2 rounded-lg transition">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Gemini APIs */}
       <div>

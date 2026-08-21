@@ -47,6 +47,12 @@ import {
   generateRandomApiKey,
   refreshConfigFile,
   jsonResponse,
+  bulkSendEngine,
+  executeRealSend,
+  sendWithRetry,
+  scoreSpamHeuristic,
+  geminiSpamReview,
+  enforceCountryRules,
 } from '@/lib/core';
 
 // Helper: extract token from request cookies
@@ -919,7 +925,7 @@ export async function POST(req) {
       const auth = await verifyAny(req);
       if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
       await connectDB();
-      const { message, numbers, sendType, templateUsed, aiSuggestion } = body;
+      const { message, numbers, sendType, templateUsed, aiSuggestion, options } = body;
 
       if (!message || !numbers || !Array.isArray(numbers) || numbers.length === 0) {
         return jsonResponse({ error: 'Message and numbers required' }, 400);
@@ -968,50 +974,13 @@ export async function POST(req) {
       // Limit to remaining quota
       const numbersToSend = validNumbers.slice(0, remaining);
 
-      // Get best sender API (auto-routing)
-      const senderApi = await getBestSenderApi();
-      if (!senderApi) {
-        return jsonResponse({ error: 'No active sender API configured. Admin must add a sender API.' }, 503);
-      }
-
-      // Get best Gemini API for spam check
+      // Get best Gemini API for spam check / AI routing
       const geminiApi = await getBestGeminiApi();
-      let aiVerdict = 'not_checked';
-      let aiSpamSuggestion = '';
-      if (geminiApi) {
-        try {
-          // Call Gemini for spam check
-          const geminiUrl = `${geminiApi.endpoint}/${geminiApi.model}:generateContent?key=${geminiApi.apiKey}`;
-          const geminiRes = await fetch(geminiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: `Analyze this SMS message for spam likelihood. Reply with JSON: {"isSpam": true/false, "suggestion": "improvement text", "inboxLikelihood": 0-100}. Message: "${message.substring(0, 500)}"` }] }],
-            }),
-          });
-          if (geminiRes.ok) {
-            const geminiData = await geminiRes.json();
-            const aiText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
-            try {
-              const parsed = JSON.parse(aiText.replace(/```json|```/g, '').trim());
-              aiVerdict = parsed.isSpam ? 'spam_detected' : 'clean';
-              aiSpamSuggestion = parsed.suggestion || '';
-              if (parsed.isSpam) {
-                // Don't block, but warn
-                aiVerdict = 'spam_warning';
-              }
-            } catch {
-              aiVerdict = 'ai_checked';
-              aiSpamSuggestion = aiText.substring(0, 200);
-            }
-          }
-          await updateGeminiApiUsage(geminiApi._id, 1);
-        } catch (e) {
-          aiVerdict = 'ai_error';
-        }
-      }
 
-      // Create campaign record
+      // Get app settings (spam protection, rate limits, country rules)
+      const appSettings = await getAppSettings();
+
+      // Create campaign record (status pending — engine will set 'running')
       const firstCountry = countryInfo[numbersToSend[0]] || {};
       const campaign = await Campaign.create({
         userEmail: user.email,
@@ -1020,87 +989,71 @@ export async function POST(req) {
         numbers: numbersToSend,
         validNumbers: numbersToSend,
         invalidNumbers: invalidNumbers.map(i => i.number),
-        status: 'running',
-        aiVerdict,
-        aiSuggestion: aiSpamSuggestion,
+        status: 'pending',
         country: firstCountry.country || null,
         countryCode: firstCountry.countryCode || null,
-        totalSent: numbersToSend.length,
-        senderApiId: senderApi._id,
-        senderApiName: senderApi.name,
         geminiApiId: geminiApi?._id || null,
         templateUsed: templateUsed || null,
         sendType: sendType || 'manual',
+        aiSuggestion: aiSuggestion || null,
       });
 
-      // Simulate sending via sender API (in production, call actual API)
-      let delivered = 0;
-      let undelivered = 0;
-      const deliveryReports = [];
+      // ── Run the REAL bulk send engine ────────────────────────────────────
+      const sendOpts = {
+        batchSize: (options && options.batchSize) || 5,
+        delayMs: (options && options.delayMs) || 1200,
+        mediaUrl: (options && options.mediaUrl) || null,
+        perMinute: (options && options.perMinute) || 0,
+        perHour: (options && options.perHour) || 0,
+        maxRetries: (options && options.maxRetries != null ? options.maxRetries : 2),
+      };
 
-      for (const num of numbersToSend) {
-        // In production, call senderApi.endpoint with senderApi.apiKey here
-        // For now, simulate delivery (90% delivery rate)
-        const isDelivered = Math.random() > 0.1;
-        const ci = countryInfo[num] || {};
+      const result = await bulkSendEngine({
+        user,
+        message,
+        numbers: numbersToSend,
+        invalidNumbers: invalidNumbers.map(i => i.number),
+        countryInfo,
+        geminiApi,
+        campaign,
+        appSettings,
+        options: sendOpts,
+      });
 
-        if (isDelivered) {
-          delivered++;
-          deliveryReports.push({
-            campaignId: campaign._id,
-            userId: user._id,
-            userEmail: user.email,
-            number: num,
-            status: 'delivered',
-            country: ci.country || null,
-            countryCode: ci.countryCode || null,
-            senderApiId: senderApi._id.toString(),
-            senderApiName: senderApi.name,
-          });
-        } else {
-          undelivered++;
-          deliveryReports.push({
-            campaignId: campaign._id,
-            userId: user._id,
-            userEmail: user.email,
-            number: num,
-            status: 'undelivered',
-            country: ci.country || null,
-            countryCode: ci.countryCode || null,
-            senderApiId: senderApi._id.toString(),
-            senderApiName: senderApi.name,
-            errorMessage: 'Delivery failed',
-          });
-        }
+      // ── Spam-blocked: stop here ──────────────────────────────────────────
+      if (result.blocked) {
+        return jsonResponse({
+          success: false,
+          blocked: true,
+          campaignId: campaign._id,
+          spamScore: result.spamScore,
+          spamLevel: result.spamLevel,
+          spamReasons: result.spamReasons,
+          aiReview: result.aiReview,
+          totalInvalid: result.totalInvalid,
+          invalidNumbers,
+          message: 'Message blocked by spam protection. Rewrite your content and try again.',
+        });
       }
 
-      // Calculate inbox/spam (simulated — in production, track via callbacks)
-      const inboxCount = Math.round(delivered * 0.85); // 85% of delivered go to inbox
-      const spamCount = delivered - inboxCount;
-
-      // Insert delivery reports
-      if (deliveryReports.length > 0) {
-        await DeliveryReport.insertMany(deliveryReports);
+      // ── No sender API available ──────────────────────────────────────────
+      if (result.error === 'no_sender_api') {
+        return jsonResponse({
+          success: false,
+          error: 'No active sender API configured. Admin must add a sender API in API Management.',
+          campaignId: campaign._id,
+          spamScore: result.spamScore,
+          spamLevel: result.spamLevel,
+        }, 503);
       }
 
-      // Update campaign
-      campaign.status = 'sent';
-      campaign.totalDelivered = delivered;
-      campaign.totalUndelivered = undelivered;
-      campaign.totalInvalid = invalidNumbers.length;
-      campaign.totalInbox = inboxCount;
-      campaign.totalSpam = spamCount;
-      await campaign.save();
-
-      // Update user stats
-      user.sentCount += numbersToSend.length;
+      // ── Update user stats ────────────────────────────────────────────────
+      user.sentCount += result.totalSent;
       user.lastSendAt = new Date();
       user.lastActiveAt = new Date();
-      user.totalDelivered += delivered;
-      user.totalUndelivered += undelivered;
-      user.totalInbox += inboxCount;
-      user.totalSpam += spamCount;
-      user.invalidHits += invalidNumbers.length;
+      user.totalDelivered += result.totalDelivered;
+      user.totalUndelivered += result.totalUndelivered;
+      user.invalidHits += result.totalInvalid;
       const totalSentAll = user.totalInbox + user.totalSpam;
       if (totalSentAll > 0) {
         user.inboxRate = Math.round((user.totalInbox / totalSentAll) * 100);
@@ -1108,31 +1061,208 @@ export async function POST(req) {
       }
       await user.save();
 
-      // Update sender API usage
-      await updateSenderApiUsage(senderApi._id, numbersToSend.length, inboxCount, spamCount);
+      // ── Log activity ─────────────────────────────────────────────────────
+      await logActivity(
+        user._id.toString(),
+        'user',
+        user.email,
+        'send_campaign',
+        `Sent ${result.totalSent} (delivered ${result.totalDelivered}, undelivered ${result.totalUndelivered}) via ${result.senderApiUsed || 'N/A'}`,
+        clientIP
+      );
 
-      // Log activity
-      await logActivity(user._id.toString(), 'user', user.email, 'send_campaign',
-        `Sent ${numbersToSend.length} via ${senderApi.name}`, clientIP);
-
-      // Check if sender API is getting low — alert admin
-      if (senderApi.remaining < senderApi.limit * 0.1 && senderApi.status === 'warning') {
-        await sendAlert('api_warning', `Sender API "${senderApi.name}" is running low: ${senderApi.remaining} remaining`);
+      // ── Alert if any sender API is running low ───────────────────────────
+      try {
+        const lowApis = await SenderApi.find({ status: 'warning' }).lean();
+        for (const la of lowApis) {
+          if (la.remaining < la.limit * 0.1) {
+            await sendAlert('api_warning', `Sender API "${la.name}" is running low: ${la.remaining} remaining`);
+          }
+        }
+      } catch (_e) {
+        // non-fatal
       }
 
       return jsonResponse({
         success: true,
         campaignId: campaign._id,
-        totalSent: numbersToSend.length,
-        totalDelivered: delivered,
-        totalUndelivered: undelivered,
-        totalInvalid: invalidNumbers.length,
+        totalSent: result.totalSent,
+        totalDelivered: result.totalDelivered,
+        totalUndelivered: result.totalUndelivered,
+        totalInvalid: result.totalInvalid,
         invalidNumbers,
-        aiVerdict,
-        aiSuggestion: aiSpamSuggestion,
-        senderApiUsed: senderApi.name,
+        spamScore: result.spamScore,
+        spamLevel: result.spamLevel,
+        spamReasons: result.spamReasons,
+        aiReview: result.aiReview,
+        senderApiUsed: result.senderApiUsed,
+        apisUsed: result.apisUsed,
         remainingQuota: user.sendingLimit - user.sentCount,
       });
+    }
+
+    // ===== ACTION: getCampaignProgress (live progress polling) =====
+    if (action === 'getCampaignProgress') {
+      const auth = await verifyAny(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const { campaignId } = body;
+      if (!campaignId) return jsonResponse({ error: 'campaignId required' }, 400);
+      const campaign = await Campaign.findById(campaignId).lean();
+      if (!campaign) return jsonResponse({ error: 'Campaign not found' }, 404);
+      // Ensure the requester owns the campaign
+      if (campaign.userId && String(campaign.userId) !== String(auth.decoded.userId)) {
+        return jsonResponse({ error: 'Unauthorized' }, 403);
+      }
+      const recentDeliveries = await DeliveryReport.find({ campaignId })
+        .sort({ sentAt: -1 })
+        .limit(20)
+        .lean();
+      return jsonResponse({
+        success: true,
+        campaign: {
+          _id: campaign._id,
+          status: campaign.status,
+          spamScore: campaign.spamScore,
+          spamLevel: campaign.spamLevel,
+          totalSent: campaign.totalSent,
+          totalDelivered: campaign.totalDelivered,
+          totalUndelivered: campaign.totalUndelivered,
+          totalInvalid: campaign.totalInvalid,
+          senderApiName: campaign.senderApiName,
+          batchSize: campaign.batchSize,
+          delayMs: campaign.delayMs,
+        },
+        recentDeliveries: recentDeliveries.map((d) => ({
+          number: d.number,
+          status: d.status,
+          provider: d.provider,
+          providerMsgId: d.providerMsgId,
+          errorCode: d.errorCode,
+          errorMessage: d.errorMessage,
+          attempts: d.attempts,
+          sentAt: d.sentAt,
+        })),
+      });
+    }
+
+    // ===== ACTION: spamCheck (preview spam score without sending) =====
+    if (action === 'spamCheck') {
+      const auth = await verifyAny(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const { message } = body;
+      if (!message) return jsonResponse({ error: 'message required' }, 400);
+      const heuristic = scoreSpamHeuristic(message);
+      const geminiApi = await getBestGeminiApi();
+      let aiReview = null;
+      if (geminiApi) {
+        try {
+          aiReview = await geminiSpamReview(message, geminiApi);
+          if (aiReview && aiReview.spam_score != null) {
+            await updateGeminiApiUsage(geminiApi._id, 1);
+          }
+        } catch (_e) {
+          // non-fatal
+        }
+      }
+      let spamScore = heuristic.score;
+      if (aiReview && aiReview.spam_score != null) {
+        spamScore = Math.round(heuristic.score * 0.5 + aiReview.spam_score * 0.5);
+      }
+      const spamLevel = spamScore >= 60 ? 'high' : spamScore >= 30 ? 'moderate' : 'clean';
+      return jsonResponse({
+        success: true,
+        spamScore,
+        spamLevel,
+        spamReasons: heuristic.reasons,
+        aiReview,
+      });
+    }
+
+    // ===== ACTION: testSenderApi (admin: test a sender API with one number) =====
+    if (action === 'testSenderApi') {
+      const auth = await verifyAdmin(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const { apiId, testNumber, testMessage } = body;
+      if (!apiId || !testNumber) return jsonResponse({ error: 'apiId and testNumber required' }, 400);
+      const api = await SenderApi.findById(apiId);
+      if (!api) return jsonResponse({ error: 'Sender API not found' }, 404);
+      const msg = testMessage || 'Test message from MMS Sender platform';
+      try {
+        const result = await sendWithRetry(api, testNumber, msg, null, 1);
+        return jsonResponse({
+          success: result.success,
+          provider: api.provider,
+          providerMsgId: result.providerMsgId,
+          errorCode: result.errorCode,
+          errorMessage: result.errorMessage,
+          attempts: result.attempts,
+        });
+      } catch (e) {
+        return jsonResponse({
+          success: false,
+          errorMessage: String(e.message || e),
+        }, 500);
+      }
+    }
+
+    // ===== ACTION: deliveryStatus (PUBLIC webhook — no auth) =====
+    if (action === 'deliveryStatus') {
+      await connectDB();
+      // Providers send webhook callbacks (POST form or JSON) with delivery updates.
+      // Common fields: MessageSid/MessageId, MessageStatus, To, ErrorCode
+      const providerMsgId =
+        body.MessageSid || body.messageSid || body.MessageId || body.messageId || body.id || null;
+      const status =
+        body.MessageStatus || body.messageStatus || body.status || null;
+      const errorCode = body.ErrorCode || body.errorCode || null;
+      const to = body.To || body.to || null;
+
+      if (!providerMsgId && !to) {
+        return jsonResponse({ error: 'No message identifier provided' }, 400);
+      }
+
+      // Find the delivery report by providerMsgId or number
+      let report = null;
+      if (providerMsgId) {
+        report = await DeliveryReport.findOne({ providerMsgId });
+      }
+      if (!report && to) {
+        report = await DeliveryReport.findOne({ number: to }).sort({ sentAt: -1 });
+      }
+      if (!report) {
+        return jsonResponse({ success: false, error: 'No matching delivery report' }, 404);
+      }
+
+      // Map provider status → our status
+      const statusMap = {
+        delivered: 'delivered',
+        sent: 'sent',
+        queued: 'queued',
+        accepted: 'sent',
+        undelivered: 'undelivered',
+        failed: 'failed',
+        rejected: 'failed',
+        bounced: 'failed',
+      };
+      const mapped = statusMap[String(status).toLowerCase()] || report.status;
+
+      report.status = mapped;
+      if (errorCode) report.errorCode = String(errorCode);
+      if (mapped === 'delivered') report.deliveredAt = new Date();
+      await report.save();
+
+      // Update campaign totals if delivered
+      if (mapped === 'delivered' && report.campaignId) {
+        await Campaign.updateOne(
+          { _id: report.campaignId },
+          { $inc: { totalDelivered: 1, totalUndelivered: -1 } }
+        ).catch(() => {});
+      }
+
+      return jsonResponse({ success: true, status: mapped });
     }
 
     // ===== ACTION: bulkImport (CSV numbers) =====

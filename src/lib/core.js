@@ -4,6 +4,18 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import {
+  checkRateLimit,
+  recordRateHit,
+  sleep,
+  batchArray,
+  executeRealSend,
+  sendWithRetry,
+  scoreSpamHeuristic,
+  geminiSpamReview,
+  aiRankSenderApis,
+  enforceCountryRules,
+} from './sendingEngine.js';
 
 // ============================================================================
 // MongoDB Connection (global caching pattern)
@@ -212,11 +224,15 @@ const campaignSchema = new mongoose.Schema({
   numbers: { type: [String] },
   validNumbers: { type: [String], default: [] },
   invalidNumbers: { type: [String], default: [] },
-  status: { type: String, enum: ['pending', 'running', 'sent', 'partial', 'blocked', 'failed'], default: 'pending' },
+  status: { type: String, enum: ['pending', 'running', 'sent', 'partial', 'blocked', 'blocked_spam', 'failed', 'queued'], default: 'pending' },
   aiVerdict: { type: String },
   aiSuggestion: { type: String },
+  spamScore: { type: Number, default: 0 },
+  spamLevel: { type: String, default: null },
   country: { type: String, default: null },
   countryCode: { type: String, default: null },
+  batchSize: { type: Number, default: 5 },
+  delayMs: { type: Number, default: 1200 },
   totalSent: { type: Number, default: 0 },
   totalDelivered: { type: Number, default: 0 },
   totalUndelivered: { type: Number, default: 0 },
@@ -334,14 +350,24 @@ const deliveryReportSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   userEmail: { type: String, default: '' },
   number: { type: String, required: true },
-  status: { type: String, enum: ['sent', 'delivered', 'undelivered', 'invalid', 'spam', 'pending'], default: 'pending' },
+  status: { type: String, enum: ['sent', 'delivered', 'undelivered', 'invalid', 'spam', 'pending', 'queued', 'failed'], default: 'pending' },
   country: { type: String, default: null },
   countryCode: { type: String, default: null },
   senderApiId: { type: String, default: null },
   senderApiName: { type: String, default: null },
+  provider: { type: String, default: null },
+  providerMsgId: { type: String, default: null },
+  errorCode: { type: String, default: null },
+  attempts: { type: Number, default: 0 },
+  batchIndex: { type: Number, default: 0 },
   errorMessage: { type: String, default: null },
   sentAt: { type: Date, default: Date.now },
+  deliveredAt: { type: Date, default: null },
 });
+
+deliveryReportSchema.index({ campaignId: 1, status: 1 });
+deliveryReportSchema.index({ userEmail: 1, sentAt: -1 });
+deliveryReportSchema.index({ providerMsgId: 1 }, { sparse: true });
 
 // --- AppSettings Schema (platform configuration) ---
 const appSettingsSchema = new mongoose.Schema({
@@ -670,6 +696,332 @@ async function updateGeminiApiUsage(apiId, requestCount) {
     api.status = 'warning';
   }
   await api.save();
+}
+
+// ============================================================================
+// REAL BULK SEND ENGINE
+// ----------------------------------------------------------------------------
+// This is the enterprise-grade bulk sending core. It:
+//   1. Scores the message for spam (heuristic + optional Gemini AI, 50/50).
+//   2. Blocks high-spam messages when spamProtection is on (spam-free guard).
+//   3. Uses AI to rank available sender APIs by inbox quality (with fallback).
+//   4. Sends in configurable batches with throttling between batches.
+//   5. Applies per-minute / per-hour rate limits per sender API.
+//   6. Retries transient failures with exponential backoff (terminal errors skip).
+//   7. Auto-routes to the next-best API if the current one exhausts or fails hard.
+//   8. Writes a DeliveryReport per number with provider, providerMsgId, errorCode.
+//   9. Updates sender API usage + health score after the campaign.
+//  10. Updates the campaign document live so the UI can poll progress.
+// ============================================================================
+
+async function bulkSendEngine(opts) {
+  const {
+    user,
+    message,
+    numbers,
+    invalidNumbers = [],
+    countryInfo,
+    geminiApi,
+    campaign,
+    appSettings,
+    options = {},
+  } = opts;
+
+  const batchSize = options.batchSize || 5;
+  const delayMs = options.delayMs || 1200;
+  const mediaUrl = options.mediaUrl || null;
+  const perMinute = options.perMinute || (appSettings && appSettings.rateLimitPerMinute) || 0;
+  const perHour = options.perHour || (appSettings && appSettings.rateLimitPerHour) || 0;
+  const maxRetries = options.maxRetries != null ? options.maxRetries : 2;
+
+  // ── 1. Spam scoring (heuristic + optional Gemini AI) ──────────────────────
+  const heuristic = scoreSpamHeuristic(message);
+  const spamReasons = [...(heuristic.reasons || [])];
+
+  let aiReview = null;
+  if (geminiApi) {
+    aiReview = await geminiSpamReview(message, geminiApi);
+    if (aiReview && aiReview.spam_score != null) {
+      await updateGeminiApiUsage(geminiApi._id, 1);
+      if (aiReview.suggestion) spamReasons.push('AI: ' + aiReview.suggestion);
+    }
+  }
+
+  let spamScore = heuristic.score;
+  if (aiReview && aiReview.spam_score != null) {
+    spamScore = Math.round(heuristic.score * 0.5 + aiReview.spam_score * 0.5);
+  }
+  const spamLevel = spamScore >= 60 ? 'high' : spamScore >= 30 ? 'moderate' : 'clean';
+
+  // ── SPAM-FREE GUARD: block high-spam content when protection is on ────────
+  if (appSettings && appSettings.spamProtection && spamLevel === 'high') {
+    campaign.status = 'blocked_spam';
+    campaign.aiVerdict = 'spam_blocked';
+    campaign.aiSuggestion = spamReasons.join('; ');
+    campaign.spamScore = spamScore;
+    campaign.spamLevel = spamLevel;
+    await campaign.save();
+    return {
+      blocked: true,
+      spamScore,
+      spamLevel,
+      spamReasons,
+      aiReview,
+      totalSent: 0,
+      totalDelivered: 0,
+      totalUndelivered: 0,
+      totalInvalid: invalidNumbers.length,
+      invalidNumbers,
+      deliveryReports: [],
+    };
+  }
+
+  // ── 2. AI routing — rank sender APIs by inbox quality ─────────────────────
+  let allApis = await SenderApi.find({ status: 'active' }).sort({ healthScore: -1 }).lean();
+  if (allApis.length === 0) {
+    campaign.status = 'failed';
+    campaign.aiVerdict = 'no_sender_api';
+    campaign.aiSuggestion = 'No active sender API configured. Add one in Admin → API Management.';
+    campaign.spamScore = spamScore;
+    await campaign.save();
+    return {
+      blocked: false,
+      error: 'no_sender_api',
+      spamScore,
+      spamLevel,
+      spamReasons,
+      aiReview,
+      totalSent: 0,
+      totalDelivered: 0,
+      totalUndelivered: 0,
+      totalInvalid: invalidNumbers.length,
+      invalidNumbers,
+      deliveryReports: [],
+    };
+  }
+
+  // Try AI ranking; fall back to deterministic sort on failure
+  let rankedApis = allApis;
+  if (geminiApi) {
+    try {
+      const aiRanked = await aiRankSenderApis(allApis, message, geminiApi);
+      if (aiRanked && Array.isArray(aiRanked) && aiRanked.length > 0) {
+        rankedApis = aiRanked;
+      }
+    } catch (_e) {
+      // keep deterministic fallback
+    }
+  }
+
+  // Build a mutable lookup so we can fetch fresh docs during auto-routing
+  const apiMap = new Map();
+  for (const a of rankedApis) apiMap.set(String(a._id), a);
+
+  // ── 3. Prepare campaign state ─────────────────────────────────────────────
+  campaign.status = 'running';
+  campaign.spamScore = spamScore;
+  campaign.spamLevel = spamLevel;
+  campaign.batchSize = batchSize;
+  campaign.delayMs = delayMs;
+  campaign.totalInvalid = invalidNumbers.length;
+  await campaign.save();
+
+  const deliveryReports = [];
+  let totalSent = 0;
+  let totalDelivered = 0;
+  let totalUndelivered = 0;
+  const apisUsed = new Set();
+  let currentApiIndex = 0;
+  let senderApiUsed = rankedApis[0] ? rankedApis[0].name : null;
+
+  // Helper to get a fresh API doc by id (so we always read latest remaining/health)
+  async function getApiDoc(id) {
+    return await SenderApi.findById(id);
+  }
+
+  // Advance to the next-best API when the current one is exhausted / blocked
+  function advanceApi() {
+    currentApiIndex++;
+    if (currentApiIndex < rankedApis.length) {
+      senderApiUsed = rankedApis[currentApiIndex].name;
+      return true;
+    }
+    return false;
+  }
+
+  // ── 4. Send in batches with throttling + retry + rate limiting ────────────
+  let batchIndex = 0;
+  for (const batch of batchArray(numbers, batchSize)) {
+    // Pick the current sender API (fresh doc)
+    let apiDoc = null;
+    let apiId = null;
+    while (currentApiIndex < rankedApis.length) {
+      apiId = String(rankedApis[currentApiIndex]._id);
+      apiDoc = await getApiDoc(apiId);
+      if (!apiDoc) {
+        if (!advanceApi()) break;
+        continue;
+      }
+      if (apiDoc.status !== 'active' || apiDoc.remaining <= 0) {
+        if (!advanceApi()) break;
+        continue;
+      }
+      break;
+    }
+
+    // No more APIs available — mark remaining numbers as undelivered
+    if (!apiDoc) {
+      for (const num of batch) {
+        deliveryReports.push({
+          campaignId: campaign._id,
+          userId: user._id,
+          userEmail: user.email,
+          number: num,
+          status: 'failed',
+          errorMessage: 'No available sender API',
+          batchIndex,
+        });
+        totalUndelivered++;
+      }
+      batchIndex++;
+      continue;
+    }
+
+    apisUsed.add(apiDoc.name);
+    senderApiUsed = apiDoc.name;
+
+    // Enforce rate limits (wait if needed)
+    const rate = checkRateLimit(apiId, perMinute, perHour);
+    if (!rate.allowed) {
+      await sleep(rate.waitMs);
+    }
+
+    // Send each number in the batch
+    for (const number of batch) {
+      // Country rule enforcement
+      if (appSettings && appSettings.countryRules) {
+        const cRes = enforceCountryRules(number, appSettings.countryRules);
+        if (cRes.blocked) {
+          deliveryReports.push({
+            campaignId: campaign._id,
+            userId: user._id,
+            userEmail: user.email,
+            number,
+            status: 'invalid',
+            errorMessage: cRes.reason || 'Blocked by country rule',
+            batchIndex,
+          });
+          totalUndelivered++;
+          continue;
+        }
+      }
+
+      recordRateHit(apiId);
+
+      const result = await sendWithRetry(apiDoc, number, message, mediaUrl, maxRetries);
+      totalSent++;
+
+      const dr = {
+        campaignId: campaign._id,
+        userId: user._id,
+        userEmail: user.email,
+        number,
+        status: result.success ? 'sent' : 'failed',
+        senderApiId: String(apiDoc._id),
+        senderApiName: apiDoc.name,
+        provider: apiDoc.provider,
+        providerMsgId: result.providerMsgId || null,
+        errorCode: result.errorCode || null,
+        attempts: result.attempts || (result.success ? 1 : maxRetries + 1),
+        batchIndex,
+        errorMessage: result.errorMessage || null,
+        sentAt: new Date(),
+      };
+
+      if (result.success) {
+        totalDelivered++;
+      } else {
+        totalUndelivered++;
+        // If this is a hard/terminal failure, consider auto-routing
+        if (result.terminal && apiDoc.remaining <= 0) {
+          advanceApi();
+        }
+      }
+
+      deliveryReports.push(dr);
+
+      // Update sender API usage incrementally (every send)
+      await updateSenderApiUsage(apiDoc._id, 1, result.success ? 1 : 0, 0);
+
+      // Refresh apiDoc so we have the latest remaining/status for the next send
+      apiDoc = await getApiDoc(apiId);
+      if (!apiDoc || apiDoc.status !== 'active' || apiDoc.remaining <= 0) {
+        if (!advanceApi()) break;
+      }
+    }
+
+    // Live campaign progress update after each batch
+    campaign.totalSent = totalSent;
+    campaign.totalDelivered = totalDelivered;
+    campaign.totalUndelivered = totalUndelivered;
+    campaign.senderApiName = senderApiUsed;
+    await campaign.save();
+
+    batchIndex++;
+    // Throttle between batches
+    if (delayMs > 0) await sleep(delayMs);
+  }
+
+  // ── 5. Finalize campaign ──────────────────────────────────────────────────
+  campaign.totalSent = totalSent;
+  campaign.totalDelivered = totalDelivered;
+  campaign.totalUndelivered = totalUndelivered;
+  campaign.status =
+    totalSent === 0
+      ? 'failed'
+      : totalDelivered === totalSent
+        ? 'sent'
+        : 'partial';
+  campaign.senderApiName = senderApiUsed;
+  await campaign.save();
+
+  // Bulk-write delivery reports
+  if (deliveryReports.length > 0) {
+    try {
+      await DeliveryReport.insertMany(deliveryReports);
+    } catch (_e) {
+      // Best-effort; individual failures are non-fatal
+    }
+  }
+
+  // Log activity
+  try {
+    await logActivity({
+      actorId: String(user._id),
+      actorType: 'user',
+      actorEmail: user.email,
+      action: 'bulk_send_complete',
+      details: `Sent ${totalSent} (delivered ${totalDelivered}, undelivered ${totalUndelivered}) via ${[...apisUsed].join(', ')}`,
+    });
+  } catch (_e) {
+    // non-fatal
+  }
+
+  return {
+    blocked: false,
+    spamScore,
+    spamLevel,
+    spamReasons,
+    aiReview,
+    totalSent,
+    totalDelivered,
+    totalUndelivered,
+    totalInvalid: invalidNumbers.length,
+    invalidNumbers,
+    deliveryReports,
+    senderApiUsed,
+    apisUsed: [...apisUsed],
+  };
 }
 
 // ============================================================================
@@ -1091,6 +1443,13 @@ export {
   getBestGeminiApi,
   updateSenderApiUsage,
   updateGeminiApiUsage,
+  // Bulk send engine (real provider integrations)
+  bulkSendEngine,
+  executeRealSend,
+  sendWithRetry,
+  scoreSpamHeuristic,
+  geminiSpamReview,
+  enforceCountryRules,
   // Number validation
   validatePhoneNumber,
   getCountryCode,
