@@ -140,16 +140,11 @@ const userSchema = new mongoose.Schema({
 });
 
 // PRE-SAVE HOOK: auto-hash password when modified
-userSchema.pre('save', async function (next) {
+userSchema.pre('save', async function () {
   if (!this.isModified('password')) {
-    return next();
+    return;
   }
-  try {
-    this.password = await hashPassword(this.password);
-    return next();
-  } catch (err) {
-    return next(err);
-  }
+  this.password = await hashPassword(this.password);
 });
 
 // --- Config Schema ---
