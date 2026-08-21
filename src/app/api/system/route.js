@@ -1,8 +1,10 @@
 import {
   connectDB,
+  reconnectDB,
   User,
   Config,
   Campaign,
+  MongoConnection,
   createToken,
   verifyToken,
   comparePassword,
@@ -341,6 +343,158 @@ export async function POST(req) {
           email: user.email,
           role: user.role,
         },
+        200
+      );
+    }
+
+    // ===== ACTION 10: getMongoConnections =====
+    if (action === 'getMongoConnections') {
+      const cookieHeader = req.headers.get('cookie') || '';
+      const tokenMatch = cookieHeader.match(/token=([^;]+)/);
+      const token = tokenMatch ? tokenMatch[1] : null;
+      if (!token) return jsonResponse({ error: 'Unauthorized' }, 401);
+      const decoded = await verifyToken(token);
+      if (!decoded) return jsonResponse({ error: 'Invalid Token' }, 403);
+      if (decoded.role !== 'admin')
+        return jsonResponse({ error: 'Forbidden: Admin only' }, 403);
+
+      await connectDB();
+      const connections = await MongoConnection.find({})
+        .sort({ isActive: -1, createdAt: 1 })
+        .select('-uri')
+        .lean();
+      // Return all fields except full URI (show only masked version for security)
+      const masked = connections.map((c) => ({
+        _id: c._id,
+        label: c.label,
+        isActive: c.isActive,
+        createdAt: c.createdAt,
+        uriMasked: c.uri ? c.uri.replace(/:[^:@]+@/, ':****@') : '',
+      }));
+      return jsonResponse({ connections: masked }, 200);
+    }
+
+    // ===== ACTION 11: addMongoConnection =====
+    if (action === 'addMongoConnection') {
+      const cookieHeader = req.headers.get('cookie') || '';
+      const tokenMatch = cookieHeader.match(/token=([^;]+)/);
+      const token = tokenMatch ? tokenMatch[1] : null;
+      if (!token) return jsonResponse({ error: 'Unauthorized' }, 401);
+      const decoded = await verifyToken(token);
+      if (!decoded) return jsonResponse({ error: 'Invalid Token' }, 403);
+      if (decoded.role !== 'admin')
+        return jsonResponse({ error: 'Forbidden: Admin only' }, 403);
+
+      const { label, uri } = body;
+      if (!label || !uri)
+        return jsonResponse({ error: 'label and uri required' }, 400);
+
+      await connectDB();
+
+      // Check for duplicate
+      const existing = await MongoConnection.findOne({ uri });
+      if (existing)
+        return jsonResponse({ error: 'This URI already exists' }, 409);
+
+      // Count existing connections
+      const count = await MongoConnection.countDocuments();
+      const makeActive = count === 0;
+
+      await MongoConnection.create({
+        label: label.trim(),
+        uri: uri.trim(),
+        isActive: makeActive,
+      });
+
+      return jsonResponse(
+        {
+          success: true,
+          message: makeActive
+            ? 'MongoDB connection added and set as active!'
+            : 'MongoDB connection added!',
+        },
+        200
+      );
+    }
+
+    // ===== ACTION 12: deleteMongoConnection =====
+    if (action === 'deleteMongoConnection') {
+      const cookieHeader = req.headers.get('cookie') || '';
+      const tokenMatch = cookieHeader.match(/token=([^;]+)/);
+      const token = tokenMatch ? tokenMatch[1] : null;
+      if (!token) return jsonResponse({ error: 'Unauthorized' }, 401);
+      const decoded = await verifyToken(token);
+      if (!decoded) return jsonResponse({ error: 'Invalid Token' }, 403);
+      if (decoded.role !== 'admin')
+        return jsonResponse({ error: 'Forbidden: Admin only' }, 403);
+
+      const { connectionId } = body;
+      if (!connectionId)
+        return jsonResponse({ error: 'connectionId required' }, 400);
+
+      await connectDB();
+      const conn = await MongoConnection.findById(connectionId);
+      if (!conn)
+        return jsonResponse({ error: 'Connection not found' }, 404);
+
+      const wasActive = conn.isActive;
+      await MongoConnection.findByIdAndDelete(connectionId);
+
+      // If we deleted the active connection, activate the first remaining one
+      if (wasActive) {
+        const remaining = await MongoConnection.findOne({}).sort({
+          createdAt: 1,
+        });
+        if (remaining) {
+          remaining.isActive = true;
+          await remaining.save();
+          await reconnectDB(remaining.uri);
+        }
+      }
+
+      return jsonResponse(
+        { success: true, message: 'Connection deleted' },
+        200
+      );
+    }
+
+    // ===== ACTION 13: setActiveMongo =====
+    if (action === 'setActiveMongo') {
+      const cookieHeader = req.headers.get('cookie') || '';
+      const tokenMatch = cookieHeader.match(/token=([^;]+)/);
+      const token = tokenMatch ? tokenMatch[1] : null;
+      if (!token) return jsonResponse({ error: 'Unauthorized' }, 401);
+      const decoded = await verifyToken(token);
+      if (!decoded) return jsonResponse({ error: 'Invalid Token' }, 403);
+      if (decoded.role !== 'admin')
+        return jsonResponse({ error: 'Forbidden: Admin only' }, 403);
+
+      const { connectionId } = body;
+      if (!connectionId)
+        return jsonResponse({ error: 'connectionId required' }, 400);
+
+      await connectDB();
+      const conn = await MongoConnection.findById(connectionId);
+      if (!conn)
+        return jsonResponse({ error: 'Connection not found' }, 404);
+
+      // Deactivate all, activate the selected one
+      await MongoConnection.updateMany({}, { isActive: false });
+      conn.isActive = true;
+      await conn.save();
+
+      // Reconnect to the new URI
+      try {
+        await reconnectDB(conn.uri);
+      } catch (err) {
+        return jsonResponse(
+          { error: 'Failed to connect to new database: ' + err.message },
+          500
+        );
+      }
+
+      return jsonResponse(
+        { success: true, message: 'Active database switched successfully!' },
         200
       );
     }

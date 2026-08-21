@@ -14,6 +14,9 @@ export default function AdminPanel({ user, onLogout }) {
     GEMINI_API_KEY: '',
     SMS_API_KEY: '',
   });
+  const [mongoConnections, setMongoConnections] = useState([]);
+  const [newMongoLabel, setNewMongoLabel] = useState('');
+  const [newMongoUri, setNewMongoUri] = useState('');
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState({});
 
@@ -34,17 +37,24 @@ export default function AdminPanel({ user, onLogout }) {
 
   useEffect(() => {
     const loadData = async () => {
-      const [u, c, s] = await Promise.all([
+      const [u, c, s, m] = await Promise.all([
         apiCall({ action: 'getUsers' }),
         apiCall({ action: 'getCampaigns' }),
         apiCall({ action: 'getConfigStatus' }),
+        apiCall({ action: 'getMongoConnections' }),
       ]);
       if (u.users) setUsers(u.users);
       if (c.campaigns) setCampaigns(c.campaigns);
       if (s.status) setConfigStatus(s.status);
+      if (m.connections) setMongoConnections(m.connections);
     };
     loadData();
   }, []);
+
+  const loadMongoConnections = async () => {
+    const res = await apiCall({ action: 'getMongoConnections' });
+    if (res.connections) setMongoConnections(res.connections);
+  };
 
   const saveConfig = async (keyName) => {
     setLoading({ ...loading, [keyName]: true });
@@ -85,6 +95,56 @@ export default function AdminPanel({ user, onLogout }) {
       );
     } else {
       showToast('error', res.error || 'Failed');
+    }
+  };
+
+  const addMongoConnection = async () => {
+    if (!newMongoLabel.trim() || !newMongoUri.trim()) {
+      showToast('error', 'Label and URI both required');
+      return;
+    }
+    setLoading({ ...loading, addMongo: true });
+    const res = await apiCall({
+      action: 'addMongoConnection',
+      label: newMongoLabel,
+      uri: newMongoUri,
+    });
+    setLoading({ ...loading, addMongo: false });
+    if (res.success) {
+      showToast('success', res.message);
+      setNewMongoLabel('');
+      setNewMongoUri('');
+      loadMongoConnections();
+    } else {
+      showToast('error', res.error || 'Failed to add');
+    }
+  };
+
+  const deleteMongoConnection = async (connectionId) => {
+    const res = await apiCall({
+      action: 'deleteMongoConnection',
+      connectionId,
+    });
+    if (res.success) {
+      showToast('success', 'Connection deleted');
+      loadMongoConnections();
+    } else {
+      showToast('error', res.error || 'Failed');
+    }
+  };
+
+  const setActiveMongo = async (connectionId) => {
+    setLoading({ ...loading, ['switch_' + connectionId]: true });
+    const res = await apiCall({
+      action: 'setActiveMongo',
+      connectionId,
+    });
+    setLoading({ ...loading, ['switch_' + connectionId]: false });
+    if (res.success) {
+      showToast('success', res.message);
+      loadMongoConnections();
+    } else {
+      showToast('error', res.error || 'Failed to switch');
     }
   };
 
@@ -220,6 +280,100 @@ export default function AdminPanel({ user, onLogout }) {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* MongoDB Multi-Connection Manager */}
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 mb-8">
+          <h2 className="text-xl font-semibold text-white mb-1">
+            MongoDB Connections
+          </h2>
+          <p className="text-sm text-slate-400 mb-6">
+            Add multiple MongoDB Atlas free-tier accounts. Switch between them
+            anytime. The green &quot;Active&quot; badge shows which database is
+            currently in use.
+          </p>
+
+          {/* Add new connection form */}
+          <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <input
+                type="text"
+                value={newMongoLabel}
+                onChange={(e) => setNewMongoLabel(e.target.value)}
+                className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm"
+                placeholder="Label (e.g. Account-1)"
+              />
+              <input
+                type="text"
+                value={newMongoUri}
+                onChange={(e) => setNewMongoUri(e.target.value)}
+                className="md:col-span-2 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm"
+                placeholder="mongodb+srv://username:password@cluster..."
+              />
+            </div>
+            <button
+              onClick={addMongoConnection}
+              disabled={loading.addMongo}
+              className="mt-2 px-5 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 disabled:opacity-50 text-sm"
+            >
+              {loading.addMongo ? 'Adding...' : '+ Add Connection'}
+            </button>
+          </div>
+
+          {/* List of connections */}
+          <div className="space-y-2">
+            {mongoConnections.length === 0 ? (
+              <p className="text-sm text-slate-500 text-center py-4">
+                No MongoDB connections added yet. Add your first one above.
+              </p>
+            ) : (
+              mongoConnections.map((conn) => (
+                <div
+                  key={conn._id}
+                  className="flex flex-col md:flex-row md:items-center justify-between bg-slate-800/30 border border-slate-700/50 rounded-lg p-3 gap-2"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-white text-sm font-medium">
+                        {conn.label}
+                      </span>
+                      {conn.isActive ? (
+                        <span className="px-2 py-0.5 rounded text-xs bg-green-900 text-green-300">
+                          Active
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-xs bg-slate-700 text-slate-400">
+                          Inactive
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1 break-all">
+                      {conn.uriMasked}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 flex-shrink-0">
+                    {!conn.isActive && (
+                      <button
+                        onClick={() => setActiveMongo(conn._id)}
+                        disabled={loading['switch_' + conn._id]}
+                        className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-500 disabled:opacity-50"
+                      >
+                        {loading['switch_' + conn._id]
+                          ? 'Switching...'
+                          : 'Set Active'}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => deleteMongoConnection(conn._id)}
+                      className="px-3 py-1.5 bg-red-600 text-white rounded text-xs hover:bg-red-500"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
 
         {/* User Management Table */}

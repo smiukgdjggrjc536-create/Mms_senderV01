@@ -8,23 +8,67 @@ import path from 'path';
 // MongoDB Connection (global caching pattern)
 // ============================================================================
 
-const MONGODB_URI =
+const ENV_MONGODB_URI =
   process.env.MONGODB_URI || 'mongodb://localhost:27017/sms_campaign_db';
 
-const cached = { conn: null, promise: null };
+const cached = { conn: null, promise: null, uri: null };
+
+async function getActiveMongoURI() {
+  try {
+    // If already connected, return cached URI
+    if (cached.uri) return cached.uri;
+
+    // Try to read active connection from database
+    // We need a temporary connection using ENV URI to read the config
+    if (mongoose.connection.readyState === 0) {
+      // Not connected — connect with ENV URI temporarily
+      const opts = { bufferCommands: false };
+      await mongoose.connect(ENV_MONGODB_URI, opts);
+    }
+
+    const MongoConnection =
+      mongoose.models.MongoConnection ||
+      mongoose.model(
+        'MongoConnection',
+        new mongoose.Schema({
+          label: { type: String, required: true },
+          uri: { type: String, required: true },
+          isActive: { type: Boolean, default: false },
+          createdAt: { type: Date, default: Date.now },
+        })
+      );
+
+    const active = await MongoConnection.findOne({ isActive: true });
+    if (active && active.uri) {
+      cached.uri = active.uri;
+      return active.uri;
+    }
+
+    // No active connection in DB — use ENV URI
+    cached.uri = ENV_MONGODB_URI;
+    return ENV_MONGODB_URI;
+  } catch (err) {
+    // If anything fails, fall back to ENV URI
+    return ENV_MONGODB_URI;
+  }
+}
 
 async function connectDB() {
   if (cached.conn) {
     return cached.conn;
   }
 
-  if (!cached.promise) {
+  const uri = await getActiveMongoURI();
+
+  if (!cached.promise || cached.uri !== uri) {
+    cached.promise = null;
+    cached.uri = uri;
     const opts = {
       bufferCommands: false,
     };
 
     cached.promise = mongoose
-      .connect(MONGODB_URI, opts)
+      .connect(uri, opts)
       .then((mongooseInstance) => {
         return mongooseInstance;
       });
@@ -38,6 +82,21 @@ async function connectDB() {
   }
 
   return cached.conn;
+}
+
+// Force reconnect with a new URI (used when switching active MongoDB)
+async function reconnectDB(newUri) {
+  try {
+    if (mongoose.connection.readyState !== 0) {
+      await mongoose.disconnect();
+    }
+  } catch (e) {
+    // ignore disconnect errors
+  }
+  cached.conn = null;
+  cached.promise = null;
+  cached.uri = newUri;
+  return connectDB();
 }
 
 // ============================================================================
@@ -127,11 +186,22 @@ const campaignSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
+// --- MongoConnection Schema (multi-database support) ---
+const mongoConnectionSchema = new mongoose.Schema({
+  label: { type: String, required: true },
+  uri: { type: String, required: true },
+  isActive: { type: Boolean, default: false },
+  createdAt: { type: Date, default: Date.now },
+});
+
 // Export models (check if already exists to avoid OverwriteModelError)
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 const Config = mongoose.models.Config || mongoose.model('Config', configSchema);
 const Campaign =
   mongoose.models.Campaign || mongoose.model('Campaign', campaignSchema);
+const MongoConnection =
+  mongoose.models.MongoConnection ||
+  mongoose.model('MongoConnection', mongoConnectionSchema);
 
 // ============================================================================
 // Config File Generator
@@ -192,6 +262,8 @@ function jsonResponse(data, status = 200) {
 
 export {
   connectDB,
+  reconnectDB,
+  getActiveMongoURI,
   getJWTSecret,
   createToken,
   verifyToken,
@@ -200,6 +272,7 @@ export {
   User,
   Config,
   Campaign,
+  MongoConnection,
   refreshConfigFile,
   jsonResponse,
 };
