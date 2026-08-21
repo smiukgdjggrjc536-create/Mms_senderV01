@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 
-export default function AdminPanel() {
+export default function AdminPanel({ user, onLogout }) {
   const [users, setUsers] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
   const [configStatus, setConfigStatus] = useState({
@@ -129,8 +129,12 @@ export default function AdminPanel() {
           </h1>
           <button
             onClick={() => {
-              document.cookie = 'token=; Max-Age=0; path=/';
-              window.location.href = '/';
+              if (onLogout) {
+                onLogout();
+              } else {
+                document.cookie = 'token=; Max-Age=0; path=/';
+                window.location.href = '/';
+              }
             }}
             className="px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 text-sm"
           >

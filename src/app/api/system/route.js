@@ -315,6 +315,36 @@ export async function POST(req) {
       return jsonResponse({ status }, 200);
     }
 
+    // ===== ACTION 9: getUserCampaigns =====
+    if (action === 'getUserCampaigns') {
+      const cookieHeader = req.headers.get('cookie') || '';
+      const tokenMatch = cookieHeader.match(/token=([^;]+)/);
+      const token = tokenMatch ? tokenMatch[1] : null;
+      if (!token) return jsonResponse({ error: 'Unauthorized' }, 401);
+      const decoded = await verifyToken(token);
+      if (!decoded) return jsonResponse({ error: 'Invalid Token' }, 403);
+
+      await connectDB();
+      const user = await User.findOne({ email: decoded.email });
+      if (!user) return jsonResponse({ error: 'User not found' }, 404);
+
+      const campaigns = await Campaign.find({ userEmail: decoded.email })
+        .sort({ createdAt: -1 })
+        .limit(50)
+        .lean();
+      return jsonResponse(
+        {
+          campaigns,
+          limit: user.sendingLimit,
+          sent: user.sentCount,
+          status: user.status,
+          email: user.email,
+          role: user.role,
+        },
+        200
+      );
+    }
+
     return jsonResponse({ error: 'Unknown action' }, 400);
   } catch (error) {
     console.error('API Error:', error);
