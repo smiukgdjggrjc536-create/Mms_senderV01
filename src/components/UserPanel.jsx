@@ -61,12 +61,11 @@ function Spinner({ size = 16 }) {
 // USER LOGIN — purple/indigo enterprise theme, shows admin-set info
 // ================================================================
 function UserLogin({ onLoginSuccess }) {
-  const [email, setEmail] = useState('');
+  const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isRegister, setIsRegister] = useState(false);
   const [settings, setSettings] = useState(null);
 
   // Fetch public app settings (platform name, description, contact)
@@ -89,14 +88,19 @@ function UserLogin({ onLoginSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    // Client-side validation: 4 letters + 2 digits, no @
+    const cleanId = loginId.trim().toUpperCase();
+    if (!/^[A-Z]{4}[0-9]{2}$/.test(cleanId)) {
+      setError('User ID must be exactly 4 letters followed by 2 digits (e.g. SAMU01). No @ symbol, no email.');
+      return;
+    }
     setLoading(true);
     try {
-      const action = isRegister ? 'registerUser' : 'login';
       const res = await fetch('/api/system', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ action, email, password }),
+        body: JSON.stringify({ action: 'login', loginId: cleanId, password }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -104,7 +108,8 @@ function UserLogin({ onLoginSuccess }) {
           role: data.role,
           limit: data.limit,
           sent: data.sent,
-          email: data.email,
+          loginId: data.loginId || cleanId,
+          email: data.email || '',
           status: 'active',
         });
       } else {
@@ -147,39 +152,29 @@ function UserLogin({ onLoginSuccess }) {
 
         {/* Login Card */}
         <div className="bg-gray-900/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-800 shadow-2xl">
-          <div className="flex gap-2 mb-6 p-1 bg-gray-800/50 rounded-lg">
-            <button
-              onClick={() => { setIsRegister(false); setError(''); }}
-              className={`flex-1 py-2 rounded-md text-sm font-medium transition ${
-                !isRegister ? 'bg-purple-600 text-white shadow' : 'text-gray-400 hover:text-gray-200'
-              }`}
-            >
-              Sign In
-            </button>
-            <button
-              onClick={() => { setIsRegister(true); setError(''); }}
-              className={`flex-1 py-2 rounded-md text-sm font-medium transition ${
-                isRegister ? 'bg-purple-600 text-white shadow' : 'text-gray-400 hover:text-gray-200'
-              }`}
-            >
-              Register
-            </button>
+          <div className="mb-6 text-center">
+            <h2 className="text-xl font-semibold text-white">Sign In to Your Account</h2>
+            <p className="text-xs text-gray-500 mt-1">Enter your User ID and password to continue</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1.5">Email / Username</label>
+              <label className="block text-sm text-gray-400 mb-1.5">User ID <span className="text-purple-400/70 text-xs">(4 letters + 2 digits)</span></label>
               <div className="relative">
                 <Icon.User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
                 <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  type="text"
+                  value={loginId}
+                  onChange={(e) => setLoginId(e.target.value)}
                   required
-                  placeholder="you@example.com"
-                  className="w-full pl-10 pr-3 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  placeholder="e.g. SAMU01"
+                  className="w-full pl-10 pr-3 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm uppercase tracking-wider font-mono"
                 />
               </div>
+              <p className="text-[10px] text-gray-600 mt-1.5">Format: exactly 4 letters then 2 numbers (no @, no email). Contact admin if you don't have an ID.</p>
             </div>
 
             <div>
@@ -217,7 +212,7 @@ function UserLogin({ onLoginSuccess }) {
               className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 text-white rounded-lg font-semibold transition shadow-lg shadow-purple-500/20 text-sm flex items-center justify-center gap-2"
             >
               {loading ? <Spinner /> : null}
-              {loading ? 'Please wait...' : isRegister ? 'Create Account' : 'Sign In'}
+              {loading ? 'Please wait...' : 'Sign In'}
             </button>
           </form>
 
@@ -410,6 +405,7 @@ function UserDashboard({ user, onLogout, onRefresh }) {
 
           <TabBtn icon={Icon.Dashboard} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
           <TabBtn icon={Icon.Send} label="Send MMS" active={activeTab === 'send'} onClick={() => setActiveTab('send')} />
+          <TabBtn icon={Icon.Inbox} label="Inbox & Auto-Reply" active={activeTab === 'inbox'} onClick={() => setActiveTab('inbox')} />
           <TabBtn icon={Icon.Report} label="Reports" active={activeTab === 'reports'} onClick={() => setActiveTab('reports')} />
           <TabBtn icon={Icon.Info} label="App Info" active={activeTab === 'info'} onClick={() => setActiveTab('info')} />
 
@@ -448,11 +444,12 @@ function UserDashboard({ user, onLogout, onRefresh }) {
               <h1 className="text-xl sm:text-2xl font-bold text-white">
                 {activeTab === 'dashboard' && 'Dashboard'}
                 {activeTab === 'send' && 'Send MMS Campaign'}
+                {activeTab === 'inbox' && 'Inbox & Auto-Reply'}
                 {activeTab === 'reports' && 'Delivery Reports'}
                 {activeTab === 'info' && 'App Information'}
               </h1>
               <p className="text-gray-400 text-xs mt-0.5">
-                Logged in as <span className="text-purple-300 font-medium">{stats?.email || user?.email}</span>
+                Logged in as <span className="text-purple-300 font-medium">{stats?.loginId || user?.loginId || stats?.email || user?.email}</span>
               </p>
             </div>
           </div>
@@ -462,6 +459,7 @@ function UserDashboard({ user, onLogout, onRefresh }) {
             {[
               { k: 'dashboard', l: 'Dashboard', I: Icon.Dashboard },
               { k: 'send', l: 'Send', I: Icon.Send },
+              { k: 'inbox', l: 'Inbox', I: Icon.Inbox },
               { k: 'reports', l: 'Reports', I: Icon.Report },
               { k: 'info', l: 'Info', I: Icon.Info },
             ].map(({ k, l, I }) => (
@@ -497,6 +495,9 @@ function UserDashboard({ user, onLogout, onRefresh }) {
               deliveryReports={deliveryReports}
               onCampaignClick={fetchDeliveryReports}
             />
+          )}
+          {activeTab === 'inbox' && (
+            <InboxAutoReplyTab language={language} onToast={show} loginId={stats?.loginId || user?.loginId} />
           )}
           {activeTab === 'info' && <InfoTab settings={settings} />}
 
@@ -1311,6 +1312,195 @@ function InfoTab({ settings }) {
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ================================================================
+// INBOX & AUTO-REPLY TAB — language selection (Bangla/English/Sylheti) then reply
+// ================================================================
+function InboxAutoReplyTab({ language, onToast, loginId }) {
+  const [config, setConfig] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [webhookUrl, setWebhookUrl] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [cfgRes, msgRes] = await Promise.all([
+        fetch('/api/system', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ action: 'getAutoReplyConfig' }) }),
+        fetch('/api/system', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ action: 'getInboxMessages' }) }),
+      ]);
+      const cfg = await cfgRes.json();
+      if (cfg.success) { setConfig(cfg.config); setWebhookUrl(cfg.webhookUrl || ''); }
+      const msg = await msgRes.json();
+      if (msg.success) setMessages(msg.messages);
+    } catch {}
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/system', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ action: 'setAutoReplyConfig', enabled: config.enabled, languagePrompt: config.languagePrompt, replyMessage: config.replyMessage }),
+      });
+      const data = await res.json();
+      if (data.success) { onToast('Auto-reply settings saved', 'success'); setConfig(data.config); }
+      else onToast(data.error || 'Save failed', 'error');
+    } catch { onToast('Network error', 'error'); }
+    setSaving(false);
+  };
+
+  if (loading || !config) return <div className="flex items-center justify-center py-20"><Spinner size={24} /></div>;
+
+  return (
+    <div className="space-y-6">
+      {/* How it works banner */}
+      <div className="bg-gradient-to-r from-purple-900/30 to-indigo-900/20 border border-purple-700/30 rounded-xl p-4">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-purple-600/30 flex items-center justify-center flex-shrink-0">
+            <Icon.Inbox className="w-5 h-5 text-purple-300" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-white">How SMS Auto-Reply Works</h3>
+            <p className="text-xs text-gray-400 mt-1 leading-relaxed">
+              When someone sends an SMS to your number, the system automatically replies with a language selection prompt.
+              The sender chooses <span className="text-purple-300">1 (Bangla)</span>, <span className="text-purple-300">2 (English)</span>, or <span className="text-purple-300">3 (Sylheti)</span>,
+              and then receives your pre-written reply in their chosen language. Configure your messages below.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Enable toggle */}
+      <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-white">Auto-Reply Status</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Enable to automatically respond to incoming SMS with language selection</p>
+          </div>
+          <button
+            onClick={() => setConfig({ ...config, enabled: !config.enabled })}
+            className={`relative w-14 h-7 rounded-full transition ${config.enabled ? 'bg-green-500' : 'bg-gray-700'}`}
+          >
+            <span className={`absolute top-0.5 w-6 h-6 bg-white rounded-full transition ${config.enabled ? 'left-7' : 'left-0.5'}`} />
+          </button>
+        </div>
+        <div className="mt-4 p-3 bg-gray-800/50 rounded-lg">
+          <p className="text-xs text-gray-500 mb-1">Webhook URL (configure this in your SMS provider's inbound webhook setting):</p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 text-xs text-purple-300 bg-gray-900 px-3 py-2 rounded font-mono break-all">{webhookUrl}</code>
+            <button
+              onClick={() => { navigator.clipboard?.writeText(webhookUrl); onToast('Webhook URL copied', 'success'); }}
+              className="px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded-lg flex-shrink-0"
+            >Copy</button>
+          </div>
+          <p className="text-[10px] text-gray-600 mt-2">POST inbound SMS to this URL with fields: {`{ action: 'smsInbound', From, Body, userEmail: '${loginId || 'YOUR_ID'}' }`}</p>
+        </div>
+      </div>
+
+      {/* Language prompt editors */}
+      <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-5">
+        <h3 className="text-sm font-semibold text-white mb-1">Step 1: Language Selection Prompt</h3>
+        <p className="text-xs text-gray-500 mb-4">This message is sent first when an SMS is received. It asks the sender to choose a language.</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {[
+            { key: 'en', label: 'English Prompt', flag: '🇬🇧' },
+            { key: 'bn', label: 'Bangla Prompt', flag: '🇧🇩' },
+            { key: 'syl', label: 'Sylheti Prompt', flag: ' Sylheti' },
+          ].map(({ key, label, flag }) => (
+            <div key={key}>
+              <label className="text-xs text-gray-400 mb-1 block">{flag} {label}</label>
+              <textarea
+                value={config.languagePrompt?.[key] || ''}
+                onChange={(e) => setConfig({ ...config, languagePrompt: { ...config.languagePrompt, [key]: e.target.value } })}
+                rows={5}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Reply message editors */}
+      <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-5">
+        <h3 className="text-sm font-semibold text-white mb-1">Step 2: Auto-Reply Messages</h3>
+        <p className="text-xs text-gray-500 mb-4">After the sender picks a language (1/2/3), this is the reply they receive in that language.</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {[
+            { key: 'bn', label: 'Bangla Reply (Option 1)', flag: '🇧🇩' },
+            { key: 'en', label: 'English Reply (Option 2)', flag: '🇬🇧' },
+            { key: 'syl', label: 'Sylheti Reply (Option 3)', flag: ' Sylheti' },
+          ].map(({ key, label, flag }) => (
+            <div key={key}>
+              <label className="text-xs text-gray-400 mb-1 block">{flag} {label}</label>
+              <textarea
+                value={config.replyMessage?.[key] || ''}
+                onChange={(e) => setConfig({ ...config, replyMessage: { ...config.replyMessage, [key]: e.target.value } })}
+                rows={4}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Save button */}
+      <div className="flex justify-end">
+        <button
+          onClick={save}
+          disabled={saving}
+          className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 text-white text-sm rounded-lg font-medium transition flex items-center gap-2"
+        >
+          {saving ? <Spinner size={14} /> : <Icon.Check className="w-4 h-4" />}
+          {saving ? 'Saving...' : 'Save Auto-Reply Settings'}
+        </button>
+      </div>
+
+      {/* Recent inbound messages */}
+      <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-white">Recent Inbound Messages</h3>
+          <button onClick={load} className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1"><Icon.Refresh className="w-3.5 h-3.5" />Refresh</button>
+        </div>
+        {messages.length === 0 ? (
+          <div className="text-center py-8 text-gray-500 text-sm">
+            <Icon.Inbox className="w-10 h-10 mx-auto mb-2 opacity-30" />
+            No inbound messages yet. Once your SMS provider webhook is configured, received messages will appear here.
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            {messages.map((m, i) => (
+              <div key={i} className="flex items-start gap-3 p-3 bg-gray-800/40 rounded-lg">
+                <div className="w-8 h-8 rounded-full bg-purple-600/20 flex items-center justify-center flex-shrink-0">
+                  <Icon.Phone className="w-4 h-4 text-purple-300" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-medium text-white">{m.fromNumber}</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+                      m.state === 'replied' ? 'bg-green-900/40 text-green-400' :
+                      m.state === 'awaiting_language' ? 'bg-yellow-900/40 text-yellow-400' :
+                      'bg-gray-700 text-gray-400'
+                    }`}>
+                      {m.state === 'replied' ? `Replied (${m.selectedLanguage || '?'})` : m.state === 'awaiting_language' ? 'Awaiting language' : 'Direct'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-300 mt-1">Incoming: {m.incomingMessage || '(empty)'}</p>
+                  {m.replySent && <p className="text-xs text-gray-500 mt-0.5">Reply: {m.replySent.slice(0, 80)}...</p>}
+                  <p className="text-[10px] text-gray-600 mt-1">{new Date(m.receivedAt).toLocaleString()}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

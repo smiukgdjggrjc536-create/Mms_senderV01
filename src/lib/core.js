@@ -167,7 +167,10 @@ function generateVerificationCode() {
 
 // --- User Schema (for USER PANEL on Vercel) ---
 const userSchema = new mongoose.Schema({
-  email: { type: String, required: true, unique: true, lowercase: true },
+  // New enterprise login ID: 4 letters + 2 digits (e.g. "SAMU01"), no @ symbol
+  userId: { type: String, unique: true, sparse: true, uppercase: true, trim: true },
+  // Legacy email field — kept for backward compatibility with existing accounts (no longer required)
+  email: { type: String, unique: true, sparse: true, lowercase: true },
   password: { type: String, required: true },
   role: { type: String, enum: ['admin', 'user'], default: 'user' },
   sendingLimit: { type: Number, default: 100 },
@@ -376,10 +379,13 @@ const appSettingsSchema = new mongoose.Schema({
   description: { type: String, default: 'Professional MMS Sending Platform' },
   whatsapp: { type: String, default: '' },
   email: { type: String, default: '' },
-  language: { type: String, enum: ['bn', 'en'], default: 'en' },
+  language: { type: String, enum: ['bn', 'en', 'syl'], default: 'en' },
   refreshEnabled: { type: Boolean, default: true },
   alertEmail: { type: String, default: '' },
   alertWhatsapp: { type: String, default: '' },
+  alertWhatsappApiKey: { type: String, default: '' },
+  alertEmailApiKey: { type: String, default: '' },
+  alertEmailFrom: { type: String, default: 'alerts@mms-sender.local' },
   alertOnCrash: { type: Boolean, default: true },
   alertOnApiDown: { type: Boolean, default: true },
   alertOnError: { type: Boolean, default: true },
@@ -414,6 +420,41 @@ const scheduledSendSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
+// --- AutoReplyConfig Schema (per-user SMS auto-reply with language selection) ---
+// When an SMS is received, the system first sends a language-selection prompt.
+// The sender replies with 1/2/3 (Bangla/English/Sylheti), then gets the configured reply.
+const autoReplyConfigSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  userEmail: { type: String, default: '' },
+  enabled: { type: Boolean, default: false },
+  // The initial prompt sent when any SMS is received (asks the sender to choose a language)
+  languagePrompt: {
+    bn: { type: String, default: 'আমাদের সাথে যোগাযোগের জন্য ধন্যবাদ। ভাষা নির্বাচন করুন:\n1 - বাংলা\n2 - English\n3 - সিলেটি\n(Reply with 1, 2 or 3)' },
+    en: { type: String, default: 'Thanks for contacting us. Choose your language:\n1 - Bangla\n2 - English\n3 - Sylheti\n(Reply with 1, 2 or 3)' },
+  },
+  // The actual auto-reply message for each language (sent after the sender picks a language)
+  replyMessage: {
+    bn: { type: String, default: 'আসসালামু আলাইকুম। আমরা আপনার বার্তা পেয়েছি। আমাদের প্রতিনিধি শীঘ্রই আপনার সাথে যোগাযোগ করবে। ধন্যবাদ।' },
+    en: { type: String, default: 'Hello! We have received your message. Our representative will contact you shortly. Thank you.' },
+    syl: { type: String, default: 'আসসালামু আলাইকুম। আমরা আপনার খবর পাইছি। আমাগো প্রতিনিধি অইগো তোমার লগে যোগাযোগ করমু। ধন্যবাদ।' },
+  },
+  updatedAt: { type: Date, default: Date.now },
+});
+
+// --- SmsInbound Schema (log of received SMS + language selection state) ---
+const smsInboundSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  userEmail: { type: String, default: '' },
+  fromNumber: { type: String, required: true },
+  incomingMessage: { type: String, default: '' },
+  // State machine: 'awaiting_language' = sent prompt, waiting for 1/2/3; 'replied' = sent final reply
+  state: { type: String, enum: ['awaiting_language', 'replied', 'direct'], default: 'awaiting_language' },
+  selectedLanguage: { type: String, enum: ['bn', 'en', 'syl', null], default: null },
+  replySent: { type: String, default: '' },
+  receivedAt: { type: Date, default: Date.now },
+});
+smsInboundSchema.index({ userId: 1, fromNumber: 1, receivedAt: -1 });
+
 // ============================================================================
 // Export models (with caching to prevent recompilation)
 // ============================================================================
@@ -433,6 +474,8 @@ const DeliveryReport = mongoose.models.DeliveryReport || mongoose.model('Deliver
 const AppSettings = mongoose.models.AppSettings || mongoose.model('AppSettings', appSettingsSchema);
 const VerificationCode = mongoose.models.VerificationCode || mongoose.model('VerificationCode', verificationCodeSchema);
 const ScheduledSend = mongoose.models.ScheduledSend || mongoose.model('ScheduledSend', scheduledSendSchema);
+const AutoReplyConfig = mongoose.models.AutoReplyConfig || mongoose.model('AutoReplyConfig', autoReplyConfigSchema);
+const SmsInbound = mongoose.models.SmsInbound || mongoose.model('SmsInbound', smsInboundSchema);
 
 // ============================================================================
 // Admin Credential Management
@@ -1241,6 +1284,8 @@ async function getDashboardStats() {
       month: monthSent[0]?.total || 0,
       year: yearSent[0]?.total || 0,
       running: runningCampaigns,
+      // Computed trend: today vs avg daily this week
+      avgDailyThisWeek: weekSent[0]?.total ? Math.round((weekSent[0]?.total || 0) / 7) : 0,
     },
     inboxSpam: {
       inboxRate,
@@ -1251,6 +1296,8 @@ async function getDashboardStats() {
       totalDelivered: totals.totalDelivered || 0,
       totalUndelivered: totals.totalUndelivered || 0,
       totalInvalid: totals.totalInvalid || 0,
+      deliveryRate: totalAllSent > 0 ? Math.round(((totals.totalDelivered || 0) / totalAllSent) * 100) : 0,
+      undeliveredRate: totalAllSent > 0 ? Math.round(((totals.totalUndelivered || 0) / totalAllSent) * 100) : 0,
     },
     apiHealth: {
       senderApis: senderApiHealth,
@@ -1260,8 +1307,42 @@ async function getDashboardStats() {
       warning: warningApis,
       good: goodApis,
       bestSenderForInbox: bestSenderForInbox ? { name: bestSenderForInbox.name, inboxRate: bestSenderForInbox.inboxRate } : null,
+      totalApiCount: senderApis.length + geminiApis.length,
+      avgUsagePercent: (senderApis.length + geminiApis.length) > 0
+        ? Math.round([...senderApis, ...geminiApis].reduce((s, a) => s + (a.limit > 0 ? (a.used / a.limit) * 100 : 0), 0) / (senderApis.length + geminiApis.length))
+        : 0,
     },
     database: dbUsage,
+    // ── Computed System Intelligence ──
+    intelligence: {
+      // Daily trend: today vs average daily (this week)
+      dailyTrendPct: (weekSent[0]?.total || 0) > 0
+        ? Math.round((((todaySent[0]?.total || 0) - ((weekSent[0]?.total || 0) / 7)) / ((weekSent[0]?.total || 0) / 7)) * 100)
+        : 0,
+      // Active user rate
+      activeUserPct: totalUsers > 0 ? Math.round((onlineUsers / totalUsers) * 100) : 0,
+      // Delivery efficiency score (weighted: delivery 50% + inbox 30% + (100-spam) 20%)
+      deliveryEfficiency: totalAllSent > 0
+        ? Math.round(((totals.totalDelivered || 0) / totalAllSent) * 50 + (inboxRate * 0.3) + ((100 - spamRate) * 0.2))
+        : 100,
+      // Capacity warning: any API > 80% usage
+      capacityWarnings: [...senderApis, ...geminiApis].filter(a => a.limit > 0 && (a.used / a.limit) > 0.8).map(a => ({ name: a.name, pct: Math.round((a.used / a.limit) * 100) })),
+      // Expiring users (within 7 days)
+      expiringUsers: usersWithDetails.filter(u => u.expiryDate && Math.ceil((u.expiryDate - now) / (24 * 60 * 60 * 1000)) <= 7 && Math.ceil((u.expiryDate - now) / (24 * 60 * 60 * 1000)) >= 0).length,
+      // High spam risk users (spamRate > 10%)
+      highRiskUsers: usersWithDetails.filter(u => (u.spamRate || 0) > 10).length,
+      // Estimated monthly capacity remaining (sum of remaining across all sender APIs)
+      estRemainingCapacity: senderApis.reduce((s, a) => s + (a.remaining || 0), 0),
+      // System grade
+      systemGrade: (() => {
+        const score = panelHealth * 0.4 + (totalAllSent > 0 ? (100 - spamRate) * 0.3 : 70) + (totalUsers > 0 ? (onlineUsers / totalUsers) * 100 * 0.3 : 50);
+        if (score >= 85) return { grade: 'A', color: '#34d399', label: 'Excellent' };
+        if (score >= 70) return { grade: 'B', color: '#60a5fa', label: 'Good' };
+        if (score >= 55) return { grade: 'C', color: '#fbbf24', label: 'Fair' };
+        if (score >= 40) return { grade: 'D', color: '#fb923c', label: 'Poor' };
+        return { grade: 'F', color: '#fb7185', label: 'Critical' };
+      })(),
+    },
   };
 }
 
@@ -1323,28 +1404,81 @@ async function updateAppSettings(updates) {
 // Alert Helper (WhatsApp / Email)
 // ============================================================================
 
+// Normalize phone number to international format (default +880 for Bangladesh)
+function normalizePhone(raw) {
+  if (!raw) return '';
+  let p = String(raw).replace(/[^\d]/g, ''); // digits only
+  if (!p) return '';
+  // Bangladesh: strip leading 0 then prefix 880 → e.g. 01712345678 → 8801712345678
+  if (p.startsWith('880')) return p;
+  if (p.startsWith('0')) return '880' + p.slice(1);
+  if (p.length === 10) return '880' + p; // assume local 10-digit BD number without leading 0
+  // Already international without +
+  return p;
+}
+
 async function sendAlert(type, message) {
   try {
     const settings = await getAppSettings();
     // Log the alert
     await logActivity(null, 'admin', 'system', 'alert', `${type}: ${message}`, null);
 
-    // WhatsApp alert via CallMeBot or similar free service
-    if (settings.alertWhatsapp && settings.alertOnCrash) {
+    const results = { whatsapp: null, email: null };
+
+    // WhatsApp alert via CallMeBot — phone + apikey are SEPARATE values
+    if (settings.alertWhatsapp && settings.alertWhatsappApiKey) {
       try {
-        const waUrl = `https://api.callmebot.com/whatsapp.php?phone=${settings.alertWhatsapp}&text=${encodeURIComponent(message)}&apikey=${settings.alertWhatsapp}`;
-        // Fire and forget — don't block on external calls
-        await fetch(waUrl).catch(() => {});
-      } catch (e) {}
+        const phone = normalizePhone(settings.alertWhatsapp);
+        const waUrl = `https://api.callmebot.com/whatsapp.php?phone=${phone}&text=${encodeURIComponent(message)}&apikey=${encodeURIComponent(settings.alertWhatsappApiKey)}`;
+        const waRes = await fetch(waUrl, { method: 'GET' }).catch((e) => ({ error: e.message }));
+        if (waRes && waRes.ok) {
+          results.whatsapp = { success: true };
+        } else {
+          const errText = waRes && waRes.text ? await waRes.text().catch(() => 'unknown') : (waRes && waRes.error) || 'no response';
+          results.whatsapp = { success: false, error: typeof errText === 'string' ? errText.slice(0, 200) : 'fetch failed' };
+          await logActivity(null, 'admin', 'system', 'whatsapp_alert_failed', String(errText).slice(0, 300), null);
+        }
+      } catch (e) {
+        results.whatsapp = { success: false, error: e.message };
+      }
+    } else if (settings.alertWhatsapp && !settings.alertWhatsappApiKey) {
+      results.whatsapp = { success: false, error: 'Missing WhatsApp API key — get it from CallMeBot (see Alerts tab setup guide)' };
+      await logActivity(null, 'admin', 'system', 'whatsapp_alert_failed', 'Missing CallMeBot API key', null);
     }
 
-    // Email alert (using a simple mailto log — real email needs SMTP config)
-    if (settings.alertEmail && settings.alertOnError) {
-      // Email sending would require SMTP — log for now
+    // Email alert via Resend API (https://resend.com — free 3000 emails/month, no card)
+    if (settings.alertEmail && settings.alertEmailApiKey) {
+      try {
+        const emailRes = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${settings.alertEmailApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: settings.alertEmailFrom || 'alerts@mms-sender.local',
+            to: [settings.alertEmail],
+            subject: `[MMS Sender Alert] ${type}`,
+            text: message,
+          }),
+        }).catch((e) => ({ error: e.message }));
+        if (emailRes && emailRes.ok) {
+          results.email = { success: true };
+        } else {
+          const errText = emailRes && emailRes.text ? await emailRes.text().catch(() => 'unknown') : (emailRes && emailRes.error) || 'no response';
+          results.email = { success: false, error: typeof errText === 'string' ? errText.slice(0, 200) : 'fetch failed' };
+          await logActivity(null, 'admin', 'system', 'email_alert_failed', String(errText).slice(0, 300), null);
+        }
+      } catch (e) {
+        results.email = { success: false, error: e.message };
+      }
+    } else if (settings.alertEmail && !settings.alertEmailApiKey) {
+      // No API key → log only (backward compatible)
       await logActivity(null, 'admin', 'system', 'email_alert', `To: ${settings.alertEmail} — ${message}`, null);
+      results.email = { success: false, error: 'Missing Resend API key — email logged only. Add a Resend API key in Alerts tab to enable real email delivery.' };
     }
 
-    return { success: true };
+    return { success: true, results };
   } catch (e) {
     return { success: false, error: e.message };
   }
@@ -1482,4 +1616,6 @@ export {
   AppSettings,
   VerificationCode,
   ScheduledSend,
+  AutoReplyConfig,
+  SmsInbound,
 };

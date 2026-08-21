@@ -162,6 +162,7 @@ function AdminDashboard({ user, onLogout, onRefresh }) {
     { id: 'database', label: 'Database', icon: <Icon.Database /> },
     { id: 'blacklist', label: 'Blacklist', icon: <Icon.Lock /> },
     { id: 'alerts', label: 'Alerts', icon: <Icon.Bell /> },
+    { id: 'sms-guide', label: 'Free SMS Guide', icon: <Icon.Send /> },
     { id: 'logs', label: 'Activity Logs', icon: <Icon.Log /> },
     { id: 'security', label: 'Admin Security', icon: <Icon.Shield /> },
     { id: 'settings', label: 'Settings', icon: <Icon.Settings /> },
@@ -207,6 +208,7 @@ function AdminDashboard({ user, onLogout, onRefresh }) {
         {tab === 'database' && <DatabaseTab />}
         {tab === 'blacklist' && <BlacklistTab />}
         {tab === 'alerts' && <AlertsTab />}
+        {tab === 'sms-guide' && <FreeSmsGuideTab />}
         {tab === 'logs' && <LogsTab />}
         {tab === 'security' && <SecurityTab user={user} />}
         {tab === 'settings' && <SettingsTab />}
@@ -394,12 +396,30 @@ function DashboardTab() {
 
   const ph = stats.apiHealth.panelHealth;
   const healthColor = ph > 70 ? '#34d399' : ph > 40 ? '#fbbf24' : '#fb7185';
-  const healthTone = ph > 70 ? 'green' : ph > 40 ? 'amber' : 'red';
   const onlinePct = stats.users.total > 0 ? Math.round((stats.users.online / stats.users.total) * 100) : 0;
+  const intel = stats.intelligence || {};
+  const grade = intel.systemGrade || { grade: 'B', color: '#60a5fa', label: 'Good' };
+  const dailyTrend = intel.dailyTrendPct || 0;
+  const deliveryEff = intel.deliveryEfficiency != null ? intel.deliveryEfficiency : 100;
+  const capacityWarnings = intel.capacityWarnings || [];
+  const expiringUsers = intel.expiringUsers || 0;
+  const highRiskUsers = intel.highRiskUsers || 0;
+  const estRemaining = intel.estRemainingCapacity || 0;
+  const avgUsage = stats.apiHealth.avgUsagePercent || 0;
+
+  // Build actionable insights list
+  const insights = [];
+  if (stats.apiHealth.blocked.length > 0) insights.push({ level: 'critical', icon: '🔴', text: `${stats.apiHealth.blocked.length} API(s) blocked: ${stats.apiHealth.blocked.map(a => a.name).join(', ')}` });
+  if (capacityWarnings.length > 0) insights.push({ level: 'warning', icon: '🟡', text: `${capacityWarnings.length} API(s) near capacity limit: ${capacityWarnings.map(c => `${c.name} (${c.pct}%)`).join(', ')}` });
+  if (expiringUsers > 0) insights.push({ level: 'warning', icon: '⏰', text: `${expiringUsers} user(s) expiring within 7 days — review and renew` });
+  if (highRiskUsers > 0) insights.push({ level: 'warning', icon: '⚠️', text: `${highRiskUsers} user(s) with high spam rate (>10%) — consider review` });
+  if (stats.inboxSpam.spamRate > 5) insights.push({ level: 'warning', icon: '📬', text: `Global spam rate at ${stats.inboxSpam.spamRate}% — above safe threshold` });
+  if (stats.apiHealth.warning.length > 0) insights.push({ level: 'info', icon: '🔵', text: `${stats.apiHealth.warning.length} API(s) need attention: ${stats.apiHealth.warning.map(a => a.name).join(', ')}` });
+  if (insights.length === 0) insights.push({ level: 'ok', icon: '✅', text: 'All systems operating within normal parameters. No action required.' });
 
   return (
     <div className="space-y-5">
-      {/* ── Top bar: title + live status + refresh ── */}
+      {/* ── Top bar: title + system grade + refresh ── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -409,22 +429,55 @@ function DashboardTab() {
             {lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString()} · auto-refresh 30s` : 'Auto-refresh every 30s'}
           </p>
         </div>
-        <button onClick={load} className="flex items-center gap-2 text-xs text-slate-400 hover:text-sky-400 bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-1.5 transition">
-          <Icon.Refresh /> Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-1.5">
+            <span className="text-[10px] text-slate-500 uppercase tracking-wide">System Grade</span>
+            <span className="text-lg font-bold tabular-nums" style={{ color: grade.color }}>{grade.grade}</span>
+            <span className="text-[10px] text-slate-400">{grade.label}</span>
+          </div>
+          <button onClick={load} className="flex items-center gap-2 text-xs text-slate-400 hover:text-sky-400 bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-1.5 transition">
+            <Icon.Refresh /> Refresh
+          </button>
+        </div>
       </div>
 
-      {/* ── Row 1: Primary KPIs (6 compact tiles, replacing ugly boxes) ── */}
+      {/* ── System Intelligence Banner ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wide">Daily Trend</p>
+          <div className="flex items-baseline gap-1.5 mt-1">
+            <p className={`text-xl font-bold tabular-nums ${dailyTrend >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{dailyTrend >= 0 ? '▲' : '▼'} {Math.abs(dailyTrend)}%</p>
+          </div>
+          <p className="text-[10px] text-slate-600 mt-0.5">vs 7-day avg</p>
+        </div>
+        <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wide">Delivery Efficiency</p>
+          <p className="text-xl font-bold text-cyan-300 tabular-nums mt-1">{deliveryEff}<span className="text-sm text-slate-500">/100</span></p>
+          <p className="text-[10px] text-slate-600 mt-0.5">weighted score</p>
+        </div>
+        <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wide">Remaining Capacity</p>
+          <p className="text-xl font-bold text-violet-300 tabular-nums mt-1">{estRemaining.toLocaleString()}</p>
+          <p className="text-[10px] text-slate-600 mt-0.5">SMS credits left</p>
+        </div>
+        <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wide">Avg API Usage</p>
+          <p className="text-xl font-bold text-amber-300 tabular-nums mt-1">{avgUsage}%</p>
+          <p className="text-[10px] text-slate-600 mt-0.5">across {stats.apiHealth.totalApiCount || 0} APIs</p>
+        </div>
+      </div>
+
+      {/* ── Row 1: Primary KPIs (6 compact tiles) ── */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <Kpi label="Total Users" value={stats.users.total} sub={`${stats.users.suspended} suspended`} tone="blue" />
         <Kpi label="Online Now" value={stats.users.online} sub={`${onlinePct}% of total`} tone="green" live />
-        <Kpi label="Sent Today" value={stats.sending.today} sub={`${stats.sending.running} running`} tone="cyan" />
-        <Kpi label="Delivered" value={stats.inboxSpam.totalDelivered} sub={`${stats.inboxSpam.totalUndelivered} undelivered`} tone="violet" />
+        <Kpi label="Sent Today" value={stats.sending.today} sub={`${stats.sending.running} running`} tone="cyan" trend={dailyTrend} />
+        <Kpi label="Delivered" value={stats.inboxSpam.totalDelivered} sub={`${stats.inboxSpam.deliveryRate || 0}% rate`} tone="violet" />
         <Kpi label="Spam Blocked" value={stats.inboxSpam.totalSpam} sub={`${stats.inboxSpam.spamRate}% rate`} tone="red" />
         <Kpi label="APIs Healthy" value={`${stats.apiHealth.good.length}/${stats.apiHealth.good.length + stats.apiHealth.warning.length + stats.apiHealth.blocked.length}`} sub={`${stats.apiHealth.blocked.length} blocked`} tone={stats.apiHealth.blocked.length > 0 ? 'amber' : 'green'} />
       </div>
 
-      {/* ── Row 2: 3-column hero — Inbox gauge | Panel health gauge | Sending trend ── */}
+      {/* ── Row 2: 3-column hero ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Inbox quality */}
         <Section title="Delivery Quality" subtitle={`${stats.inboxSpam.totalSent} total messages sent`}>
@@ -433,7 +486,8 @@ function DashboardTab() {
             <div className="flex-1 space-y-2">
               <div className="flex items-center justify-between text-xs"><span className="text-slate-500">Spam rate</span><span className="text-rose-400 font-semibold">{stats.inboxSpam.spamRate}%</span></div>
               <ProgressBar percent={stats.inboxSpam.spamRate} color="from-rose-500 to-red-500" />
-              <div className="flex items-center justify-between text-xs pt-1"><span className="text-slate-500">Invalid numbers</span><span className="text-slate-300">{stats.inboxSpam.totalInvalid}</span></div>
+              <div className="flex items-center justify-between text-xs pt-1"><span className="text-slate-500">Undelivered</span><span className="text-slate-300">{stats.inboxSpam.totalUndelivered} ({stats.inboxSpam.undeliveredRate || 0}%)</span></div>
+              <div className="flex items-center justify-between text-xs"><span className="text-slate-500">Invalid numbers</span><span className="text-slate-300">{stats.inboxSpam.totalInvalid}</span></div>
               {stats.apiHealth.bestSenderForInbox && (
                 <div className="mt-2 pt-2 border-t border-slate-800/60">
                   <p className="text-[10px] text-slate-600 uppercase tracking-wide">Best sender</p>
@@ -476,8 +530,30 @@ function DashboardTab() {
         </Section>
       </div>
 
-      {/* ── Row 3: API usage (clean rows, no boxes) + Live users ── */}
+      {/* ── Row 3: System Intelligence + API Usage ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* System Intelligence — NEW logic-heavy panel */}
+        <Section
+          className="lg:col-span-1"
+          title="🧠 System Intelligence"
+          subtitle="Auto-computed risk & action items"
+          action={<span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${insights.filter(i => i.level === 'critical').length > 0 ? 'bg-rose-500/15 text-rose-400' : insights.filter(i => i.level === 'warning').length > 0 ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'}`}>{insights.filter(i => i.level === 'critical').length > 0 ? 'ACTION NEEDED' : insights.filter(i => i.level === 'warning').length > 0 ? 'MONITOR' : 'HEALTHY'}</span>}
+        >
+          <div className="space-y-2">
+            {insights.map((ins, i) => (
+              <div key={i} className={`flex items-start gap-2 p-2.5 rounded-lg text-xs ${ins.level === 'critical' ? 'bg-rose-950/30 border border-rose-800/40' : ins.level === 'warning' ? 'bg-amber-950/30 border border-amber-800/40' : ins.level === 'ok' ? 'bg-emerald-950/20 border border-emerald-800/30' : 'bg-slate-800/30 border border-slate-700/40'}`}>
+                <span className="flex-none text-sm">{ins.icon}</span>
+                <span className={`text-[11px] leading-relaxed ${ins.level === 'critical' ? 'text-rose-200' : ins.level === 'warning' ? 'text-amber-200' : ins.level === 'ok' ? 'text-emerald-200' : 'text-slate-300'}`}>{ins.text}</span>
+              </div>
+            ))}
+          </div>
+          {/* Mini stats grid */}
+          <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-800/60">
+            <div><p className="text-[10px] text-slate-600 uppercase">Active user rate</p><p className="text-sm text-sky-300 font-semibold">{intel.activeUserPct || 0}%</p></div>
+            <div><p className="text-[10px] text-slate-600 uppercase">High-risk users</p><p className={`text-sm font-semibold ${highRiskUsers > 0 ? 'text-rose-300' : 'text-emerald-300'}`}>{highRiskUsers}</p></div>
+          </div>
+        </Section>
+
         {/* API usage — spans 2 cols */}
         <Section
           className="lg:col-span-2"
@@ -523,7 +599,10 @@ function DashboardTab() {
             </div>
           )}
         </Section>
+      </div>
 
+      {/* ── Row 4: Live users + Database ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Live users */}
         <Section
           title="Live User Presence"
@@ -532,29 +611,29 @@ function DashboardTab() {
         >
           <UserPresenceList users={stats.users.withDetails} />
         </Section>
-      </div>
 
-      {/* ── Row 4: Database usage (clean rows) ── */}
-      <Section title="Database Connections" subtitle="MongoDB storage utilization">
-        {stats.database.length === 0 ? (
-          <p className="text-xs text-slate-600 py-3 text-center">Using default MongoDB connection.</p>
-        ) : (
-          <div>
-            {stats.database.map((db, i) => (
-              <UsageRow
-                key={db.id}
-                name={`${db.label}${db.isActive ? ' · Active' : ''}`}
-                type="MongoDB"
-                used={`${db.storageUsed}MB`}
-                limit={`${db.storageLimit}MB`}
-                percent={db.usagePercent}
-                status={db.isActive ? 'active' : 'paused'}
-                last={i === stats.database.length - 1}
-              />
-            ))}
-          </div>
-        )}
-      </Section>
+        {/* Database usage */}
+        <Section title="Database Connections" subtitle="MongoDB storage utilization">
+          {stats.database.length === 0 ? (
+            <p className="text-xs text-slate-600 py-3 text-center">Using default MongoDB connection.</p>
+          ) : (
+            <div>
+              {stats.database.map((db, i) => (
+                <UsageRow
+                  key={db.id}
+                  name={`${db.label}${db.isActive ? ' · Active' : ''}`}
+                  type="MongoDB"
+                  used={`${db.storageUsed}MB`}
+                  limit={`${db.storageLimit}MB`}
+                  percent={db.usagePercent}
+                  status={db.isActive ? 'active' : 'paused'}
+                  last={i === stats.database.length - 1}
+                />
+              ))}
+            </div>
+          )}
+        </Section>
+      </div>
     </div>
   );
 }
@@ -1196,46 +1275,290 @@ function BlacklistTab() {
 // ALERTS TAB
 // ============================================================================
 function AlertsTab() {
-  const [settings, setSettings] = useState({ alertWhatsapp: '', alertEmail: '', alertOnCrash: true, alertOnApiDown: true, alertOnError: true });
+  const [settings, setSettings] = useState({ alertWhatsapp: '', alertWhatsappApiKey: '', alertEmail: '', alertEmailApiKey: '', alertEmailFrom: 'alerts@mms-sender.local', alertOnCrash: true, alertOnApiDown: true, alertOnError: true });
   const [loading, setLoading] = useState(true);
+  const [testResult, setTestResult] = useState(null);
+  const [testing, setTesting] = useState(false);
+  const [showWaGuide, setShowWaGuide] = useState(false);
+  const [showEmailGuide, setShowEmailGuide] = useState(false);
 
   useEffect(() => {
-    (async () => { const data = await api('getAppSettings'); if (data.success) setSettings(data.settings); setLoading(false); })();
+    (async () => { const data = await api('getAppSettings'); if (data.success) setSettings(prev => ({ ...prev, ...data.settings })); setLoading(false); })();
   }, []);
 
   const save = async () => {
     const data = await api('setAlertConfig', settings);
-    if (data.success) alert('Alert settings saved'); else alert(data.error);
+    if (data.success) { setSettings(prev => ({ ...prev, ...data.settings })); setTestResult({ type: 'save', ok: true, msg: 'Alert settings saved successfully' }); }
+    else setTestResult({ type: 'save', ok: false, msg: data.error || 'Save failed' });
   };
 
   const testAlert = async () => {
+    setTesting(true); setTestResult(null);
     const data = await api('testAlert');
-    if (data.success) alert('Test alert sent'); else alert(data.error);
+    setTesting(false);
+    if (data.success) {
+      const r = data.results || {};
+      const parts = [];
+      if (r.whatsapp) parts.push(`WhatsApp: ${r.whatsapp.success ? '✅ Sent' : '❌ ' + (r.whatsapp.error || 'failed')}`);
+      if (r.email) parts.push(`Email: ${r.email.success ? '✅ Sent' : '❌ ' + (r.email.error || 'failed')}`);
+      setTestResult({ type: 'test', ok: true, msg: parts.length ? parts.join('  |  ') : 'Test alert processed (no channels configured)' });
+    } else setTestResult({ type: 'test', ok: false, msg: data.error || 'Test failed' });
   };
 
   if (loading) return <Spinner />;
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-white">Alerts & Notifications</h2>
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 space-y-4 max-w-lg">
+      <div className="flex items-center justify-between">
         <div>
-          <label className="text-gray-400 text-sm font-medium block mb-1.5">WhatsApp Number (for alerts)</label>
-          <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="+1234567890" value={settings.alertWhatsapp} onChange={e => setSettings({...settings, alertWhatsapp: e.target.value})} />
+          <h2 className="text-2xl font-bold text-white">Alerts & Notifications</h2>
+          <p className="text-sm text-gray-400 mt-1">Configure WhatsApp and email alerts for system events. Both channels support free APIs — no credit card required.</p>
+        </div>
+      </div>
+
+      {/* Status summary */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className={`rounded-xl border p-4 ${settings.alertWhatsapp && settings.alertWhatsappApiKey ? 'bg-emerald-950/40 border-emerald-800' : 'bg-amber-950/30 border-amber-800'}`}>
+          <div className="flex items-center gap-2">
+            <span className="text-lg">{settings.alertWhatsapp && settings.alertWhatsappApiKey ? '🟢' : '🟡'}</span>
+            <span className="text-sm font-semibold text-white">WhatsApp Channel</span>
+          </div>
+          <p className="text-xs text-gray-400 mt-1">{settings.alertWhatsapp && settings.alertWhatsappApiKey ? 'Configured & ready' : settings.alertWhatsapp ? 'Phone set — API key missing' : 'Not configured'}</p>
+        </div>
+        <div className={`rounded-xl border p-4 ${settings.alertEmail && settings.alertEmailApiKey ? 'bg-emerald-950/40 border-emerald-800' : 'bg-amber-950/30 border-amber-800'}`}>
+          <div className="flex items-center gap-2">
+            <span className="text-lg">{settings.alertEmail && settings.alertEmailApiKey ? '🟢' : '🟡'}</span>
+            <span className="text-sm font-semibold text-white">Email Channel</span>
+          </div>
+          <p className="text-xs text-gray-400 mt-1">{settings.alertEmail && settings.alertEmailApiKey ? 'Configured & ready' : settings.alertEmail ? 'Email set — API key missing' : 'Not configured'}</p>
+        </div>
+        <div className="rounded-xl border p-4 bg-slate-900/50 border-slate-800">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">⚙️</span>
+            <span className="text-sm font-semibold text-white">Trigger Rules</span>
+          </div>
+          <p className="text-xs text-gray-400 mt-1">{[settings.alertOnCrash && 'Crash', settings.alertOnApiDown && 'API Down', settings.alertOnError && 'Errors'].filter(Boolean).join(', ') || 'None enabled'}</p>
+        </div>
+      </div>
+
+      {/* WhatsApp config */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-white flex items-center gap-2">💬 WhatsApp Alerts <span className="text-xs bg-green-900/50 text-green-300 px-2 py-0.5 rounded-full">Free · CallMeBot</span></h3>
+          <button onClick={() => setShowWaGuide(!showWaGuide)} className="text-xs text-blue-400 hover:text-blue-300 underline">{showWaGuide ? 'Hide' : 'Show'} Setup Guide</button>
+        </div>
+
+        {showWaGuide && (
+          <div className="bg-slate-950/60 border border-slate-700/50 rounded-lg p-4 text-sm text-gray-300 space-y-2">
+            <p className="font-semibold text-white">How to get your free WhatsApp API key (CallMeBot):</p>
+            <ol className="list-decimal list-inside space-y-1 text-xs">
+              <li>Open WhatsApp on your phone and add this number to your contacts: <code className="bg-slate-800 px-1.5 py-0.5 rounded text-green-300">+34 694 25 79 52</code></li>
+              <li>Send a WhatsApp message to that number with exactly this text: <code className="bg-slate-800 px-1.5 py-0.5 rounded text-green-300">I allow callmebot to send me messages</code></li>
+              <li>The bot will reply with your personal API key (looks like <code className="bg-slate-800 px-1 px-1 rounded text-green-300">1234567</code> or similar).</li>
+              <li>Paste that API key in the field below.</li>
+              <li>For Bangladesh numbers: enter <code className="bg-slate-800 px-1.5 py-0.5 rounded text-green-300">017XXXXXXXX</code> or <code className="bg-slate-800 px-1.5 py-0.5 rounded text-green-300">+88017XXXXXXXX</code> — the system auto-normalizes to <code className="bg-slate-800 px-1.5 py-0.5 rounded text-green-300">88017XXXXXXXX</code>.</li>
+            </ol>
+            <p className="text-xs text-amber-300 mt-2">⚠️ You must complete step 1-3 from the SAME WhatsApp number you want alerts sent to. The API key is unique per number.</p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="text-gray-400 text-sm font-medium block mb-1.5">WhatsApp Number <span className="text-amber-400 text-xs">(Bangladesh supported)</span></label>
+            <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" placeholder="01712345678 or +8801712345678" value={settings.alertWhatsapp} onChange={e => setSettings({...settings, alertWhatsapp: e.target.value})} />
+            <p className="text-xs text-gray-500 mt-1">BD format auto-converted: 017XXX → 88017XXX</p>
+          </div>
+          <div>
+            <label className="text-gray-400 text-sm font-medium block mb-1.5">CallMeBot API Key</label>
+            <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" placeholder="e.g. 1234567" value={settings.alertWhatsappApiKey} onChange={e => setSettings({...settings, alertWhatsappApiKey: e.target.value})} />
+            <p className="text-xs text-gray-500 mt-1">Get it from CallMeBot (see guide above)</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Email config */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-white flex items-center gap-2">📧 Email Alerts <span className="text-xs bg-blue-900/50 text-blue-300 px-2 py-0.5 rounded-full">Free · Resend</span></h3>
+          <button onClick={() => setShowEmailGuide(!showEmailGuide)} className="text-xs text-blue-400 hover:text-blue-300 underline">{showEmailGuide ? 'Hide' : 'Show'} Setup Guide</button>
+        </div>
+
+        {showEmailGuide && (
+          <div className="bg-slate-950/60 border border-slate-700/50 rounded-lg p-4 text-sm text-gray-300 space-y-2">
+            <p className="font-semibold text-white">How to get a free Resend email API key (3000 emails/month, no card):</p>
+            <ol className="list-decimal list-inside space-y-1 text-xs">
+              <li>Go to <code className="bg-slate-800 px-1.5 py-0.5 rounded text-blue-300">https://resend.com</code> and sign up (free, no credit card).</li>
+              <li>Verify your email address.</li>
+              <li>Go to <strong>API Keys</strong> → <strong>Create API Key</strong> → copy the key (starts with <code className="bg-slate-800 px-1.5 py-0.5 rounded text-blue-300">re_...</code>).</li>
+              <li>Paste the key in the field below.</li>
+              <li>Set "From Email" to <code className="bg-slate-800 px-1.5 py-0.5 rounded text-blue-300">onboarding@resend.dev</code> (free testing sender) or your verified domain.</li>
+            </ol>
+            <p className="text-xs text-amber-300 mt-2">⚠️ With the free plan you can only send TO the email you signed up with unless you verify a custom domain. Use <code className="bg-slate-800 px-1 px-1 rounded text-blue-300">onboarding@resend.dev</code> as the From address for testing.</p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="text-gray-400 text-sm font-medium block mb-1.5">Alert Recipient Email</label>
+            <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="admin@example.com" value={settings.alertEmail} onChange={e => setSettings({...settings, alertEmail: e.target.value})} />
+          </div>
+          <div>
+            <label className="text-gray-400 text-sm font-medium block mb-1.5">Resend API Key</label>
+            <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" placeholder="re_xxxxxxxx" value={settings.alertEmailApiKey} onChange={e => setSettings({...settings, alertEmailApiKey: e.target.value})} />
+          </div>
         </div>
         <div>
-          <label className="text-gray-400 text-sm font-medium block mb-1.5">Email (for alerts)</label>
-          <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="admin@example.com" value={settings.alertEmail} onChange={e => setSettings({...settings, alertEmail: e.target.value})} />
+          <label className="text-gray-400 text-sm font-medium block mb-1.5">From Email Address</label>
+          <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" placeholder="onboarding@resend.dev" value={settings.alertEmailFrom} onChange={e => setSettings({...settings, alertEmailFrom: e.target.value})} />
+          <p className="text-xs text-gray-500 mt-1">Use onboarding@resend.dev for free testing, or your verified domain email</p>
         </div>
+      </div>
+
+      {/* Trigger rules */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 space-y-3">
+        <h3 className="text-lg font-semibold text-white">⚡ Alert Triggers</h3>
         <div className="space-y-2">
-          <label className="flex items-center gap-2 text-sm text-gray-300"><input type="checkbox" checked={settings.alertOnCrash} onChange={e => setSettings({...settings, alertOnCrash: e.target.checked})} />Alert on server crash</label>
-          <label className="flex items-center gap-2 text-sm text-gray-300"><input type="checkbox" checked={settings.alertOnApiDown} onChange={e => setSettings({...settings, alertOnApiDown: e.target.checked})} />Alert when API goes down</label>
-          <label className="flex items-center gap-2 text-sm text-gray-300"><input type="checkbox" checked={settings.alertOnError} onChange={e => setSettings({...settings, alertOnError: e.target.checked})} />Alert on errors/bugs</label>
+          <label className="flex items-center gap-3 text-sm text-gray-300 cursor-pointer p-2 rounded-lg hover:bg-slate-800/50 transition"><input type="checkbox" checked={settings.alertOnCrash} onChange={e => setSettings({...settings, alertOnCrash: e.target.checked})} className="w-4 h-4 accent-blue-600" />Alert on server crash</label>
+          <label className="flex items-center gap-3 text-sm text-gray-300 cursor-pointer p-2 rounded-lg hover:bg-slate-800/50 transition"><input type="checkbox" checked={settings.alertOnApiDown} onChange={e => setSettings({...settings, alertOnApiDown: e.target.checked})} className="w-4 h-4 accent-blue-600" />Alert when SMS API goes down</label>
+          <label className="flex items-center gap-3 text-sm text-gray-300 cursor-pointer p-2 rounded-lg hover:bg-slate-800/50 transition"><input type="checkbox" checked={settings.alertOnError} onChange={e => setSettings({...settings, alertOnError: e.target.checked})} className="w-4 h-4 accent-blue-600" />Alert on errors / bugs</label>
         </div>
-        <div className="flex gap-3">
-          <button onClick={save} className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-2 rounded-lg transition">Save Settings</button>
-          <button onClick={testAlert} className="bg-slate-700 hover:bg-slate-600 text-white text-sm px-4 py-2 rounded-lg transition">Send Test Alert</button>
+      </div>
+
+      {/* Test result */}
+      {testResult && (
+        <div className={`rounded-xl border p-4 text-sm ${testResult.ok ? 'bg-emerald-950/40 border-emerald-800 text-emerald-200' : 'bg-red-950/40 border-red-800 text-red-200'}`}>
+          <strong>{testResult.type === 'test' ? 'Test Alert Result: ' : 'Save: '}</strong>{testResult.msg}
         </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex gap-3">
+        <button onClick={save} className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition">Save Settings</button>
+        <button onClick={testAlert} disabled={testing} className="bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition">{testing ? 'Sending...' : 'Send Test Alert'}</button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// FREE SMS GUIDE TAB — guide for getting a free SMS sending API (no card)
+// ============================================================================
+function FreeSmsGuideTab() {
+  const [copied, setCopied] = useState(null);
+  const copy = (text, key) => { navigator.clipboard?.writeText(text); setCopied(key); setTimeout(() => setCopied(null), 2000); };
+
+  return (
+    <div className="space-y-6 max-w-4xl">
+      <div>
+        <h2 className="text-2xl font-bold text-white">Free SMS Sending API Guide</h2>
+        <p className="text-sm text-gray-400 mt-1">Complete guide to get a free SMS sending API without a credit card. Two options: global (TextBee) and Bangladesh-local (Alpha SMS).</p>
+      </div>
+
+      {/* ── Option 1: TextBee ── */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 space-y-4">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">📱</span>
+          <div>
+            <h3 className="text-lg font-semibold text-white">Option 1: TextBee (Recommended — Free, No Card)</h3>
+            <p className="text-xs text-emerald-400">300 SMS/month free · Uses your own Android phone + SIM · REST API</p>
+          </div>
+        </div>
+
+        <div className="bg-slate-950/60 border border-slate-700/50 rounded-lg p-4 space-y-3">
+          <p className="text-sm font-semibold text-white">How it works:</p>
+          <p className="text-xs text-gray-400">TextBee turns your Android phone into an SMS gateway. You install their app on a phone with a SIM card, and the API sends SMS through your phone. This means <strong className="text-amber-300">no credit card</strong> needed — you use your existing SIM's SMS quota.</p>
+
+          <p className="text-sm font-semibold text-white pt-2">Step-by-step setup:</p>
+          <ol className="list-decimal list-inside space-y-2 text-xs text-gray-300">
+            <li>Go to <button onClick={() => copy('https://textbee.dev', 'url1')} className="text-sky-400 hover:underline font-mono">textbee.dev</button> {copied === 'url1' && <span className="text-emerald-400">✓ copied</span>} and create a free account (email only, no card).</li>
+            <li>Download the <strong className="text-white">TextBee Android Gateway app</strong> from the Google Play Store on the phone you want to use as the gateway.</li>
+            <li>Open the app, sign in with your TextBee account, and grant SMS permissions. The phone must stay powered on with internet connected.</li>
+            <li>On the TextBee website dashboard, find your <strong className="text-white">API Key</strong> and your <strong className="text-white">Device ID</strong>.</li>
+            <li>In this admin panel, go to <strong className="text-sky-400">API Management</strong> → Add Sender API → choose provider <strong className="text-white">Custom HTTP</strong>.</li>
+            <li>Set the endpoint to: <button onClick={() => copy('https://api.textbee.dev/api/v1/gateway/send-sms', 'url2')} className="text-green-300 hover:underline font-mono text-[11px]">https://api.textbee.dev/api/v1/gateway/send-sms</button> {copied === 'url2' && <span className="text-emerald-400">✓</span>}</li>
+            <li>Set <strong className="text-white">apiKey</strong> = your TextBee API key. Set <strong className="text-white">apiSecret</strong> = your Device ID.</li>
+          </ol>
+
+          <div className="bg-slate-800/50 border border-slate-700/30 rounded-md p-3 mt-2">
+            <p className="text-[10px] text-slate-500 uppercase mb-1">API Request Format (for reference):</p>
+            <pre className="text-[11px] text-green-300 font-mono overflow-x-auto">{`POST https://api.textbee.dev/api/v1/gateway/send-sms
+Headers: { "x-api-key": "YOUR_API_KEY" }
+Body: {
+  "deviceId": "YOUR_DEVICE_ID",
+  "recipients": ["+88017XXXXXXXX"],
+  "message": "Your message here"
+}`}</pre>
+          </div>
+
+          <div className="flex items-start gap-2 text-xs text-amber-300 bg-amber-950/20 border border-amber-800/30 rounded-md p-3">
+            <span>⚠️</span>
+            <p><strong>Limitations:</strong> The gateway phone must be online. SMS uses your SIM's plan (free if you have an SMS bundle). 300 SMS/month on the free plan. Works great for low-volume testing and small campaigns in Bangladesh.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Option 2: Alpha SMS (Bangladesh) ── */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 space-y-4">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">🇧🇩</span>
+          <div>
+            <h3 className="text-lg font-semibold text-white">Option 2: Alpha SMS (Bangladesh Local)</h3>
+            <p className="text-xs text-sky-400">Local BD provider · Trial available · Call to activate</p>
+          </div>
+        </div>
+
+        <div className="bg-slate-950/60 border border-slate-700/50 rounded-lg p-4 space-y-3">
+          <p className="text-xs text-gray-400">Alpha SMS is a Bangladesh-based bulk SMS provider. They offer a trial balance (free credits) when you register. No international card needed — you can pay via bKash later if you want more.</p>
+
+          <p className="text-sm font-semibold text-white pt-2">Step-by-step setup:</p>
+          <ol className="list-decimal list-inside space-y-2 text-xs text-gray-300">
+            <li>Go to <button onClick={() => copy('https://api.sms.net.bd', 'url3')} className="text-sky-400 hover:underline font-mono">api.sms.net.bd</button> {copied === 'url3' && <span className="text-emerald-400">✓</span>} or the main site <button onClick={() => copy('https://sms.net.bd', 'url4')} className="text-sky-400 hover:underline font-mono">sms.net.bd</button> {copied === 'url4' && <span className="text-emerald-400">✓</span>}</li>
+            <li>Register an account with your Bangladeshi phone number.</li>
+            <li><strong className="text-amber-300">Call their support</strong> at <button onClick={() => copy('+88 09613 250 250', 'phone1')} className="text-green-300 hover:underline font-mono">+88 09613 250 250</button> {copied === 'phone1' && <span className="text-emerald-400">✓</span>} and ask for a <strong className="text-white">trial balance</strong> for testing. They typically give free credits.</li>
+            <li>Once approved, get your <strong className="text-white">API Key</strong> from the dashboard.</li>
+            <li>In this admin panel, go to <strong className="text-sky-400">API Management</strong> → Add Sender API → <strong className="text-white">Custom HTTP</strong>.</li>
+            <li>Set endpoint to: <button onClick={() => copy('https://api.sms.net.bd/sendsms', 'url5')} className="text-green-300 hover:underline font-mono text-[11px]">https://api.sms.net.bd/sendsms</button> {copied === 'url5' && <span className="text-emerald-400">✓</span>}</li>
+            <li>Set <strong className="text-white">apiKey</strong> = your Alpha SMS API key.</li>
+          </ol>
+
+          <div className="bg-slate-800/50 border border-slate-700/30 rounded-md p-3 mt-2">
+            <p className="text-[10px] text-slate-500 uppercase mb-1">API Request Format (for reference):</p>
+            <pre className="text-[11px] text-green-300 font-mono overflow-x-auto">{`GET https://api.sms.net.bd/sendsms?
+  api_key=YOUR_API_KEY
+  &msg=Your message
+  &to=88017XXXXXXXX`}</pre>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Comparison ── */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
+        <h3 className="text-lg font-semibold text-white mb-3">Quick Comparison</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-slate-700">
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">Feature</th>
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">TextBee</th>
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">Alpha SMS</th>
+              </tr>
+            </thead>
+            <tbody className="text-gray-300">
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">Credit card needed</td><td className="py-2 px-3 text-emerald-400">❌ No</td><td className="py-2 px-3 text-emerald-400">❌ No</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">Free quota</td><td className="py-2 px-3">300 SMS/month</td><td className="py-2 px-3">Trial credits (call to get)</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">Requires Android phone</td><td className="py-2 px-3 text-amber-400">✅ Yes (as gateway)</td><td className="py-2 px-3 text-emerald-400">❌ No (cloud-based)</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">Bangladesh numbers</td><td className="py-2 px-3 text-emerald-400">✅ Yes (via your SIM)</td><td className="py-2 px-3 text-emerald-400">✅ Yes (native BD)</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">Setup time</td><td className="py-2 px-3">~10 min</td><td className="py-2 px-3">~1 day (wait for call)</td></tr>
+              <tr><td className="py-2 px-3 text-slate-500">Best for</td><td className="py-2 px-3">Quick testing, small volume</td><td className="py-2 px-3">Production BD campaigns</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ── How to add in this system ── */}
+      <div className="bg-blue-950/20 border border-blue-800/40 rounded-xl p-6">
+        <h3 className="text-lg font-semibold text-white mb-2">📌 How to add your API in this system</h3>
+        <p className="text-xs text-gray-300 leading-relaxed">Once you have your API key from either provider, go to <strong className="text-sky-400">API Management</strong> tab → click <strong className="text-white">Add Sender API</strong> → select <strong className="text-white">Custom HTTP</strong> as provider → paste the endpoint URL and your API key → set a limit (e.g. 300 for TextBee free plan) → save. The system will automatically use it for sending campaigns and auto-replies.</p>
       </div>
     </div>
   );

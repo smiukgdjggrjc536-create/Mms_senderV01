@@ -16,6 +16,8 @@ import {
   AppSettings,
   VerificationCode,
   ScheduledSend,
+  AutoReplyConfig,
+  SmsInbound,
   createToken,
   verifyToken,
   comparePassword,
@@ -781,9 +783,13 @@ export async function POST(req) {
       const auth = await verifyAdmin(req);
       if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
       await connectDB();
-      const { alertWhatsapp, alertEmail, alertOnCrash, alertOnApiDown, alertOnError } = body;
+      const { alertWhatsapp, alertWhatsappApiKey, alertEmail, alertEmailApiKey, alertEmailFrom, alertOnCrash, alertOnApiDown, alertOnError } = body;
       const updated = await updateAppSettings({
-        alertWhatsapp, alertEmail,
+        alertWhatsapp: alertWhatsapp || '',
+        alertWhatsappApiKey: alertWhatsappApiKey || '',
+        alertEmail: alertEmail || '',
+        alertEmailApiKey: alertEmailApiKey || '',
+        alertEmailFrom: alertEmailFrom || 'alerts@mms-sender.local',
         alertOnCrash: alertOnCrash !== false,
         alertOnApiDown: alertOnApiDown !== false,
         alertOnError: alertOnError !== false,
@@ -795,7 +801,7 @@ export async function POST(req) {
       const auth = await verifyAdmin(req);
       if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
       await connectDB();
-      const result = await sendAlert('test', 'Test alert from MMS Sender Admin Panel');
+      const result = await sendAlert('test', 'Test alert from MMS Sender Admin Panel — if you see this, alerts are working!');
       return jsonResponse(result);
     }
 
@@ -818,53 +824,83 @@ export async function POST(req) {
     // USER PANEL ACTIONS (Vercel only)
     // ================================================================
 
-    // ===== ACTION: registerUser (self-registration, role='user') =====
+    // ===== ACTION: registerUser (admin-created account, role='user') =====
+    // Self-registration is DISABLED on the user panel (login only).
+    // This action remains for admin-created accounts and validates the 4-letter+2-digit ID format.
     if (action === 'registerUser') {
       await connectDB();
-      const { email, password } = body;
-      if (!email || !password) return jsonResponse({ error: 'Email and password required' }, 400);
+      const { email, password, userId } = body;
+      if (!password) return jsonResponse({ error: 'Password required' }, 400);
       if (password.length < 6) return jsonResponse({ error: 'Password must be at least 6 characters' }, 400);
-      const existing = await User.findOne({ email: email.toLowerCase() });
-      if (existing) return jsonResponse({ error: 'Email already registered. Please login.' }, 409);
+      // Determine the login identifier: prefer userId (new format), fall back to email (legacy)
+      let loginId = null;
+      if (userId) {
+        const cleanId = String(userId).trim().toUpperCase();
+        if (!/^[A-Z]{4}[0-9]{2}$/.test(cleanId)) {
+          return jsonResponse({ error: 'User ID must be exactly 4 letters followed by 2 digits (e.g. SAMU01). No @ symbol.' }, 400);
+        }
+        const exists = await User.findOne({ userId: cleanId });
+        if (exists) return jsonResponse({ error: 'This User ID is already taken.' }, 409);
+        loginId = cleanId;
+      } else if (email) {
+        const exists = await User.findOne({ email: email.toLowerCase() });
+        if (exists) return jsonResponse({ error: 'Email already registered. Please login.' }, 409);
+        loginId = email.toLowerCase();
+      } else {
+        return jsonResponse({ error: 'User ID (4 letters + 2 digits) required' }, 400);
+      }
       const settings = await getAppSettings();
-      const newUser = new User({
-        email: email.toLowerCase(),
+      const newUserDoc = {
         password,
         role: 'user',
         sendingLimit: settings.defaultUserLimit,
         expiryDate: new Date(Date.now() + settings.defaultUserExpiryDays * 24 * 60 * 60 * 1000),
         ipAddress: clientIP,
-      });
+      };
+      if (userId) newUserDoc.userId = loginId; else newUserDoc.email = loginId;
+      const newUser = new User(newUserDoc);
       await newUser.save();
-      await logActivity(newUser._id.toString(), 'user', newUser.email, 'register', 'New user registered', clientIP);
-      const token = await createToken({ userId: newUser._id.toString(), role: 'user', email: newUser.email });
-      const res = jsonResponse({ success: true, role: 'user', limit: newUser.sendingLimit, sent: newUser.sentCount, email: newUser.email });
+      const displayId = newUser.userId || newUser.email;
+      await logActivity(newUser._id.toString(), 'user', displayId, 'register', 'New user registered: ' + displayId, clientIP);
+      const token = await createToken({ userId: newUser._id.toString(), role: 'user', loginId: displayId });
+      const res = jsonResponse({ success: true, role: 'user', limit: newUser.sendingLimit, sent: newUser.sentCount, loginId: displayId, email: newUser.email || '' });
       res.headers.set('Set-Cookie', `token=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=86400`);
       return res;
     }
 
-    // ===== ACTION: login (user login — email + password only) =====
+    // ===== ACTION: login (user login — 4-letter+2-digit ID or legacy email + password) =====
     if (action === 'login') {
       await connectDB();
-      const { email, password } = body;
-      if (!email || !password) return jsonResponse({ error: 'Email and password required' }, 400);
-      const user = await User.findOne({ email: email.toLowerCase() });
-      if (!user) return jsonResponse({ error: 'Invalid email or password' }, 401);
+      const { email, password, loginId } = body;
+      // Accept loginId (new) or email (legacy field name from old client)
+      const rawId = (loginId || email || '').trim();
+      if (!rawId || !password) return jsonResponse({ error: 'User ID and password required' }, 400);
+      // Try userId lookup first (4 letters + 2 digits), then fall back to email lookup
+      let user = null;
+      const upperId = rawId.toUpperCase();
+      if (/^[A-Z]{4}[0-9]{2}$/.test(upperId)) {
+        user = await User.findOne({ userId: upperId });
+      }
+      if (!user && rawId.includes('@')) {
+        user = await User.findOne({ email: rawId.toLowerCase() });
+      }
+      if (!user) return jsonResponse({ error: 'Invalid User ID or password' }, 401);
       if (user.status === 'suspended') return jsonResponse({ error: 'Account suspended. Contact admin.' }, 403);
       // Check expiry
       if (user.expiryDate && user.expiryDate < new Date()) {
         return jsonResponse({ error: 'Account expired. Contact admin.' }, 403);
       }
       const match = await comparePassword(password, user.password);
-      if (!match) return jsonResponse({ error: 'Invalid email or password' }, 401);
+      if (!match) return jsonResponse({ error: 'Invalid User ID or password' }, 401);
       // Update last active + IP
       user.lastActiveAt = new Date();
       user.ipAddress = clientIP;
       await user.save();
-      await logActivity(user._id.toString(), 'user', user.email, 'login', 'User logged in', clientIP);
-      const token = await createToken({ userId: user._id.toString(), role: 'user', email: user.email });
+      const displayId = user.userId || user.email;
+      await logActivity(user._id.toString(), 'user', displayId, 'login', 'User logged in', clientIP);
+      const token = await createToken({ userId: user._id.toString(), role: 'user', loginId: displayId });
       const res = jsonResponse({
-        success: true, role: 'user', email: user.email,
+        success: true, role: 'user', loginId: displayId, email: user.email || '',
         limit: user.sendingLimit, sent: user.sentCount,
         expiryDate: user.expiryDate, inboxRate: user.inboxRate,
       });
@@ -885,6 +921,7 @@ export async function POST(req) {
       return jsonResponse({
         success: true,
         email: user.email,
+        loginId: user.userId || user.email,
         limit: user.sendingLimit,
         sent: user.sentCount,
         remaining: user.sendingLimit - user.sentCount,
@@ -905,7 +942,10 @@ export async function POST(req) {
       const auth = await verifyAny(req);
       if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
       await connectDB();
-      const campaigns = await Campaign.find({ userEmail: auth.decoded.email }).sort({ createdAt: -1 }).limit(50).lean();
+      // Resolve the user's identifier (loginId for new accounts, email for legacy)
+      const userDoc = await User.findById(auth.decoded.userId).lean();
+      const userIdentifier = userDoc ? (userDoc.userId || userDoc.email) : (auth.decoded.loginId || auth.decoded.email);
+      const campaigns = await Campaign.find({ $or: [ { userEmail: userIdentifier }, { userEmail: auth.decoded.email }, { userId: auth.decoded.userId } ] }).sort({ createdAt: -1 }).limit(50).lean();
       return jsonResponse({ success: true, campaigns });
     }
 
@@ -915,7 +955,11 @@ export async function POST(req) {
       if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
       await connectDB();
       const { campaignId } = body;
-      const filter = campaignId ? { campaignId } : { userEmail: auth.decoded.email };
+      const userDoc = await User.findById(auth.decoded.userId).lean();
+      const userIdentifier = userDoc ? (userDoc.userId || userDoc.email) : (auth.decoded.loginId || auth.decoded.email);
+      const filter = campaignId
+        ? { campaignId }
+        : { $or: [ { userEmail: userIdentifier }, { userEmail: auth.decoded.email }, { userId: auth.decoded.userId } ] };
       const reports = await DeliveryReport.find(filter).sort({ sentAt: -1 }).limit(500).lean();
       return jsonResponse({ success: true, reports });
     }
@@ -983,7 +1027,7 @@ export async function POST(req) {
       // Create campaign record (status pending — engine will set 'running')
       const firstCountry = countryInfo[numbersToSend[0]] || {};
       const campaign = await Campaign.create({
-        userEmail: user.email,
+        userEmail: user.userId || user.email,
         userId: user._id,
         message,
         numbers: numbersToSend,
@@ -1296,7 +1340,7 @@ export async function POST(req) {
         // Update last active
         await User.findByIdAndUpdate(user._id, { lastActiveAt: new Date(), ipAddress: clientIP });
         return jsonResponse({
-          role: 'user', email: user.email,
+          role: 'user', email: user.email, loginId: user.userId || user.email,
           limit: user.sendingLimit, sent: user.sentCount,
           expiryDate: user.expiryDate,
         });
@@ -1310,7 +1354,7 @@ export async function POST(req) {
       return jsonResponse({ error: 'Unknown role' }, 403);
     }
 
-    // ===== ACTION: aiChat (Gemini chat support for user panel) =====
+    // ===== ACTION: aiChat (Advanced Gemini chat — reads user logs/data, language-aware incl. Sylheti) =====
     if (action === 'aiChat') {
       const auth = await verifyAny(req);
       if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
@@ -1318,27 +1362,250 @@ export async function POST(req) {
       const { message, language } = body;
       if (!message) return jsonResponse({ error: 'Message required' }, 400);
       const geminiApi = await getBestGeminiApi();
-      if (!geminiApi) return jsonResponse({ error: 'AI support not available (no Gemini API configured)' }, 503);
+      if (!geminiApi) return jsonResponse({ error: 'AI support not available (no Gemini API configured by admin)' }, 503);
+
       try {
-        const langInstruction = language === 'bn' ? 'Respond in Bengali.' : 'Respond in English.';
+        // ---- Gather user context so the AI can answer based on REAL data ----
+        const userObj = await User.findById(auth.decoded.userId).select('-password').lean();
+        const userIdentifier = userObj ? (userObj.userId || userObj.email) : (auth.decoded.loginId || auth.decoded.email);
+
+        // Recent campaigns (last 10)
+        const recentCampaigns = await Campaign.find({
+          $or: [ { userEmail: userIdentifier }, { userEmail: auth.decoded.email }, { userId: auth.decoded.userId } ]
+        }).sort({ createdAt: -1 }).limit(10).lean().catch(() => []);
+
+        // Recent activity logs for this user (last 15)
+        const recentLogs = await ActivityLog.find({ actorId: String(auth.decoded.userId) })
+          .sort({ timestamp: -1 }).limit(15).lean().catch(() => []);
+
+        // Recent delivery reports summary (last 20)
+        const recentReports = await DeliveryReport.find({
+          $or: [ { userEmail: userIdentifier }, { userEmail: auth.decoded.email } ]
+        }).sort({ sentAt: -1 }).limit(20).lean().catch(() => []);
+
+        // Build a compact context string for the AI
+        const ctxParts = [];
+        if (userObj) {
+          ctxParts.push(`USER ACCOUNT: ID=${userIdentifier}, Status=${userObj.status}, SendingLimit=${userObj.sendingLimit}, SentCount=${userObj.sentCount}, Remaining=${userObj.sendingLimit - userObj.sentCount}, InboxRate=${userObj.inboxRate}%, SpamRate=${userObj.spamRate}%, TotalInbox=${userObj.totalInbox}, TotalSpam=${userObj.totalSpam}, TotalDelivered=${userObj.totalDelivered}, TotalUndelivered=${userObj.totalUndelivered}, InvalidHits=${userObj.invalidHits}, Expiry=${userObj.expiryDate ? new Date(userObj.expiryDate).toISOString().split('T')[0] : 'none'}`);
+        }
+        if (recentCampaigns && recentCampaigns.length) {
+          const campSummary = recentCampaigns.map(c =>
+            `[${c.status}] ${c.message ? c.message.slice(0, 50) : ''}... numbers=${(c.numbers || []).length} sent=${c.totalSent || 0} delivered=${c.totalDelivered || 0} undelivered=${c.totalUndelivered || 0} spam=${c.totalSpam || 0} at=${c.createdAt ? new Date(c.createdAt).toISOString().split('T')[0] : ''}`
+          ).join(' | ');
+          ctxParts.push(`RECENT CAMPAIGNS (last 10): ${campSummary}`);
+        }
+        if (recentLogs && recentLogs.length) {
+          const logSummary = recentLogs.map(l =>
+            `${l.action || l.eventType || 'event'}: ${(l.details || l.description || '').slice(0, 60)} @ ${l.timestamp ? new Date(l.timestamp).toISOString().split('T')[0] : ''}`
+          ).join(' | ');
+          ctxParts.push(`RECENT ACTIVITY LOGS (last 15): ${logSummary}`);
+        }
+        if (recentReports && recentReports.length) {
+          const deliveredCount = recentReports.filter(r => r.status === 'delivered').length;
+          const undeliveredCount = recentReports.filter(r => r.status === 'undelivered').length;
+          const spamCount = recentReports.filter(r => r.status === 'spam').length;
+          ctxParts.push(`DELIVERY REPORTS (last 20): delivered=${deliveredCount}, undelivered=${undeliveredCount}, spam=${spamCount}`);
+        }
+        const userContext = ctxParts.length ? ctxParts.join('\n') : 'No user data available yet (new account).';
+
+        // ---- Language instruction (now supports Sylheti) ----
+        let langInstruction = 'Respond in English.';
+        if (language === 'bn') langInstruction = 'Respond in Bengali (Bangla).';
+        else if (language === 'syl') langInstruction = 'Respond in Sylheti (Siloti) dialect — this is the language of the Sylhet region of Bangladesh, written in Bengali script. Use common Sylheti expressions and vocabulary.';
+
+        // ---- Build the AI prompt with context ----
+        const systemPrompt = `You are an advanced AI support assistant for an enterprise MMS/SMS sending platform. You have access to the user's REAL account data and recent activity logs below. Use this data to give specific, helpful, data-driven answers. If the user asks about their sending stats, campaign performance, delivery rates, or account status, refer to the actual data provided. If data is missing, say so honestly. Be concise but thorough. ${langInstruction}
+
+=== USER ACCOUNT DATA & RECENT LOGS ===
+${userContext}
+=== END DATA ===
+
+User question: ${message}`;
+
         const geminiUrl = `${geminiApi.endpoint}/${geminiApi.model}:generateContent?key=${geminiApi.apiKey}`;
         const geminiRes = await fetch(geminiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: `You are a helpful support assistant for an MMS sending platform. ${langInstruction} User question: ${message}` }] }],
+            contents: [{ parts: [{ text: systemPrompt }] }],
+            generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
           }),
         });
         if (geminiRes.ok) {
           const geminiData = await geminiRes.json();
-          const aiText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || 'Sorry, I could not process that.';
+          const aiText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || 'Sorry, I could not process that request.';
           await updateGeminiApiUsage(geminiApi._id, 1);
+          // Log the AI chat interaction
+          await logActivity(auth.decoded.userId, 'user', userIdentifier, 'ai_chat', `Q: ${message.slice(0, 80)}`, null).catch(() => {});
           return jsonResponse({ success: true, reply: aiText });
         }
-        return jsonResponse({ error: 'AI request failed' }, 502);
+        const errText = await geminiRes.text().catch(() => '');
+        return jsonResponse({ error: 'AI request failed: ' + geminiRes.status, detail: errText.slice(0, 200) }, 502);
       } catch (e) {
         return jsonResponse({ error: 'AI error: ' + e.message }, 500);
       }
+    }
+
+    // ===== ACTION: getAutoReplyConfig (user's SMS auto-reply settings) =====
+    if (action === 'getAutoReplyConfig') {
+      const auth = await verifyAny(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const userDoc = await User.findById(auth.decoded.userId).lean();
+      const userIdentifier = userDoc ? (userDoc.userId || userDoc.email) : (auth.decoded.loginId || auth.decoded.email);
+      let config = await AutoReplyConfig.findOne({ $or: [ { userId: auth.decoded.userId }, { userEmail: userIdentifier } ] }).lean();
+      if (!config) {
+        // Return defaults
+        return jsonResponse({
+          success: true,
+          config: {
+            enabled: false,
+            languagePrompt: {
+              bn: 'আমাদের সাথে যোগাযোগের জন্য ধন্যবাদ। ভাষা নির্বাচন করুন:\n1 - বাংলা\n2 - English\n3 - সিলেটি\n(Reply with 1, 2 or 3)',
+              en: 'Thanks for contacting us. Choose your language:\n1 - Bangla\n2 - English\n3 - Sylheti\n(Reply with 1, 2 or 3)',
+            },
+            replyMessage: {
+              bn: 'আসসালামু আলাইকুম। আমরা আপনার বার্তা পেয়েছি। আমাদের প্রতিনিধি শীঘ্রই আপনার সাথে যোগাযোগ করবে। ধন্যবাদ।',
+              en: 'Hello! We have received your message. Our representative will contact you shortly. Thank you.',
+              syl: 'আসসালামু আলাইকুম। আমরা আপনার খবর পাইছি। আমাগো প্রতিনিধি অইগো তোমার লগে যোগাযোগ করমু। ধন্যবাদ।',
+            },
+          },
+          webhookUrl: `${new URL(req.url).origin}/api/system`,
+        });
+      }
+      return jsonResponse({ success: true, config, webhookUrl: `${new URL(req.url).origin}/api/system` });
+    }
+
+    // ===== ACTION: setAutoReplyConfig (save user's SMS auto-reply settings) =====
+    if (action === 'setAutoReplyConfig') {
+      const auth = await verifyAny(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const userDoc = await User.findById(auth.decoded.userId).lean();
+      const userIdentifier = userDoc ? (userDoc.userId || userDoc.email) : (auth.decoded.loginId || auth.decoded.email);
+      const { enabled, languagePrompt, replyMessage } = body;
+      let config = await AutoReplyConfig.findOne({ $or: [ { userId: auth.decoded.userId }, { userEmail: userIdentifier } ] });
+      if (!config) {
+        config = new AutoReplyConfig({ userId: auth.decoded.userId, userEmail: userIdentifier });
+      }
+      config.enabled = enabled !== false;
+      if (languagePrompt) config.languagePrompt = { ...config.languagePrompt, ...languagePrompt };
+      if (replyMessage) config.replyMessage = { ...config.replyMessage, ...replyMessage };
+      config.updatedAt = new Date();
+      await config.save();
+      return jsonResponse({ success: true, config });
+    }
+
+    // ===== ACTION: getInboxMessages (user's received SMS log) =====
+    if (action === 'getInboxMessages') {
+      const auth = await verifyAny(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const userDoc = await User.findById(auth.decoded.userId).lean();
+      const userIdentifier = userDoc ? (userDoc.userId || userDoc.email) : (auth.decoded.loginId || auth.decoded.email);
+      const messages = await SmsInbound.find({
+        $or: [ { userId: auth.decoded.userId }, { userEmail: userIdentifier } ]
+      }).sort({ receivedAt: -1 }).limit(100).lean();
+      return jsonResponse({ success: true, messages });
+    }
+
+    // ===== ACTION: smsInbound (PUBLIC webhook — receives inbound SMS, handles language selection) =====
+    // Providers (textbee, Twilio, etc.) POST inbound SMS here.
+    // The flow: 1st SMS → send language prompt; sender replies 1/2/3 → send the configured reply in that language.
+    if (action === 'smsInbound') {
+      await connectDB();
+      // Extract fields from various provider formats
+      const fromNumber = body.From || body.from || body.sender || body.msisdn || null;
+      const incomingMessage = body.Body || body.body || body.message || body.text || '';
+      const toNumber = body.To || body.to || body.receiver || null;
+      const userEmail = body.userEmail || body.user || null; // some gateways pass a custom field
+
+      if (!fromNumber) return jsonResponse({ error: 'No sender number (From) provided' }, 400);
+
+      // Find the user who owns this inbound number (match by the number they send from, or a custom userEmail field)
+      let userDoc = null;
+      if (userEmail) {
+        userDoc = await User.findOne({ $or: [ { userId: userEmail.toUpperCase() }, { email: userEmail.toLowerCase() } ] }).lean();
+      }
+      // If we can't identify the user, return a generic acknowledgment
+      if (!userDoc) {
+        // Log as orphan inbound
+        await SmsInbound.create({ fromNumber, incomingMessage: String(incomingMessage).slice(0, 500), state: 'direct', replySent: 'No user account matched this inbound number.' }).catch(() => {});
+        return jsonResponse({ success: true, reply: '', message: 'Inbound logged but no matching user account.' });
+      }
+
+      const userIdentifier = userDoc.userId || userDoc.email;
+      let config = await AutoReplyConfig.findOne({ $or: [ { userId: userDoc._id }, { userEmail: userIdentifier } ] });
+      if (!config || !config.enabled) {
+        await SmsInbound.create({ userId: userDoc._id, userEmail: userIdentifier, fromNumber, incomingMessage: String(incomingMessage).slice(0, 500), state: 'direct', replySent: 'Auto-reply disabled.' }).catch(() => {});
+        return jsonResponse({ success: true, reply: '', message: 'Auto-reply is disabled for this account.' });
+      }
+
+      // Check for a recent 'awaiting_language' state from this sender (within last 30 minutes)
+      const recentPending = await SmsInbound.findOne({
+        userId: userDoc._id, fromNumber, state: 'awaiting_language',
+        receivedAt: { $gte: new Date(Date.now() - 30 * 60 * 1000) },
+      }).sort({ receivedAt: -1 });
+
+      let replyText = '';
+      let selectedLang = null;
+      let newState = 'awaiting_language';
+
+      if (recentPending) {
+        // This is a reply to the language prompt — parse 1/2/3
+        const msg = String(incomingMessage).trim();
+        if (msg === '1' || /^1/.test(msg)) { selectedLang = 'bn'; }
+        else if (msg === '2' || /^2/.test(msg)) { selectedLang = 'en'; }
+        else if (msg === '3' || /^3/.test(msg)) { selectedLang = 'syl'; }
+        else {
+          // Invalid choice — re-send the prompt
+          replyText = config.languagePrompt?.en || 'Please reply with 1, 2, or 3 to choose your language.';
+          newState = 'awaiting_language';
+        }
+        if (selectedLang) {
+          replyText = config.replyMessage?.[selectedLang] || config.replyMessage?.en || 'Thank you for your message.';
+          newState = 'replied';
+          // Mark the pending one as resolved
+          recentPending.state = 'replied';
+          recentPending.selectedLanguage = selectedLang;
+          recentPending.replySent = replyText;
+          await recentPending.save().catch(() => {});
+        }
+      } else {
+        // First message from this sender — send the language prompt
+        // Detect language from the app settings to pick which prompt language, default English prompt
+        const settings = await getAppSettings();
+        const promptLang = settings.language || 'en';
+        replyText = config.languagePrompt?.[promptLang] || config.languagePrompt?.en || 'Choose your language: 1-Bangla, 2-English, 3-Sylheti';
+        newState = 'awaiting_language';
+      }
+
+      // Log the inbound message
+      await SmsInbound.create({
+        userId: userDoc._id, userEmail: userIdentifier,
+        fromNumber, incomingMessage: String(incomingMessage).slice(0, 500),
+        state: newState, selectedLanguage: selectedLang,
+        replySent: replyText,
+      }).catch(() => {});
+
+      // Attempt to send the reply via the best sender API (best-effort, non-blocking)
+      let sendResult = null;
+      if (replyText) {
+        try {
+          const senderApi = await getBestSenderApi();
+          if (senderApi) {
+            sendResult = await executeRealSend({
+              to: fromNumber,
+              message: replyText,
+              senderApi,
+            }).catch((e) => ({ error: e.message }));
+          }
+        } catch (e) {
+          sendResult = { error: e.message };
+        }
+      }
+
+      return jsonResponse({ success: true, reply: replyText, sendResult });
     }
 
     // ===== ACTION: getScheduledSends =====
@@ -1346,7 +1613,9 @@ export async function POST(req) {
       const auth = await verifyAny(req);
       if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
       await connectDB();
-      const sends = await ScheduledSend.find({ userEmail: auth.decoded.email, status: 'scheduled' }).sort({ scheduledAt: 1 }).lean();
+      const userDoc = await User.findById(auth.decoded.userId).lean();
+      const userIdentifier = userDoc ? (userDoc.userId || userDoc.email) : (auth.decoded.loginId || auth.decoded.email);
+      const sends = await ScheduledSend.find({ $or: [ { userEmail: userIdentifier }, { userEmail: auth.decoded.email } ], status: 'scheduled' }).sort({ scheduledAt: 1 }).lean();
       return jsonResponse({ success: true, scheduledSends: sends });
     }
 
@@ -1357,8 +1626,10 @@ export async function POST(req) {
       await connectDB();
       const { message, numbers, scheduledAt, templateUsed } = body;
       if (!message || !numbers || !scheduledAt) return jsonResponse({ error: 'Message, numbers, and scheduled time required' }, 400);
+      const userDoc = await User.findById(auth.decoded.userId).lean();
+      const userIdentifier = userDoc ? (userDoc.userId || userDoc.email) : (auth.decoded.loginId || auth.decoded.email);
       const send = await ScheduledSend.create({
-        userEmail: auth.decoded.email,
+        userEmail: userIdentifier,
         message, numbers, scheduledAt: new Date(scheduledAt),
         templateUsed: templateUsed || null,
       });
