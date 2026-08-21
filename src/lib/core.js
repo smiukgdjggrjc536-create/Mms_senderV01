@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { SignJWT, jwtVerify } from 'jose';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
@@ -26,8 +27,6 @@ async function connectDB() {
     cached.promise = mongoose
       .connect(ENV_MONGODB_URI, opts)
       .then(async (mongooseInstance) => {
-        // After connecting with ENV URI, check if there's an active
-        // MongoConnection in the database that we should switch to
         try {
           const MongoConnectionModel =
             mongoose.models.MongoConnection ||
@@ -43,13 +42,11 @@ async function connectDB() {
 
           const active = await MongoConnectionModel.findOne({ isActive: true });
           if (active && active.uri && active.uri !== ENV_MONGODB_URI) {
-            // Switch to the active database URI
             await mongoose.disconnect();
             return mongoose.connect(active.uri, opts);
           }
         } catch (err) {
-          // If checking active connection fails, continue with ENV URI
-          // This is fine — the ENV URI is always the fallback
+          // continue with ENV URI
         }
         return mongooseInstance;
       });
@@ -65,14 +62,13 @@ async function connectDB() {
   return cached.conn;
 }
 
-// Force reconnect with a new URI (used when switching active MongoDB)
 async function reconnectDB(newUri) {
   try {
     if (mongoose.connection.readyState !== 0) {
       await mongoose.disconnect();
     }
   } catch (e) {
-    // ignore disconnect errors
+    // ignore
   }
   cached.conn = null;
   cached.promise = mongoose
@@ -125,10 +121,36 @@ async function comparePassword(password, hash) {
 }
 
 // ============================================================================
+// Random Generators (for admin credentials)
+// ============================================================================
+
+function generateRandomUsername() {
+  const prefix = 'admin';
+  const random = crypto.randomBytes(4).toString('hex');
+  return `${prefix}_${random}`;
+}
+
+function generateRandomPassword() {
+  // 16 chars: mix of letters, numbers, symbols — readable
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';
+  let password = '';
+  const bytes = crypto.randomBytes(16);
+  for (let i = 0; i < 16; i++) {
+    password += chars[bytes[i] % chars.length];
+  }
+  return password;
+}
+
+function generateRandomApiKey() {
+  // API key: sk_ prefix + 40 hex chars
+  return 'sk_' + crypto.randomBytes(20).toString('hex');
+}
+
+// ============================================================================
 // Mongoose Schemas
 // ============================================================================
 
-// --- User Schema ---
+// --- User Schema (for USER PANEL on Vercel) ---
 const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true, lowercase: true },
   password: { type: String, required: true },
@@ -139,12 +161,19 @@ const userSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
-// PRE-SAVE HOOK: auto-hash password when modified
 userSchema.pre('save', async function () {
   if (!this.isModified('password')) {
     return;
   }
   this.password = await hashPassword(this.password);
+});
+
+// --- AdminCredential Schema (for ADMIN PANEL on Netlify — 3-layer security) ---
+const adminCredentialSchema = new mongoose.Schema({
+  username: { type: String, required: true, unique: true },
+  passwordHash: { type: String, required: true },
+  apiKey: { type: String, required: true },
+  updatedAt: { type: Date, default: Date.now },
 });
 
 // --- Config Schema ---
@@ -172,7 +201,7 @@ const mongoConnectionSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
-// Export models (check if already exists to avoid OverwriteModelError)
+// Export models
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 const Config = mongoose.models.Config || mongoose.model('Config', configSchema);
 const Campaign =
@@ -180,6 +209,113 @@ const Campaign =
 const MongoConnection =
   mongoose.models.MongoConnection ||
   mongoose.model('MongoConnection', mongoConnectionSchema);
+const AdminCredential =
+  mongoose.models.AdminCredential ||
+  mongoose.model('AdminCredential', adminCredentialSchema);
+
+// ============================================================================
+// Admin Credential Management
+// ============================================================================
+
+// Initialize default admin credentials if none exist (called on first admin login attempt)
+async function ensureAdminCredentials() {
+  const existing = await AdminCredential.countDocuments();
+  if (existing > 0) {
+    return null; // already has credentials
+  }
+
+  const username = generateRandomUsername();
+  const password = generateRandomPassword();
+  const apiKey = generateRandomApiKey();
+  const passwordHash = await hashPassword(password);
+
+  await AdminCredential.create({
+    username,
+    passwordHash,
+    apiKey,
+  });
+
+  // Return the PLAIN credentials ONCE (only on creation) so they can be shown to admin
+  return { username, password, apiKey };
+}
+
+// Verify admin login (3-layer: username + password + apiKey)
+async function verifyAdminLogin(username, password, apiKey) {
+  const admin = await AdminCredential.findOne({ username });
+  if (!admin) {
+    return { success: false, error: 'Invalid credentials' };
+  }
+
+  const passwordMatch = await comparePassword(password, admin.passwordHash);
+  if (!passwordMatch) {
+    return { success: false, error: 'Invalid credentials' };
+  }
+
+  if (admin.apiKey !== apiKey) {
+    return { success: false, error: 'Invalid API key' };
+  }
+
+  return { success: true, admin };
+}
+
+// Get admin credentials info (masked — for display in admin panel)
+async function getAdminCredentialsInfo() {
+  const admin = await AdminCredential.findOne({});
+  if (!admin) {
+    return null;
+  }
+  return {
+    username: admin.username,
+    apiKeyMasked: admin.apiKey.substring(0, 6) + '••••••••••••••••••••',
+    passwordSet: true,
+    updatedAt: admin.updatedAt,
+  };
+}
+
+// Update admin username
+async function updateAdminUsername(newUsername) {
+  const admin = await AdminCredential.findOne({});
+  if (!admin) {
+    return { success: false, error: 'Admin not found' };
+  }
+  // Check uniqueness
+  const existing = await AdminCredential.findOne({
+    username: newUsername,
+    _id: { $ne: admin._id },
+  });
+  if (existing) {
+    return { success: false, error: 'Username already taken' };
+  }
+  admin.username = newUsername;
+  admin.updatedAt = new Date();
+  await admin.save();
+  return { success: true };
+}
+
+// Update admin password
+async function updateAdminPassword(newPassword) {
+  const admin = await AdminCredential.findOne({});
+  if (!admin) {
+    return { success: false, error: 'Admin not found' };
+  }
+  admin.passwordHash = await hashPassword(newPassword);
+  admin.updatedAt = new Date();
+  await admin.save();
+  return { success: true };
+}
+
+// Update admin API key (generate new random one)
+async function updateAdminApiKey() {
+  const admin = await AdminCredential.findOne({});
+  if (!admin) {
+    return { success: false, error: 'Admin not found' };
+  }
+  const newKey = generateRandomApiKey();
+  admin.apiKey = newKey;
+  admin.updatedAt = new Date();
+  await admin.save();
+  return { success: true, apiKey: newKey };
+}
 
 // ============================================================================
 // Config File Generator
@@ -246,10 +382,20 @@ export {
   verifyToken,
   hashPassword,
   comparePassword,
+  generateRandomUsername,
+  generateRandomPassword,
+  generateRandomApiKey,
+  ensureAdminCredentials,
+  verifyAdminLogin,
+  getAdminCredentialsInfo,
+  updateAdminUsername,
+  updateAdminPassword,
+  updateAdminApiKey,
   User,
   Config,
   Campaign,
   MongoConnection,
+  AdminCredential,
   refreshConfigFile,
   jsonResponse,
 };

@@ -8,6 +8,8 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  # Admin Panel mode — Netlify shows ONLY the admin panel
+  NEXT_PUBLIC_PANEL_MODE = "admin"
 
 # Next.js runtime plugin is auto-installed by Netlify when it detects Next.js.
 # The @netlify/plugin-nextjs plugin handles SSR/ISR/API routes automatically.

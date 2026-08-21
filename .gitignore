@@ -45,3 +45,6 @@ config-sending.js
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local Netlify folder
+.netlify
