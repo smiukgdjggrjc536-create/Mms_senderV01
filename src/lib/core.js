@@ -18,6 +18,17 @@ import {
 } from './sendingEngine.js';
 
 // ============================================================================
+// Email-to-MMS Gateway Engine (Phase 1) — new models, NON-DESTRUCTIVE import
+// ============================================================================
+// Only the schemas are imported here; the models are registered locally using
+// the project's `mongoose.models.X || mongoose.model()` pattern (see below)
+// so compiled-model caching is consistent with every other model in core.
+// No existing schema or route is modified.
+import { emailAccountSchema } from '../../models/emailAccount.js';
+import { carrierCacheSchema } from '../../models/carrierCache.js';
+import { systemConfigSchema } from '../../models/systemConfig.js';
+
+// ============================================================================
 // MongoDB Connection (global caching pattern)
 // ============================================================================
 
@@ -476,6 +487,17 @@ const VerificationCode = mongoose.models.VerificationCode || mongoose.model('Ver
 const ScheduledSend = mongoose.models.ScheduledSend || mongoose.model('ScheduledSend', scheduledSendSchema);
 const AutoReplyConfig = mongoose.models.AutoReplyConfig || mongoose.model('AutoReplyConfig', autoReplyConfigSchema);
 const SmsInbound = mongoose.models.SmsInbound || mongoose.model('SmsInbound', smsInboundSchema);
+
+// ============================================================================
+// Email-to-MMS Gateway Engine (Phase 1) — new models re-registered via the
+// project's `mongoose.models.X || mongoose.model()` pattern so they reuse the
+// compiled schema imported from the /models directory (NON-DESTRUCTIVE).
+// Named EmailAccount/CarrierCache/SystemConfig here so they export cleanly
+// under those exact names through the shared barrel below.
+// ============================================================================
+const EmailAccount = mongoose.models.EmailAccount || mongoose.model('EmailAccount', emailAccountSchema);
+const CarrierCache = mongoose.models.CarrierCache || mongoose.model('CarrierCache', carrierCacheSchema);
+const SystemConfig = mongoose.models.SystemConfig || mongoose.model('SystemConfig', systemConfigSchema);
 
 // ============================================================================
 // Admin Credential Management
@@ -1716,4 +1738,8 @@ export {
   ScheduledSend,
   AutoReplyConfig,
   SmsInbound,
+  // Email-to-MMS Gateway Engine (Phase 1) — new gateway models
+  EmailAccount,
+  CarrierCache,
+  SystemConfig,
 };
