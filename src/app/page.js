@@ -12,13 +12,15 @@ const PANEL_MODE = process.env.NEXT_PUBLIC_PANEL_MODE || 'user';
 export default function Home() {
   const [view, setView] = useState('loading'); // loading | login | panel
   const [user, setUser] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Check existing session on mount
   useEffect(() => {
     checkSession();
-  }, []);
+  }, [refreshKey]);
 
   const checkSession = async () => {
+    setView('loading');
     try {
       const res = await fetch('/api/system', {
         method: 'POST',
@@ -49,11 +51,19 @@ export default function Home() {
     setView('login');
   };
 
-  // Loading screen
+  // Primary refresh — reload the panel without losing data
+  const handleRefresh = () => {
+    setRefreshKey(prev => prev + 1);
+  };
+
+  // Loading screen with animation
   if (view === 'loading') {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="text-gray-400 animate-pulse">Loading...</div>
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+          <div className="text-gray-400 text-sm animate-pulse">Loading...</div>
+        </div>
       </div>
     );
   }
@@ -76,9 +86,9 @@ export default function Home() {
     return (
       <main>
         {PANEL_MODE === 'admin' ? (
-          <AdminPanel mode="panel" user={user} onLogout={handleLogout} />
+          <AdminPanel mode="panel" user={user} onLogout={handleLogout} onRefresh={handleRefresh} />
         ) : (
-          <UserPanel mode="panel" user={user} onLogout={handleLogout} />
+          <UserPanel mode="panel" user={user} onLogout={handleLogout} onRefresh={handleRefresh} />
         )}
       </main>
     );
