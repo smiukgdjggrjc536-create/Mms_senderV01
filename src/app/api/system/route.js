@@ -125,18 +125,20 @@ export async function POST(req) {
 
       const result = await verifyAdminLogin(username, password, apiKey);
       if (result.success) {
+        const adminObj = result.admin.toObject ? result.admin.toObject() : result.admin;
+        const permArr = Array.isArray(adminObj.permissions) ? [...adminObj.permissions] : [];
         const token = await createToken({
-          userId: result.admin._id.toString(),
-          role: result.admin.role === 'subadmin' ? 'subadmin' : 'admin',
-          username: result.admin.username,
-          permissions: result.admin.permissions,
+          userId: adminObj._id.toString(),
+          role: adminObj.role === 'subadmin' ? 'subadmin' : 'admin',
+          username: adminObj.username,
+          permissions: permArr,
         });
-        await logActivity(result.admin._id.toString(), 'admin', result.admin.username, 'login', 'Admin logged in', clientIP);
+        await logActivity(adminObj._id.toString(), 'admin', adminObj.username, 'login', 'Admin logged in', clientIP);
         const res = jsonResponse({
           success: true,
-          role: result.admin.role === 'subadmin' ? 'subadmin' : 'admin',
-          username: result.admin.username,
-          permissions: result.admin.permissions,
+          role: adminObj.role === 'subadmin' ? 'subadmin' : 'admin',
+          username: adminObj.username,
+          permissions: permArr,
         });
         res.headers.set('Set-Cookie', `token=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=86400`);
         return res;
