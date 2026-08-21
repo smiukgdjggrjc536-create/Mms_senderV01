@@ -209,6 +209,112 @@ export async function POST(req) {
       );
     }
 
+    // ===== ACTION 4: getUsers =====
+    if (action === 'getUsers') {
+      const cookieHeader = req.headers.get('cookie') || '';
+      const tokenMatch = cookieHeader.match(/token=([^;]+)/);
+      const token = tokenMatch ? tokenMatch[1] : null;
+      if (!token) return jsonResponse({ error: 'Unauthorized' }, 401);
+      const decoded = await verifyToken(token);
+      if (!decoded) return jsonResponse({ error: 'Invalid Token' }, 403);
+      if (decoded.role !== 'admin')
+        return jsonResponse({ error: 'Forbidden: Admin only' }, 403);
+
+      await connectDB();
+      const users = await User.find({}).select('-password').sort({ createdAt: -1 });
+      return jsonResponse({ users }, 200);
+    }
+
+    // ===== ACTION 5: suspendUser =====
+    if (action === 'suspendUser') {
+      const cookieHeader = req.headers.get('cookie') || '';
+      const tokenMatch = cookieHeader.match(/token=([^;]+)/);
+      const token = tokenMatch ? tokenMatch[1] : null;
+      if (!token) return jsonResponse({ error: 'Unauthorized' }, 401);
+      const decoded = await verifyToken(token);
+      if (!decoded) return jsonResponse({ error: 'Invalid Token' }, 403);
+      if (decoded.role !== 'admin')
+        return jsonResponse({ error: 'Forbidden: Admin only' }, 403);
+
+      const { email: targetEmail } = body;
+      if (!targetEmail)
+        return jsonResponse({ error: 'Email required' }, 400);
+      if (decoded.email === targetEmail.toLowerCase())
+        return jsonResponse({ error: 'Cannot suspend yourself' }, 400);
+
+      await connectDB();
+      await User.findOneAndUpdate(
+        { email: targetEmail.toLowerCase() },
+        { status: 'suspended' }
+      );
+      return jsonResponse({ success: true, message: 'User suspended' }, 200);
+    }
+
+    // ===== ACTION 6: activateUser =====
+    if (action === 'activateUser') {
+      const cookieHeader = req.headers.get('cookie') || '';
+      const tokenMatch = cookieHeader.match(/token=([^;]+)/);
+      const token = tokenMatch ? tokenMatch[1] : null;
+      if (!token) return jsonResponse({ error: 'Unauthorized' }, 401);
+      const decoded = await verifyToken(token);
+      if (!decoded) return jsonResponse({ error: 'Invalid Token' }, 403);
+      if (decoded.role !== 'admin')
+        return jsonResponse({ error: 'Forbidden: Admin only' }, 403);
+
+      const { email: targetEmail } = body;
+      if (!targetEmail)
+        return jsonResponse({ error: 'Email required' }, 400);
+
+      await connectDB();
+      await User.findOneAndUpdate(
+        { email: targetEmail.toLowerCase() },
+        { status: 'active' }
+      );
+      return jsonResponse({ success: true, message: 'User activated' }, 200);
+    }
+
+    // ===== ACTION 7: getCampaigns =====
+    if (action === 'getCampaigns') {
+      const cookieHeader = req.headers.get('cookie') || '';
+      const tokenMatch = cookieHeader.match(/token=([^;]+)/);
+      const token = tokenMatch ? tokenMatch[1] : null;
+      if (!token) return jsonResponse({ error: 'Unauthorized' }, 401);
+      const decoded = await verifyToken(token);
+      if (!decoded) return jsonResponse({ error: 'Invalid Token' }, 403);
+      if (decoded.role !== 'admin')
+        return jsonResponse({ error: 'Forbidden: Admin only' }, 403);
+
+      await connectDB();
+      const campaigns = await Campaign.find({})
+        .sort({ createdAt: -1 })
+        .limit(100);
+      return jsonResponse({ campaigns }, 200);
+    }
+
+    // ===== ACTION 8: getConfigStatus =====
+    if (action === 'getConfigStatus') {
+      const cookieHeader = req.headers.get('cookie') || '';
+      const tokenMatch = cookieHeader.match(/token=([^;]+)/);
+      const token = tokenMatch ? tokenMatch[1] : null;
+      if (!token) return jsonResponse({ error: 'Unauthorized' }, 401);
+      const decoded = await verifyToken(token);
+      if (!decoded) return jsonResponse({ error: 'Invalid Token' }, 403);
+      if (decoded.role !== 'admin')
+        return jsonResponse({ error: 'Forbidden: Admin only' }, 403);
+
+      await connectDB();
+      const configs = await Config.find({});
+      const status = {
+        MONGODB_URI: false,
+        GEMINI_API_KEY: false,
+        SMS_API_KEY: false,
+      };
+      configs.forEach((c) => {
+        if (c.keyName && c.keyValue) status[c.keyName] = true;
+      });
+      return jsonResponse({ status }, 200);
+    }
+
     return jsonResponse({ error: 'Unknown action' }, 400);
   } catch (error) {
     console.error('API Error:', error);
