@@ -1,6 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, createContext, useContext } from 'react';
+
+// ─── Global Loading Context ─────────────────────────────────────────────────
+// Provides withLoading(label, fn) to any component for enterprise overlay
+const LoadingCtx = createContext(null);
+function useLoading() { return useContext(LoadingCtx); }
 
 // ============================================================================
 // ICON COMPONENTS (professional SVG, no emoji)
@@ -27,6 +32,7 @@ const Icon = {
   Send: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>),
   Activity: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>),
   Zap: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>),
+  Beaker: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.171.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.878 3.298-.6 4.036a16.875 16.875 0 01-8.187 2.012 16.875 16.875 0 01-8.187-2.012c-1.478-.738-1.832-2.804-.6-4.036L5 14.5"/></svg>),
 };
 
 // ============================================================================
@@ -136,7 +142,7 @@ function AdminLogin({ onLoginSuccess }) {
           {error && <div className="text-red-400 text-sm bg-red-900/30 border border-red-800/50 rounded-lg px-3 py-2">{error}</div>}
           <button type="submit" disabled={loading}
             className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-semibold py-2.5 rounded-lg transition shadow-lg shadow-blue-600/30 disabled:opacity-50 flex items-center justify-center gap-2">
-            {loading ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>Authenticating...</> : <><Icon.Lock /> Secure Login</>}
+            {loading ? <><BtnSpinner /> Authenticating...</> : <><Icon.Lock /> Secure Login</>}
           </button>
         </form>
         <p className="text-center text-gray-600 text-xs mt-4">3-Layer Security: Username + Password + API Key</p>
@@ -151,6 +157,13 @@ function AdminLogin({ onLoginSuccess }) {
 function AdminDashboard({ user, onLogout, onRefresh }) {
   const [tab, setTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [globalLoading, setGlobalLoading] = useState(null); // { label } | null
+
+  // Enterprise loading helper — wrap any async action to show the overlay
+  const withLoading = async (label, fn) => {
+    setGlobalLoading({ label });
+    try { return await fn(); } finally { setGlobalLoading(null); }
+  };
 
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: <Icon.Dashboard /> },
@@ -169,6 +182,7 @@ function AdminDashboard({ user, onLogout, onRefresh }) {
   ];
 
   return (
+    <LoadingCtx.Provider value={withLoading}>
     <div className="min-h-screen bg-slate-950 text-gray-200">
       {/* Sidebar */}
       <div className={`fixed inset-y-0 left-0 w-64 bg-slate-900 border-r border-slate-800 transform transition-transform z-40 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
@@ -213,14 +227,111 @@ function AdminDashboard({ user, onLogout, onRefresh }) {
         {tab === 'security' && <SecurityTab user={user} />}
         {tab === 'settings' && <SettingsTab />}
       </div>
+      {/* Enterprise full-screen loading overlay */}
+      <EnterpriseOverlay show={!!globalLoading} label={globalLoading?.label || 'Processing...'} />
     </div>
+    </LoadingCtx.Provider>
   );
 }
 
 // ============================================================================
 // LOADING SPINNER
 // ============================================================================
-function Spinner() { return <div className="flex items-center justify-center py-12"><div className="w-8 h-8 border-3 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div></div>; }
+// ─── Enterprise Loading System ──────────────────────────────────────────────
+// Spinner — backward-compatible; renders an enterprise-grade gradient ring
+function Spinner({ size = 32, label }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 gap-3">
+      <div className="relative" style={{ width: size, height: size }}>
+        <div className="absolute inset-0 rounded-full border-2 border-slate-700/50" />
+        <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-sky-400 border-r-violet-400 animate-spin" style={{ animationDuration: '0.8s' }} />
+        <div className="absolute inset-1.5 rounded-full bg-gradient-to-br from-sky-500/10 to-violet-500/10 animate-pulse" />
+      </div>
+      {label && <p className="text-xs text-slate-500 font-medium animate-pulse">{label}</p>}
+    </div>
+  );
+}
+
+// Inline button spinner — tiny, fits inside buttons
+function BtnSpinner({ size = 14, color = 'text-white' }) {
+  return (
+    <svg className={`animate-spin ${color}`} style={{ width: size, height: size }} viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+      <path d="M12 2a10 10 0 0110 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// LoadingButton — enterprise button with built-in loading state
+function LoadingButton({ loading = false, onClick, children, variant = 'primary', size = 'md', className = '', icon, disabled, full = false, type = 'button' }) {
+  const variants = {
+    primary:   'bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white shadow-lg shadow-sky-600/20',
+    success:   'bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white shadow-lg shadow-emerald-600/20',
+    danger:    'bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white shadow-lg shadow-rose-600/20',
+    warning:   'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white shadow-lg shadow-amber-500/20',
+    ghost:     'bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700',
+    subtle:    'bg-slate-700/50 hover:bg-slate-700 text-white',
+  };
+  const sizes = { sm: 'px-2.5 py-1 text-xs rounded-lg gap-1', md: 'px-3.5 py-2 text-sm rounded-lg gap-1.5', lg: 'px-5 py-2.5 text-sm rounded-xl gap-2' };
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled || loading}
+      className={`relative inline-flex items-center justify-center font-medium transition-all duration-200 ${variants[variant] || variants.primary} ${sizes[size]} ${full ? 'w-full' : ''} ${disabled || loading ? 'opacity-60 cursor-not-allowed' : 'hover:scale-[1.02] active:scale-[0.98]'} ${className}`}
+    >
+      {loading ? <BtnSpinner /> : icon}
+      <span className={loading ? 'opacity-70' : ''}>{children}</span>
+    </button>
+  );
+}
+
+// Full-screen enterprise loading overlay — triggered for any major action
+function EnterpriseOverlay({ show, label = 'Processing...' }) {
+  if (!show) return null;
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm">
+      <div className="flex flex-col items-center gap-5">
+        <div className="relative w-20 h-20">
+          <div className="absolute inset-0 rounded-full border-2 border-sky-500/20" />
+          <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-sky-400 border-r-sky-400 animate-spin" style={{ animationDuration: '1s' }} />
+          <div className="absolute inset-2.5 rounded-full border-2 border-violet-500/20" />
+          <div className="absolute inset-2.5 rounded-full border-2 border-transparent border-t-violet-400 border-b-violet-400 animate-spin" style={{ animationDuration: '1.4s', animationDirection: 'reverse' }} />
+          <div className="absolute inset-5 rounded-full border-2 border-emerald-500/20" />
+          <div className="absolute inset-5 rounded-full border-2 border-transparent border-l-emerald-400 animate-spin" style={{ animationDuration: '0.9s' }} />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-3 h-3 rounded-full bg-gradient-to-br from-sky-400 to-violet-400 animate-pulse" />
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm font-medium text-slate-200">{label}</span>
+          <span className="flex gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+            <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Section-level loading skeleton (for tab content)
+function SkeletonGrid({ rows = 3 }) {
+  return (
+    <div className="space-y-3 animate-pulse">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-lg bg-slate-800/60" />
+          <div className="flex-1 space-y-2">
+            <div className="h-3 w-1/3 rounded bg-slate-800/60" />
+            <div className="h-2.5 w-1/2 rounded bg-slate-800/40" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // ============================================================================
 // ENTERPRISE DASHBOARD — sleek, modern, data-dense, no ugly boxes
@@ -240,32 +351,35 @@ function ProgressBar({ percent, color }) {
 // Compact KPI tile — flat, glassy, subtle left accent. NOT the old bulky box.
 function Kpi({ label, value, sub, tone = 'slate', live, trend }) {
   const tones = {
-    slate:  { accent: 'bg-slate-600',   value: 'text-white',      glow: '' },
-    green:  { accent: 'bg-emerald-500',  value: 'text-emerald-300', glow: 'shadow-emerald-500/10' },
-    red:    { accent: 'bg-rose-500',     value: 'text-rose-300',    glow: 'shadow-rose-500/10' },
-    amber:  { accent: 'bg-amber-500',    value: 'text-amber-300',   glow: 'shadow-amber-500/10' },
-    blue:   { accent: 'bg-sky-500',      value: 'text-sky-300',     glow: 'shadow-sky-500/10' },
-    violet: { accent: 'bg-violet-500',   value: 'text-violet-300',  glow: 'shadow-violet-500/10' },
-    cyan:   { accent: 'bg-cyan-500',     value: 'text-cyan-300',    glow: 'shadow-cyan-500/10' },
+    slate:  { accent: 'from-slate-500 to-slate-600',     value: 'text-white',      glow: 'hover:shadow-slate-500/10',    ring: 'group-hover:border-slate-600/50' },
+    green:  { accent: 'from-emerald-400 to-green-500',   value: 'text-emerald-300', glow: 'hover:shadow-emerald-500/20',  ring: 'group-hover:border-emerald-600/40' },
+    red:    { accent: 'from-rose-400 to-red-500',        value: 'text-rose-300',    glow: 'hover:shadow-rose-500/20',     ring: 'group-hover:border-rose-600/40' },
+    amber:  { accent: 'from-amber-400 to-orange-500',    value: 'text-amber-300',   glow: 'hover:shadow-amber-500/20',    ring: 'group-hover:border-amber-600/40' },
+    blue:   { accent: 'from-sky-400 to-blue-500',        value: 'text-sky-300',     glow: 'hover:shadow-sky-500/20',      ring: 'group-hover:border-sky-600/40' },
+    violet: { accent: 'from-violet-400 to-purple-500',   value: 'text-violet-300',  glow: 'hover:shadow-violet-500/20',   ring: 'group-hover:border-violet-600/40' },
+    cyan:   { accent: 'from-cyan-400 to-teal-500',       value: 'text-cyan-300',    glow: 'hover:shadow-cyan-500/20',     ring: 'group-hover:border-cyan-600/40' },
   };
   const t = tones[tone] || tones.slate;
   return (
-    <div className={`relative bg-slate-900/50 border border-slate-800/80 rounded-lg px-4 py-3 overflow-hidden hover:border-slate-700 transition-colors`}>
-      <span className={`absolute left-0 top-0 bottom-0 w-0.5 ${t.accent}`} />
-      <div className="flex items-center justify-between">
+    <div className={`group relative bg-gradient-to-br from-slate-900/80 to-slate-900/40 border border-slate-800/80 rounded-xl px-4 py-3.5 overflow-hidden transition-all duration-300 ${t.ring} ${t.glow} hover:shadow-lg hover:-translate-y-0.5`}>
+      {/* Top gradient accent bar */}
+      <div className={`absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r ${t.accent} opacity-60 group-hover:opacity-100 transition-opacity`} />
+      {/* Subtle glow on hover */}
+      <div className={`absolute -inset-px bg-gradient-to-br ${t.accent} opacity-0 group-hover:opacity-[0.03] transition-opacity rounded-xl`} />
+      <div className="relative flex items-center justify-between">
         <p className="text-[11px] text-slate-500 font-medium uppercase tracking-wide truncate">{label}</p>
-        {live && <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />LIVE</span>}
+        {live && <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400/50" />LIVE</span>}
       </div>
-      <div className="flex items-baseline gap-2 mt-1">
-        <p className={`text-2xl font-semibold tabular-nums ${t.value} leading-none`}>{value}</p>
+      <div className="relative flex items-baseline gap-2 mt-1.5">
+        <p className={`text-2xl font-bold tabular-nums ${t.value} leading-none tracking-tight`}>{value}</p>
         {trend != null && <span className={`text-[11px] font-semibold ${trend >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{trend >= 0 ? '▲' : '▼'} {Math.abs(trend)}%</span>}
       </div>
-      {sub && <p className="text-[11px] text-slate-600 mt-1 truncate">{sub}</p>}
+      {sub && <p className="relative text-[11px] text-slate-600 mt-1 truncate">{sub}</p>}
     </div>
   );
 }
 
-// Radial gauge (pure SVG) for percentage metrics like inbox rate / panel health
+// Radial gauge// Radial gauge (pure SVG) for percentage metrics like inbox rate / panel health
 function RadialGauge({ value, label, sub, color = '#34d399', size = 120 }) {
   const r = size / 2 - 8;
   const c = 2 * Math.PI * r;
@@ -361,10 +475,10 @@ function MiniBars({ values, labels }) {
 // Section wrapper with header + optional action
 function Section({ title, subtitle, action, children, className = '' }) {
   return (
-    <section className={`bg-slate-900/40 border border-slate-800/70 rounded-xl p-4 ${className}`}>
+    <section className={`group bg-gradient-to-br from-slate-900/60 to-slate-900/30 border border-slate-800/70 rounded-xl p-4 transition-all duration-300 hover:border-slate-700/80 ${className}`}>
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h3 className="text-sm font-semibold text-slate-200">{title}</h3>
+          <h3 className="text-sm font-semibold text-slate-100 flex items-center gap-2">{title}</h3>
           {subtitle && <p className="text-[11px] text-slate-600 mt-0.5">{subtitle}</p>}
         </div>
         {action}
@@ -391,7 +505,7 @@ function DashboardTab() {
 
   useEffect(() => { load(); const interval = setInterval(load, 30000); return () => clearInterval(interval); }, [load]);
 
-  if (loading && !stats) return <Spinner />;
+  if (loading && !stats) return <Spinner size={40} label="Loading dashboard analytics..." />;
   if (!stats) return <p className="text-slate-500">Failed to load stats.</p>;
 
   const ph = stats.apiHealth.panelHealth;
@@ -420,50 +534,61 @@ function DashboardTab() {
   return (
     <div className="space-y-5">
       {/* ── Top bar: title + system grade + refresh ── */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /> Operations Overview
-          </h2>
-          <p className="text-[11px] text-slate-600 mt-0.5">
-            {lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString()} · auto-refresh 30s` : 'Auto-refresh every 30s'}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-1.5">
-            <span className="text-[10px] text-slate-500 uppercase tracking-wide">System Grade</span>
-            <span className="text-lg font-bold tabular-nums" style={{ color: grade.color }}>{grade.grade}</span>
-            <span className="text-[10px] text-slate-400">{grade.label}</span>
+      <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-slate-900/80 via-slate-900/40 to-slate-900/80 border border-slate-800/70 px-5 py-4">
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-sky-500/30 to-transparent" />
+        <div className="flex flex-wrap items-center justify-between gap-3 relative">
+          <div>
+            <h2 className="text-xl font-bold text-white flex items-center gap-2.5">
+              <span className="relative flex items-center justify-center w-6 h-6">
+                <span className="absolute inset-0 rounded-full bg-emerald-400/20 animate-ping" />
+                <span className="relative w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />
+              </span>
+              Operations Overview
+            </h2>
+            <p className="text-[11px] text-slate-500 mt-1">
+              {lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString()} · auto-refresh 30s` : 'Auto-refresh every 30s'}
+            </p>
           </div>
-          <button onClick={load} className="flex items-center gap-2 text-xs text-slate-400 hover:text-sky-400 bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-1.5 transition">
-            <Icon.Refresh /> Refresh
-          </button>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5 bg-slate-950/50 border border-slate-800 rounded-lg px-3.5 py-2">
+              <span className="text-[10px] text-slate-500 uppercase tracking-wide">System Grade</span>
+              <span className="text-xl font-bold tabular-nums leading-none" style={{ color: grade.color }}>{grade.grade}</span>
+              <span className="text-[10px] text-slate-400">{grade.label}</span>
+            </div>
+            <button onClick={load} className="flex items-center gap-2 text-xs text-slate-400 hover:text-sky-300 bg-slate-950/50 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-lg px-3.5 py-2 transition-all hover:scale-105">
+              <Icon.Refresh /> Refresh
+            </button>
+          </div>
         </div>
       </div>
 
       {/* ── System Intelligence Banner ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
+        <div className="group relative bg-gradient-to-br from-slate-900/80 to-slate-900/30 border border-slate-800/80 rounded-xl p-3.5 overflow-hidden transition-all duration-300 hover:border-emerald-700/40 hover:shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-0.5">
+          <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-400 to-green-500 opacity-50 group-hover:opacity-100 transition-opacity" />
           <p className="text-[10px] text-slate-500 uppercase tracking-wide">Daily Trend</p>
-          <div className="flex items-baseline gap-1.5 mt-1">
-            <p className={`text-xl font-bold tabular-nums ${dailyTrend >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{dailyTrend >= 0 ? '▲' : '▼'} {Math.abs(dailyTrend)}%</p>
+          <div className="flex items-baseline gap-1.5 mt-1.5">
+            <p className={`text-2xl font-bold tabular-nums leading-none ${dailyTrend >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{dailyTrend >= 0 ? '▲' : '▼'} {Math.abs(dailyTrend)}%</p>
           </div>
-          <p className="text-[10px] text-slate-600 mt-0.5">vs 7-day avg</p>
+          <p className="text-[10px] text-slate-600 mt-1">vs 7-day avg</p>
         </div>
-        <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
+        <div className="group relative bg-gradient-to-br from-slate-900/80 to-slate-900/30 border border-slate-800/80 rounded-xl p-3.5 overflow-hidden transition-all duration-300 hover:border-cyan-700/40 hover:shadow-lg hover:shadow-cyan-500/10 hover:-translate-y-0.5">
+          <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-400 to-teal-500 opacity-50 group-hover:opacity-100 transition-opacity" />
           <p className="text-[10px] text-slate-500 uppercase tracking-wide">Delivery Efficiency</p>
-          <p className="text-xl font-bold text-cyan-300 tabular-nums mt-1">{deliveryEff}<span className="text-sm text-slate-500">/100</span></p>
-          <p className="text-[10px] text-slate-600 mt-0.5">weighted score</p>
+          <p className="text-2xl font-bold text-cyan-300 tabular-nums mt-1.5 leading-none">{deliveryEff}<span className="text-sm text-slate-500">/100</span></p>
+          <p className="text-[10px] text-slate-600 mt-1">weighted score</p>
         </div>
-        <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
+        <div className="group relative bg-gradient-to-br from-slate-900/80 to-slate-900/30 border border-slate-800/80 rounded-xl p-3.5 overflow-hidden transition-all duration-300 hover:border-violet-700/40 hover:shadow-lg hover:shadow-violet-500/10 hover:-translate-y-0.5">
+          <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-violet-400 to-purple-500 opacity-50 group-hover:opacity-100 transition-opacity" />
           <p className="text-[10px] text-slate-500 uppercase tracking-wide">Remaining Capacity</p>
-          <p className="text-xl font-bold text-violet-300 tabular-nums mt-1">{estRemaining.toLocaleString()}</p>
-          <p className="text-[10px] text-slate-600 mt-0.5">SMS credits left</p>
+          <p className="text-2xl font-bold text-violet-300 tabular-nums mt-1.5 leading-none">{estRemaining.toLocaleString()}</p>
+          <p className="text-[10px] text-slate-600 mt-1">SMS credits left</p>
         </div>
-        <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
+        <div className="group relative bg-gradient-to-br from-slate-900/80 to-slate-900/30 border border-slate-800/80 rounded-xl p-3.5 overflow-hidden transition-all duration-300 hover:border-amber-700/40 hover:shadow-lg hover:shadow-amber-500/10 hover:-translate-y-0.5">
+          <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-amber-400 to-orange-500 opacity-50 group-hover:opacity-100 transition-opacity" />
           <p className="text-[10px] text-slate-500 uppercase tracking-wide">Avg API Usage</p>
-          <p className="text-xl font-bold text-amber-300 tabular-nums mt-1">{avgUsage}%</p>
-          <p className="text-[10px] text-slate-600 mt-0.5">across {stats.apiHealth.totalApiCount || 0} APIs</p>
+          <p className="text-2xl font-bold text-amber-300 tabular-nums mt-1.5 leading-none">{avgUsage}%</p>
+          <p className="text-[10px] text-slate-600 mt-1">across {stats.apiHealth.totalApiCount || 0} APIs</p>
         </div>
       </div>
 
@@ -648,10 +773,16 @@ function ApiManagementTab() {
   const [showSenderForm, setShowSenderForm] = useState(false);
   const [showGeminiForm, setShowGeminiForm] = useState(false);
   const [senderForm, setSenderForm] = useState({ name: '', provider: 'custom', apiKey: '', apiSecret: '', endpoint: '', senderId: '', limit: 1000, priority: 0 });
-  const [geminiForm, setGeminiForm] = useState({ name: '', apiKey: '', model: 'gemini-1.5-flash', limit: 1500, priority: 0 });
+  const [geminiForm, setGeminiForm] = useState({ name: '', apiKey: '', model: 'gemini-2.5-flash', limit: 1500, priority: 0 });
   const [testing, setTesting] = useState(null);     // apiId being tested
   const [testResult, setTestResult] = useState({});  // { [apiId]: {success, ...} }
   const [testModal, setTestModal] = useState(null);  // { api, number, message }
+  const [testingGemini, setTestingGemini] = useState(null);  // gemini apiId being tested OR true for pre-save test
+  const [geminiResult, setGeminiResult] = useState({});      // { [geminiApiId]: {ok, message, error, hint, model} }
+  const [geminiTestResult, setGeminiTestResult] = useState(null); // pre-save test result
+  const [savingGemini, setSavingGemini] = useState(false);
+  const [savingSender, setSavingSender] = useState(false);
+  const [sendingTest, setSendingTest] = useState(false);
 
   // Provider templates — auto-fill endpoint + fields when provider changes
   const PROVIDER_TEMPLATES = {
@@ -704,16 +835,41 @@ function ApiManagementTab() {
 
   const addSender = async (e) => {
     e.preventDefault();
-    const data = await api('addSenderApi', senderForm);
-    if (data.success) { setShowSenderForm(false); setSenderForm({ name: '', provider: 'custom', apiKey: '', apiSecret: '', endpoint: '', senderId: '', limit: 1000, priority: 0 }); load(); }
-    else alert(data.error);
+    setSavingSender(true);
+    try {
+      const data = await api('addSenderApi', senderForm);
+      if (data.success) { setShowSenderForm(false); setSenderForm({ name: '', provider: 'custom', apiKey: '', apiSecret: '', endpoint: '', senderId: '', limit: 1000, priority: 0 }); load(); }
+      else alert(data.error);
+    } finally { setSavingSender(false); }
   };
 
   const addGemini = async (e) => {
     e.preventDefault();
+    setSavingGemini(true);
     const data = await api('addGeminiApi', geminiForm);
-    if (data.success) { setShowGeminiForm(false); setGeminiForm({ name: '', apiKey: '', model: 'gemini-1.5-flash', limit: 1500, priority: 0 }); load(); }
+    setSavingGemini(false);
+    if (data.success) { setShowGeminiForm(false); setGeminiForm({ name: '', apiKey: '', model: 'gemini-2.5-flash', limit: 1500, priority: 0 }); setGeminiTestResult(null); load(); }
     else alert(data.error);
+  };
+
+  // Test a saved Gemini API from the list
+  const testGeminiApi = async (id) => {
+    setTestingGemini(id);
+    setGeminiResult((r) => ({ ...r, [id]: null }));
+    const data = await api('testGeminiApi', { id });
+    setGeminiResult((r) => ({ ...r, [id]: data }));
+    setTestingGemini(null);
+    if (data.ok) load(); // reload to pick up model update + cleared lastError
+  };
+
+  // Test the Gemini key currently in the form (before saving)
+  const testGeminiBeforeSave = async () => {
+    if (!geminiForm.apiKey) { setGeminiTestResult({ ok: false, error: 'Enter an API key first.' }); return; }
+    setTestingGemini(true);
+    setGeminiTestResult(null);
+    const data = await api('testGeminiApi', { apiKey: geminiForm.apiKey, model: geminiForm.model });
+    setGeminiTestResult(data);
+    setTestingGemini(false);
   };
 
   const runTest = async () => {
@@ -726,7 +882,7 @@ function ApiManagementTab() {
     if (data.success) { setTestModal(null); load(); }
   };
 
-  if (loading) return <Spinner />;
+  if (loading) return <Spinner label="Loading APIs..." />;
 
   const tmpl = PROVIDER_TEMPLATES[senderForm.provider] || PROVIDER_TEMPLATES.custom;
 
@@ -802,7 +958,7 @@ function ApiManagementTab() {
               <input type="number" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Priority (higher=preferred)" value={senderForm.priority} onChange={e => setSenderForm({...senderForm, priority: parseInt(e.target.value) || 0})} />
             </div>
             {tmpl.help && <p className="text-xs text-gray-500 bg-slate-800/40 rounded-lg p-2">💡 {tmpl.help}</p>}
-            <button type="submit" className="bg-green-600 hover:bg-green-500 text-white text-sm px-4 py-2 rounded-lg transition">Save Sender API</button>
+            <button type="submit" disabled={savingSender} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white text-sm px-4 py-2 rounded-lg transition disabled:opacity-60">{savingSender ? <BtnSpinner /> : <Icon.Plus />}Save Sender API</button>
           </form>
         )}
 
@@ -869,8 +1025,8 @@ function ApiManagementTab() {
             <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Test number (E.164, e.g. +1234567890)" value={testModal.number} onChange={e => setTestModal({ ...testModal, number: e.target.value })} />
             <textarea className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm h-20" placeholder="Test message" value={testModal.message} onChange={e => setTestModal({ ...testModal, message: e.target.value })} />
             <div className="flex gap-2">
-              <button onClick={runTest} disabled={testing === testModal.api._id || !testModal.number} className="flex-1 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg transition flex items-center justify-center gap-1.5">
-                {testing === testModal.api._id ? 'Sending…' : <><Icon.Send /> Send Test</>}
+              <button onClick={runTest} disabled={testing === testModal.api._id || !testModal.number} className="flex-1 bg-gradient-to-r from-cyan-600 to-sky-600 hover:from-cyan-500 hover:to-sky-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg transition flex items-center justify-center gap-1.5">
+                {testing === testModal.api._id ? <><BtnSpinner /> Sending…</> : <><Icon.Send /> Send Test</>}
               </button>
               <button onClick={() => setTestModal(null)} className="bg-slate-700 hover:bg-slate-600 text-white text-sm px-4 py-2 rounded-lg transition">Cancel</button>
             </div>
@@ -884,31 +1040,69 @@ function ApiManagementTab() {
           <h3 className="text-lg font-semibold text-gray-300">Gemini AI APIs <span className="text-sm text-gray-500">({geminiApis.length}/10)</span></h3>
           {geminiApis.length < 10 && <button onClick={() => setShowGeminiForm(!showGeminiForm)} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm px-3 py-1.5 rounded-lg transition"><Icon.Plus />Add Gemini API</button>}
         </div>
+        {/* API key format help banner */}
+        <div className="bg-amber-900/20 border border-amber-700/40 rounded-xl p-3 mb-3 text-xs text-amber-200/90 leading-relaxed">
+          <span className="font-semibold text-amber-300">⚠️ গুরুত্বপূর্ণ / Important:</span> Gemini API key অবশ্যই <code className="bg-amber-950/50 px-1 rounded text-amber-100">AIzaSy...</code> দিয়ে শুরু হতে হবে।
+          ফ্রি API key নিতে এখানে যান: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" className="underline text-amber-300 hover:text-amber-200">https://aistudio.google.com/apikey</a>
+          &nbsp;→ "Create API Key" → কপি করে এখানে পেস্ট করুন। Recommended model: <code className="bg-amber-950/50 px-1 rounded text-amber-100">gemini-2.5-flash</code>
+        </div>
         {showGeminiForm && (
-          <form onSubmit={addGemini} className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 mb-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-            <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Name" value={geminiForm.name} onChange={e => setGeminiForm({...geminiForm, name: e.target.value})} required />
-            <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Gemini API Key" value={geminiForm.apiKey} onChange={e => setGeminiForm({...geminiForm, apiKey: e.target.value})} required />
-            <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Model" value={geminiForm.model} onChange={e => setGeminiForm({...geminiForm, model: e.target.value})} />
-            <input type="number" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Daily Limit" value={geminiForm.limit} onChange={e => setGeminiForm({...geminiForm, limit: parseInt(e.target.value)})} />
-            <button type="submit" className="bg-green-600 hover:bg-green-500 text-white text-sm px-4 py-2 rounded-lg transition">Save Gemini API</button>
+          <form onSubmit={addGemini} className="bg-slate-900/50 border border-slate-700 rounded-xl p-4 mb-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+            <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Name (e.g. Gemini Primary)" value={geminiForm.name} onChange={e => setGeminiForm({...geminiForm, name: e.target.value})} required />
+            <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Gemini API Key (AIzaSy...)" value={geminiForm.apiKey} onChange={e => setGeminiForm({...geminiForm, apiKey: e.target.value})} required />
+            <select className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={geminiForm.model} onChange={e => setGeminiForm({...geminiForm, model: e.target.value})}>
+              <option value="gemini-2.5-flash">gemini-2.5-flash (Recommended)</option>
+              <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
+              <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+              <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+              <option value="gemini-flash-latest">gemini-flash-latest</option>
+            </select>
+            <input type="number" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Daily Limit (default 1500)" value={geminiForm.limit} onChange={e => setGeminiForm({...geminiForm, limit: parseInt(e.target.value)})} />
+            <div className="md:col-span-2 flex items-center gap-3 flex-wrap">
+              <button type="button" onClick={testGeminiBeforeSave} disabled={testingGemini} className="flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg transition">
+                {testingGemini ? <><span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block"></span>Testing...</> : <><Icon.Beaker />Test before saving</>}
+              </button>
+              <button type="submit" className="flex items-center gap-1.5 bg-green-600 hover:bg-green-500 text-white text-sm px-4 py-2 rounded-lg transition">
+                {savingGemini ? <><span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block"></span>Saving...</> : <><Icon.Plus />Save Gemini API</>}
+              </button>
+              {geminiTestResult && (
+                <span className={`text-xs px-3 py-1.5 rounded-lg ${geminiTestResult.ok ? 'bg-green-900/40 text-green-300' : 'bg-red-900/40 text-red-300'}`}>
+                  {geminiTestResult.ok ? `✅ ${geminiTestResult.message}` : `❌ ${geminiTestResult.error}`}
+                </span>
+              )}
+            </div>
           </form>
         )}
         <div className="space-y-2">
           {geminiApis.map(a => (
             <div key={a._id} className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
               <div className="flex justify-between items-center">
-                <div>
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-medium text-white">{a.name}</span>
-                  <span className="text-xs text-gray-500 ml-2">{a.model}</span>
-                  <span className={`ml-2 text-xs px-2 py-0.5 rounded ${a.status === 'active' ? 'bg-green-900/40 text-green-400' : a.status === 'warning' ? 'bg-yellow-900/40 text-yellow-400' : 'bg-red-900/40 text-red-400'}`}>{a.status}</span>
+                  <span className="text-xs text-gray-500">{a.model}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded ${a.status === 'active' ? 'bg-green-900/40 text-green-400' : a.status === 'warning' ? 'bg-yellow-900/40 text-yellow-400' : 'bg-red-900/40 text-red-400'}`}>{a.status}</span>
+                  {a.apiKey && !a.apiKey.startsWith('AIza') && (
+                    <span className="text-xs px-2 py-0.5 rounded bg-red-900/50 text-red-300 border border-red-700/40">⚠️ Key format wrong</span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
+                  <button onClick={() => testGeminiApi(a._id)} disabled={testingGemini === a._id} className="flex items-center gap-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white text-xs px-2.5 py-1 rounded-lg transition">
+                    {testingGemini === a._id ? <><span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block"></span>Testing</> : <><Icon.Beaker />Test</>}
+                  </button>
                   <label className="flex items-center gap-1 text-xs text-gray-500"><input type="checkbox" checked={a.autoRoute} onChange={async (e) => { await api('setAutoRoute', { id: a._id, type: 'gemini', autoRoute: e.target.checked }); load(); }} />Auto-Route</label>
                   <button onClick={async () => { if (confirm('Delete?')) { await api('deleteGeminiApi', { id: a._id }); load(); } }} className="text-red-400 hover:text-red-300"><Icon.Trash /></button>
                 </div>
               </div>
-              <div className="flex gap-4 text-xs text-gray-500 mt-2"><span>Used: {a.used}/{a.limit}</span><span>Remaining: {a.remaining}</span><span>Health: {a.healthScore}%</span></div>
+              <div className="flex gap-4 text-xs text-gray-500 mt-2"><span>Key: {a.apiKey}</span><span>Used: {a.used}/{a.limit}</span><span>Remaining: {a.remaining}</span><span>Health: {a.healthScore}%</span></div>
               <div className="mt-2"><ProgressBar percent={a.limit > 0 ? Math.round((a.used / a.limit) * 100) : 0} /></div>
+              {geminiResult[a._id] && (
+                <div className={`mt-2 text-xs p-2 rounded-lg ${geminiResult[a._id].ok ? 'bg-green-900/30 text-green-300 border border-green-800/40' : 'bg-red-900/30 text-red-300 border border-red-800/40'}`}>
+                  {geminiResult[a._id].ok ? `✅ ${geminiResult[a._id].message} (model: ${geminiResult[a._id].model})` : `❌ ${geminiResult[a._id].error}${geminiResult[a._id].hint ? ` — ${geminiResult[a._id].hint}` : ''}`}
+                </div>
+              )}
+              {a.lastError && !geminiResult[a._id] && (
+                <div className="mt-2 text-xs p-2 rounded-lg bg-red-900/20 text-red-300/80 border border-red-800/30">Last error: {a.lastError}</div>
+              )}
             </div>
           ))}
           {geminiApis.length === 0 && <p className="text-gray-600 text-sm py-4 text-center">No Gemini APIs. Add one for AI spam filtering & chat support.</p>}
@@ -926,18 +1120,24 @@ function UserManagementTab() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ email: '', password: '', sendingLimit: 100, expiryDays: 30 });
+  const [creating, setCreating] = useState(false);
+  const [acting, setActing] = useState(null); // userId being acted on
+  const withLoading = useLoading();
 
   const load = async () => { setLoading(true); const data = await api('getUsers'); if (data.success) setUsers(data.users); setLoading(false); };
   useEffect(() => { load(); }, []);
 
   const createUser = async (e) => {
     e.preventDefault();
-    const data = await api('createUser', form);
-    if (data.success) { setShowForm(false); setForm({ email: '', password: '', sendingLimit: 100, expiryDays: 30 }); load(); }
-    else alert(data.error);
+    setCreating(true);
+    try {
+      const data = await api('createUser', form);
+      if (data.success) { setShowForm(false); setForm({ email: '', password: '', sendingLimit: 100, expiryDays: 30 }); load(); }
+      else alert(data.error);
+    } finally { setCreating(false); }
   };
 
-  if (loading) return <Spinner />;
+  if (loading) return <Spinner label="Loading users..." />;
 
   return (
     <div className="space-y-6">
@@ -951,7 +1151,7 @@ function UserManagementTab() {
           <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} required />
           <input type="number" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Send Limit" value={form.sendingLimit} onChange={e => setForm({...form, sendingLimit: parseInt(e.target.value)})} />
           <input type="number" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Expiry (days)" value={form.expiryDays} onChange={e => setForm({...form, expiryDays: parseInt(e.target.value)})} />
-          <button type="submit" className="bg-green-600 hover:bg-green-500 text-white text-sm px-4 py-2 rounded-lg transition">Create</button>
+          <button type="submit" disabled={creating} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white text-sm px-4 py-2 rounded-lg transition disabled:opacity-60">{creating ? <BtnSpinner /> : <Icon.Plus />}Create User</button>
         </form>
       )}
       <div className="overflow-x-auto">
@@ -974,8 +1174,8 @@ function UserManagementTab() {
                   <div className="flex gap-1">
                     <input type="number" placeholder="Limit" className="w-16 bg-slate-800 border border-slate-700 rounded px-1 py-1 text-white text-xs" defaultValue={u.sendingLimit} onBlur={async (e) => { await api('updateUserLimit', { userId: u._id, limit: parseInt(e.target.value) }); }} />
                     <input type="number" placeholder="Days" className="w-16 bg-slate-800 border border-slate-700 rounded px-1 py-1 text-white text-xs" onBlur={async (e) => { if (e.target.value) { await api('updateUserExpiry', { userId: u._id, expiryDays: parseInt(e.target.value) }); load(); } }} />
-                    {u.status === 'active' ? <button onClick={async () => { await api('suspendUser', { userId: u._id }); load(); }} className="text-yellow-400 text-xs px-2">Block</button> : <button onClick={async () => { await api('activateUser', { userId: u._id }); load(); }} className="text-green-400 text-xs px-2">Unblock</button>}
-                    <button onClick={async () => { if (confirm('Delete user?')) { await api('deleteUser', { userId: u._id }); load(); } }} className="text-red-400"><Icon.Trash /></button>
+                    {u.status === 'active' ? <button disabled={acting === u._id} onClick={async () => { setActing(u._id); await withLoading?.('Blocking user...', async () => { await api('suspendUser', { userId: u._id }); }); setActing(null); load(); }} className="text-yellow-400 text-xs px-2 disabled:opacity-50">{acting === u._id ? <BtnSpinner size={10} /> : 'Block'}</button> : <button disabled={acting === u._id} onClick={async () => { setActing(u._id); await withLoading?.('Activating user...', async () => { await api('activateUser', { userId: u._id }); }); setActing(null); load(); }} className="text-green-400 text-xs px-2 disabled:opacity-50">{acting === u._id ? <BtnSpinner size={10} /> : 'Unblock'}</button>}
+                    <button disabled={acting === u._id} onClick={async () => { if (confirm('Delete user?')) { setActing(u._id); await withLoading?.('Deleting user...', async () => { await api('deleteUser', { userId: u._id }); }); setActing(null); load(); } }} className="text-red-400 disabled:opacity-50">{acting === u._id ? <BtnSpinner size={12} color="text-red-400" /> : <Icon.Trash />}</button>
                   </div>
                 </td>
               </tr>
@@ -996,7 +1196,7 @@ function CampaignsTab() {
   const [loading, setLoading] = useState(true);
   const load = async () => { setLoading(true); const data = await api('getCampaigns'); if (data.success) setCampaigns(data.campaigns); setLoading(false); };
   useEffect(() => { load(); }, []);
-  if (loading) return <Spinner />;
+  if (loading) return <Spinner label="Loading campaigns..." />;
 
   return (
     <div className="space-y-6">
@@ -1041,14 +1241,19 @@ function ContentTab() {
   };
   useEffect(() => { load(); }, []);
 
+  const [savingTpl, setSavingTpl] = useState(false);
+  const withLoading = useLoading();
   const addTpl = async (e) => {
     e.preventDefault();
-    const data = await api('addTemplate', tplForm);
-    if (data.success) { setShowTplForm(false); setTplForm({ name: '', type: 'custom', content: '' }); load(); }
-    else alert(data.error);
+    setSavingTpl(true);
+    try {
+      const data = await api('addTemplate', tplForm);
+      if (data.success) { setShowTplForm(false); setTplForm({ name: '', type: 'custom', content: '' }); load(); }
+      else alert(data.error);
+    } finally { setSavingTpl(false); }
   };
 
-  if (loading) return <Spinner />;
+  if (loading) return <Spinner label="Loading content..." />;
 
   return (
     <div className="space-y-6">
@@ -1069,7 +1274,7 @@ function ContentTab() {
               </select>
             </div>
             <textarea className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" rows="4" placeholder="Message content. Use {name}, {amount} for variables." value={tplForm.content} onChange={e => setTplForm({...tplForm, content: e.target.value})} required />
-            <button type="submit" className="bg-green-600 hover:bg-green-500 text-white text-sm px-4 py-2 rounded-lg transition">Save Template</button>
+            <button type="submit" disabled={savingTpl} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white text-sm px-4 py-2 rounded-lg transition disabled:opacity-60">{savingTpl ? <BtnSpinner /> : <Icon.Plus />}Save Template</button>
           </form>
         )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1079,7 +1284,7 @@ function ContentTab() {
                 <span className="text-sm font-medium text-white">{t.name}</span>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-blue-400 bg-blue-900/30 px-2 py-0.5 rounded">{t.type}</span>
-                  <button onClick={async () => { await api('deleteTemplate', { id: t._id }); load(); }} className="text-red-400"><Icon.Trash /></button>
+                  <button onClick={async () => { await withLoading?.('Deleting template...', async () => { await api('deleteTemplate', { id: t._id }); }); load(); }} className="text-red-400"><Icon.Trash /></button>
                 </div>
               </div>
               <p className="text-xs text-gray-400 mt-1">{t.content.substring(0, 100)}</p>
@@ -1098,7 +1303,7 @@ function ContentTab() {
               {c.url && <img src={c.url} alt={c.name} className="w-full h-24 object-cover rounded mb-2" />}
               <p className="text-xs text-white">{c.name}</p>
               <p className="text-xs text-gray-500">{c.type} - {c.purpose}</p>
-              <button onClick={async () => { await api('deleteContent', { id: c._id }); load(); }} className="text-red-400 mt-2"><Icon.Trash /></button>
+              <button onClick={async () => { await withLoading?.('Deleting content...', async () => { await api('deleteContent', { id: c._id }); }); load(); }} className="text-red-400 mt-2"><Icon.Trash /></button>
             </div>
           ))}
           {content.length === 0 && <p className="text-gray-600 text-sm col-span-full text-center py-4">No content assets yet.</p>}
@@ -1118,22 +1323,27 @@ function SubAdminTab() {
   const [form, setForm] = useState({ username: '', password: '', permissions: ['dashboard'] });
 
   const allPerms = ['dashboard', 'apis', 'users', 'campaigns', 'content', 'database', 'blacklist', 'alerts', 'logs', 'settings'];
+  const [creating, setCreating] = useState(false);
+  const withLoading = useLoading();
 
   const load = async () => { setLoading(true); const data = await api('getSubAdmins'); if (data.success) setSubs(data.subAdmins); setLoading(false); };
   useEffect(() => { load(); }, []);
 
   const create = async (e) => {
     e.preventDefault();
-    const data = await api('createSubAdmin', form);
-    if (data.success) { setShowForm(false); setForm({ username: '', password: '', permissions: ['dashboard'] }); load(); }
-    else alert(data.error);
+    setCreating(true);
+    try {
+      const data = await api('createSubAdmin', form);
+      if (data.success) { setShowForm(false); setForm({ username: '', password: '', permissions: ['dashboard'] }); load(); }
+      else alert(data.error);
+    } finally { setCreating(false); }
   };
 
   const togglePerm = (perm) => {
     setForm(f => ({ ...f, permissions: f.permissions.includes(perm) ? f.permissions.filter(p => p !== perm) : [...f.permissions, perm] }));
   };
 
-  if (loading) return <Spinner />;
+  if (loading) return <Spinner label="Loading sub-admins..." />;
 
   return (
     <div className="space-y-6">
@@ -1157,7 +1367,7 @@ function SubAdminTab() {
               ))}
             </div>
           </div>
-          <button type="submit" className="bg-green-600 hover:bg-green-500 text-white text-sm px-4 py-2 rounded-lg transition">Create Sub-Admin</button>
+          <button type="submit" disabled={creating} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white text-sm px-4 py-2 rounded-lg transition disabled:opacity-60">{creating ? <BtnSpinner /> : <Icon.Plus />}Create Sub-Admin</button>
         </form>
       )}
       <div className="space-y-2">
@@ -1167,7 +1377,7 @@ function SubAdminTab() {
               <p className="text-sm text-white font-medium">{s.username}</p>
               <p className="text-xs text-gray-500">Permissions: {s.permissions?.join(', ')}</p>
             </div>
-            <button onClick={async () => { if (confirm('Delete sub-admin?')) { await api('deleteSubAdmin', { id: s._id }); load(); } }} className="text-red-400"><Icon.Trash /></button>
+            <button onClick={async () => { if (confirm('Delete sub-admin?')) { await withLoading?.('Deleting sub-admin...', async () => { await api('deleteSubAdmin', { id: s._id }); }); load(); } }} className="text-red-400"><Icon.Trash /></button>
           </div>
         ))}
         {subs.length === 0 && <p className="text-gray-600 text-sm py-8 text-center">No sub-admins yet.</p>}
@@ -1185,17 +1395,23 @@ function DatabaseTab() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ label: '', uri: '', storageLimit: 512 });
 
+  const [creating, setCreating] = useState(false);
+  const withLoading = useLoading();
+
   const load = async () => { setLoading(true); const data = await api('getMongoConnections'); if (data.success) setConns(data.connections); setLoading(false); };
   useEffect(() => { load(); }, []);
 
   const add = async (e) => {
     e.preventDefault();
-    const data = await api('addMongoConnection', form);
-    if (data.success) { setShowForm(false); setForm({ label: '', uri: '', storageLimit: 512 }); load(); }
-    else alert(data.error);
+    setCreating(true);
+    try {
+      const data = await api('addMongoConnection', form);
+      if (data.success) { setShowForm(false); setForm({ label: '', uri: '', storageLimit: 512 }); load(); }
+      else alert(data.error);
+    } finally { setCreating(false); }
   };
 
-  if (loading) return <Spinner />;
+  if (loading) return <Spinner label="Loading databases..." />;
 
   return (
     <div className="space-y-6">
@@ -1208,7 +1424,7 @@ function DatabaseTab() {
           <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Label (e.g., Primary DB)" value={form.label} onChange={e => setForm({...form, label: e.target.value})} required />
           <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="MongoDB URI" value={form.uri} onChange={e => setForm({...form, uri: e.target.value})} required />
           <input type="number" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Storage Limit (MB)" value={form.storageLimit} onChange={e => setForm({...form, storageLimit: parseInt(e.target.value)})} />
-          <button type="submit" className="bg-green-600 hover:bg-green-500 text-white text-sm px-4 py-2 rounded-lg transition">Add</button>
+          <button type="submit" disabled={creating} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white text-sm px-4 py-2 rounded-lg transition disabled:opacity-60">{creating ? <BtnSpinner /> : <Icon.Plus />}Add Database</button>
         </form>
       )}
       <div className="space-y-2">
@@ -1219,8 +1435,8 @@ function DatabaseTab() {
               <p className="text-xs text-gray-500">{c.storageUsed}MB / {c.storageLimit}MB</p>
             </div>
             <div className="flex gap-2">
-              {!c.isActive && <button onClick={async () => { await api('setActiveMongo', { id: c._id }); load(); }} className="text-green-400 text-xs px-2">Set Active</button>}
-              <button onClick={async () => { await api('deleteMongoConnection', { id: c._id }); load(); }} className="text-red-400"><Icon.Trash /></button>
+              {!c.isActive && <button onClick={async () => { await withLoading?.('Activating database...', async () => { await api('setActiveMongo', { id: c._id }); }); load(); }} className="text-green-400 text-xs px-2">Set Active</button>}
+              <button onClick={async () => { if (confirm('Delete database?')) { await withLoading?.('Deleting database...', async () => { await api('deleteMongoConnection', { id: c._id }); }); load(); } }} className="text-red-400"><Icon.Trash /></button>
             </div>
           </div>
         ))}
@@ -1239,16 +1455,22 @@ function BlacklistTab() {
   const [number, setNumber] = useState('');
   const [reason, setReason] = useState('spam');
 
+  const [adding, setAdding] = useState(false);
+  const withLoading = useLoading();
+
   const load = async () => { setLoading(true); const data = await api('getBlacklist'); if (data.success) setList(data.blacklist); setLoading(false); };
   useEffect(() => { load(); }, []);
 
   const add = async (e) => {
     e.preventDefault();
-    const data = await api('addBlacklist', { number, reason });
-    if (data.success) { setNumber(''); load(); } else alert(data.error);
+    setAdding(true);
+    try {
+      const data = await api('addBlacklist', { number, reason });
+      if (data.success) { setNumber(''); load(); } else alert(data.error);
+    } finally { setAdding(false); }
   };
 
-  if (loading) return <Spinner />;
+  if (loading) return <Spinner label="Loading blacklist..." />;
 
   return (
     <div className="space-y-6">
@@ -1262,7 +1484,7 @@ function BlacklistTab() {
         {list.map(b => (
           <div key={b._id} className="bg-slate-900/50 border border-slate-800 rounded-lg p-3 flex justify-between items-center">
             <div><span className="text-sm text-white">{b.number}</span><span className="text-xs text-gray-500 ml-2">{b.reason}</span></div>
-            <button onClick={async () => { await api('removeBlacklist', { id: b._id }); load(); }} className="text-red-400"><Icon.Trash /></button>
+            <button onClick={async () => { await withLoading?.('Removing from blacklist...', async () => { await api('removeBlacklist', { id: b._id }); }); load(); }} className="text-red-400"><Icon.Trash /></button>
           </div>
         ))}
         {list.length === 0 && <p className="text-gray-600 text-sm py-8 text-center">No blacklisted numbers.</p>}
@@ -1281,15 +1503,21 @@ function AlertsTab() {
   const [testing, setTesting] = useState(false);
   const [showWaGuide, setShowWaGuide] = useState(false);
   const [showEmailGuide, setShowEmailGuide] = useState(false);
+  const [copied, setCopied] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const copy = (text, key) => { navigator.clipboard?.writeText(text); setCopied(key); setTimeout(() => setCopied(null), 2000); };
 
   useEffect(() => {
     (async () => { const data = await api('getAppSettings'); if (data.success) setSettings(prev => ({ ...prev, ...data.settings })); setLoading(false); })();
   }, []);
 
   const save = async () => {
-    const data = await api('setAlertConfig', settings);
-    if (data.success) { setSettings(prev => ({ ...prev, ...data.settings })); setTestResult({ type: 'save', ok: true, msg: 'Alert settings saved successfully' }); }
-    else setTestResult({ type: 'save', ok: false, msg: data.error || 'Save failed' });
+    setSaving(true);
+    try {
+      const data = await api('setAlertConfig', settings);
+      if (data.success) { setSettings(prev => ({ ...prev, ...data.settings })); setTestResult({ type: 'save', ok: true, msg: 'Alert settings saved successfully' }); }
+      else setTestResult({ type: 'save', ok: false, msg: data.error || 'Save failed' });
+    } finally { setSaving(false); }
   };
 
   const testAlert = async () => {
@@ -1305,7 +1533,7 @@ function AlertsTab() {
     } else setTestResult({ type: 'test', ok: false, msg: data.error || 'Test failed' });
   };
 
-  if (loading) return <Spinner />;
+  if (loading) return <Spinner label="Loading alert config..." />;
 
   return (
     <div className="space-y-6">
@@ -1345,20 +1573,55 @@ function AlertsTab() {
       <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold text-white flex items-center gap-2">💬 WhatsApp Alerts <span className="text-xs bg-green-900/50 text-green-300 px-2 py-0.5 rounded-full">Free · CallMeBot</span></h3>
-          <button onClick={() => setShowWaGuide(!showWaGuide)} className="text-xs text-blue-400 hover:text-blue-300 underline">{showWaGuide ? 'Hide' : 'Show'} Setup Guide</button>
+          <button onClick={() => setShowWaGuide(!showWaGuide)} className="text-xs text-blue-400 hover:text-blue-300 underline">{showWaGuide ? 'গাইড লুকান' : 'সেটআপ গাইড দেখুন'}</button>
         </div>
 
         {showWaGuide && (
-          <div className="bg-slate-950/60 border border-slate-700/50 rounded-lg p-4 text-sm text-gray-300 space-y-2">
-            <p className="font-semibold text-white">How to get your free WhatsApp API key (CallMeBot):</p>
-            <ol className="list-decimal list-inside space-y-1 text-xs">
-              <li>Open WhatsApp on your phone and add this number to your contacts: <code className="bg-slate-800 px-1.5 py-0.5 rounded text-green-300">+34 694 25 79 52</code></li>
-              <li>Send a WhatsApp message to that number with exactly this text: <code className="bg-slate-800 px-1.5 py-0.5 rounded text-green-300">I allow callmebot to send me messages</code></li>
-              <li>The bot will reply with your personal API key (looks like <code className="bg-slate-800 px-1 px-1 rounded text-green-300">1234567</code> or similar).</li>
-              <li>Paste that API key in the field below.</li>
-              <li>For Bangladesh numbers: enter <code className="bg-slate-800 px-1.5 py-0.5 rounded text-green-300">017XXXXXXXX</code> or <code className="bg-slate-800 px-1.5 py-0.5 rounded text-green-300">+88017XXXXXXXX</code> — the system auto-normalizes to <code className="bg-slate-800 px-1.5 py-0.5 rounded text-green-300">88017XXXXXXXX</code>.</li>
-            </ol>
-            <p className="text-xs text-amber-300 mt-2">⚠️ You must complete step 1-3 from the SAME WhatsApp number you want alerts sent to. The API key is unique per number.</p>
+          <div className="bg-slate-950/60 border border-slate-700/50 rounded-lg p-4 text-sm text-gray-300 space-y-3">
+            <p className="font-semibold text-white text-base">📱 WhatsApp অ্যালার্ট সেটআপ করার সম্পূর্ণ গাইড (বাংলায়)</p>
+            <p className="text-xs text-gray-400">CallMeBot একটি ফ্রি সার্ভিস যা আপনার WhatsApp এ অটোমেটিক মেসেজ পাঠায়। নিচের ধাপগুলো হুবহু ফলো করুন:</p>
+
+            <div className="bg-blue-950/30 border border-blue-800/40 rounded-md p-3">
+              <p className="text-sm font-semibold text-blue-300">ধাপ ১ — WhatsApp এ CallMeBot নম্বরটি যোগ করুন</p>
+              <p className="text-xs text-gray-300 mt-1">আপনার ফোনে WhatsApp ওপেন করুন। নতুন কন্টাক্ট হিসেবে এই নম্বরটি সেভ করুন:</p>
+              <div className="bg-slate-800 rounded px-2 py-1.5 mt-1.5 font-mono text-green-300 text-sm flex items-center justify-between">
+                <span>+34 694 25 79 52</span>
+                <button onClick={() => copy('+34 694 25 79 52', 'wa1')} className="text-xs text-blue-400 hover:text-blue-300">{copied === 'wa1' ? '✓ কপি হয়েছে' : 'কপি করুন'}</button>
+              </div>
+              <p className="text-xs text-gray-500 mt-1.5">⚠️ এই নম্বরটি স্পেনের (Spain)। WhatsApp এ যোগ করলেই হবে — আন্তর্জাতিক কল করতে হবে না।</p>
+            </div>
+
+            <div className="bg-blue-950/30 border border-blue-800/40 rounded-md p-3">
+              <p className="text-sm font-semibold text-blue-300">ধাপ ২ — অনুমতি মেসেজ পাঠান</p>
+              <p className="text-xs text-gray-300 mt-1">উপরের নম্বরে হুবহু নিচের লেখাটি WhatsApp মেসেজ হিসেবে পাঠান (কপি করে পেস্ট করতে পারেন):</p>
+              <div className="bg-slate-800 rounded px-2 py-1.5 mt-1.5 font-mono text-green-300 text-sm flex items-center justify-between">
+                <span>I allow callmebot to send me messages</span>
+                <button onClick={() => copy('I allow callmebot to send me messages', 'wa2')} className="text-xs text-blue-400 hover:text-blue-300">{copied === 'wa2' ? '✓' : 'কপি'}</button>
+              </div>
+              <p className="text-xs text-gray-500 mt-1.5">⚠️ লেখাটি হুবহু একই রকম হতে হবে। বড় হাতের/ছোট হাতের অক্ষর ঠিক রাখুন।</p>
+            </div>
+
+            <div className="bg-blue-950/30 border border-blue-800/40 rounded-md p-3">
+              <p className="text-sm font-semibold text-blue-300">ধাপ ৩ — API Key সংগ্রহ করুন</p>
+              <p className="text-xs text-gray-300 mt-1">মেসেজ পাঠানোর কয়েক সেকেন্ড পর CallMeBot বট আপনাকে রিপ্লাই দেবে। সেই রিপ্লাই মেসেজের ভেতর আপনার <strong className="text-green-300">API Key</strong> লেখা থাকবে (যেমন: <code className="bg-slate-800 px-1 rounded text-green-300">1234567</code>)।</p>
+              <p className="text-xs text-amber-300 mt-1.5">⚠️ এই API Key টি সংরক্ষণ করে রাখুন — নিচের ঘরে এটিই বসবে। প্রতিটি WhatsApp নম্বরের জন্য API Key আলাদা।</p>
+            </div>
+
+            <div className="bg-blue-950/30 border border-blue-800/40 rounded-md p-3">
+              <p className="text-sm font-semibold text-blue-300">ধাপ ৪ — এই প্যানেলে ফোন নম্বর ও API Key বসান</p>
+              <p className="text-xs text-gray-300 mt-1">নিচের ঘরে আপনার WhatsApp নম্বর (যে নম্বর থেকে ধাপ ১-৩ করেছেন) এবং CallMeBot থেকে পাওয়া API Key টি বসান।</p>
+              <p className="text-xs text-gray-400 mt-1">বাংলাদেশি নম্বরের জন্য ফরম্যাট: <code className="bg-slate-800 px-1 rounded text-green-300">01712345678</code> অথবা <code className="bg-slate-800 px-1 rounded text-green-300">+8801712345678</code> — সিস্টেম অটোমেটিক <code className="bg-slate-800 px-1 rounded text-green-300">88017XXXXXXXX</code> তে কনভার্ট করে নেবে।</p>
+            </div>
+
+            <div className="bg-blue-950/30 border border-blue-800/40 rounded-md p-3">
+              <p className="text-sm font-semibold text-blue-300">ধাপ ৫ — Save করুন এবং Test করুন</p>
+              <p className="text-xs text-gray-300 mt-1">নিচের <strong className="text-white">"Save Settings"</strong> বাটনে চাপ দিন। তারপর <strong className="text-white">"Send Test Alert"</strong> বাটনে চাপ দিন। কিছুক্ষণের মধ্যে আপনার WhatsApp এ একটি টেস্ট মেসেজ আসবে।</p>
+              <p className="text-xs text-emerald-300 mt-1.5">✅ যদি টেস্ট মেসেজ আসে — সব ঠিক আছে! এখন থেকে সিস্টেমে কোনো সমস্যা হলে (যেমন API ডাউন, এরর) অটোমেটিক আপনাকে WhatsApp এ জানানো হবে।</p>
+            </div>
+
+            <div className="bg-amber-950/20 border border-amber-800/30 rounded-md p-3">
+              <p className="text-xs text-amber-300"><strong>সমস্যা হলে:</strong> যদি টেস্ট মেসেজ না আসে — (১) আবার ধাপ ১-২ চেক করুন, নম্বর ঠিক সেভ করেছেন কি না। (২) API Key ঠিক কপি করেছেন কি না। (৩) আপনার ইন্টারনেট কানেকশন ঠিক আছে কি না। CallMeBot ফ্রি সার্ভিস, তাই কখনো কখনো কিছুক্ষণ দেরি হতে পারে।</p>
+            </div>
           </div>
         )}
 
@@ -1433,15 +1696,15 @@ function AlertsTab() {
 
       {/* Actions */}
       <div className="flex gap-3">
-        <button onClick={save} className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition">Save Settings</button>
-        <button onClick={testAlert} disabled={testing} className="bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition">{testing ? 'Sending...' : 'Send Test Alert'}</button>
+        <button onClick={save} disabled={saving} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition disabled:opacity-60">{saving ? <BtnSpinner /> : null}Save Settings</button>
+        <button onClick={testAlert} disabled={testing} className="inline-flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition">{testing ? <BtnSpinner /> : null}{testing ? 'Sending...' : 'Send Test Alert'}</button>
       </div>
     </div>
   );
 }
 
 // ============================================================================
-// FREE SMS GUIDE TAB — guide for getting a free SMS sending API (no card)
+// FREE SMS GUIDE TAB — international + Bangladesh, full Bengali guide
 // ============================================================================
 function FreeSmsGuideTab() {
   const [copied, setCopied] = useState(null);
@@ -1450,106 +1713,160 @@ function FreeSmsGuideTab() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h2 className="text-2xl font-bold text-white">Free SMS Sending API Guide</h2>
-        <p className="text-sm text-gray-400 mt-1">Complete guide to get a free SMS sending API without a credit card. Two options: global (TextBee) and Bangladesh-local (Alpha SMS).</p>
+        <h2 className="text-2xl font-bold text-white">ফ্রি SMS সেন্ডিং API গাইড</h2>
+        <p className="text-sm text-gray-400 mt-1">যেকোনো দেশে ফ্রি SMS পাঠানোর সম্পূর্ণ গাইড। কোনো ক্রেডিট কার্ড লাগবে না। নিচে ৩টি অপশন দেওয়া আছে — আন্তর্জাতিক (Textbelt), নিজের ফোন দিয়ে (TextBee), এবং বাংলাদেশের জন্য (Alpha SMS)।</p>
       </div>
 
-      {/* ── Option 1: TextBee ── */}
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 space-y-4">
+      {/* ── Option 1: Textbelt (International — 100+ countries) ── */}
+      <div className="bg-slate-900/50 border border-emerald-800/40 rounded-xl p-6 space-y-4">
         <div className="flex items-center gap-3">
-          <span className="text-2xl">📱</span>
+          <span className="text-2xl">🌍</span>
           <div>
-            <h3 className="text-lg font-semibold text-white">Option 1: TextBee (Recommended — Free, No Card)</h3>
-            <p className="text-xs text-emerald-400">300 SMS/month free · Uses your own Android phone + SIM · REST API</p>
+            <h3 className="text-lg font-semibold text-white">অপশন ১: Textbelt (আন্তর্জাতিক — সবচেয়ে সহজ) <span className="text-xs bg-emerald-900/50 text-emerald-300 px-2 py-0.5 rounded-full ml-1">100+ দেশ</span></h3>
+            <p className="text-xs text-emerald-400">ফ্রি টিয়ার: প্রতিদিন ১টি SMS ফ্রি · কোনো কার্ড নেই · ১০০+ দেশে কাজ করে</p>
           </div>
         </div>
 
         <div className="bg-slate-950/60 border border-slate-700/50 rounded-lg p-4 space-y-3">
-          <p className="text-sm font-semibold text-white">How it works:</p>
-          <p className="text-xs text-gray-400">TextBee turns your Android phone into an SMS gateway. You install their app on a phone with a SIM card, and the API sends SMS through your phone. This means <strong className="text-amber-300">no credit card</strong> needed — you use your existing SIM's SMS quota.</p>
+          <p className="text-sm text-gray-300">Textbelt একটি সহজ SMS API। ফ্রি API key <code className="bg-slate-800 px-1 rounded text-emerald-300">textbelt</code> ব্যবহার করে প্রতিদিন ১টি SMS ফ্রি পাঠানো যায় — যেকোনো দেশে। আরও বেশি পাঠাতে চাইলে কয়েক ডলারে কেনা যায় (পেমেন্ট ঐচ্ছিক)।</p>
 
-          <p className="text-sm font-semibold text-white pt-2">Step-by-step setup:</p>
+          <p className="text-sm font-semibold text-white pt-1">ধাপে ধাপে সেটআপ:</p>
           <ol className="list-decimal list-inside space-y-2 text-xs text-gray-300">
-            <li>Go to <button onClick={() => copy('https://textbee.dev', 'url1')} className="text-sky-400 hover:underline font-mono">textbee.dev</button> {copied === 'url1' && <span className="text-emerald-400">✓ copied</span>} and create a free account (email only, no card).</li>
-            <li>Download the <strong className="text-white">TextBee Android Gateway app</strong> from the Google Play Store on the phone you want to use as the gateway.</li>
-            <li>Open the app, sign in with your TextBee account, and grant SMS permissions. The phone must stay powered on with internet connected.</li>
-            <li>On the TextBee website dashboard, find your <strong className="text-white">API Key</strong> and your <strong className="text-white">Device ID</strong>.</li>
-            <li>In this admin panel, go to <strong className="text-sky-400">API Management</strong> → Add Sender API → choose provider <strong className="text-white">Custom HTTP</strong>.</li>
-            <li>Set the endpoint to: <button onClick={() => copy('https://api.textbee.dev/api/v1/gateway/send-sms', 'url2')} className="text-green-300 hover:underline font-mono text-[11px]">https://api.textbee.dev/api/v1/gateway/send-sms</button> {copied === 'url2' && <span className="text-emerald-400">✓</span>}</li>
-            <li>Set <strong className="text-white">apiKey</strong> = your TextBee API key. Set <strong className="text-white">apiSecret</strong> = your Device ID.</li>
+            <li>এই API টি তৈরি করতে কোনো অ্যাকাউন্ট খোলার দরকার নেই! ফ্রি কী হলো শুধু শব্দটি: <code className="bg-slate-800 px-1 rounded text-emerald-300">textbelt</code></li>
+            <li>আপনার সিস্টেমে যান: <strong className="text-sky-400">API Management</strong> → <strong className="text-white">Add Sender API</strong> → provider হিসেবে <strong className="text-white">Custom HTTP</strong> সিলেক্ট করুন।</li>
+            <li>Endpoint হিসেবে বসান:
+              <button onClick={() => copy('https://textbelt.com/text', 'tb1')} className="text-green-300 hover:underline font-mono text-[11px] ml-1">https://textbelt.com/text</button>
+              {copied === 'tb1' && <span className="text-emerald-400"> ✓</span>}
+            </li>
+            <li><strong className="text-white">API Key</strong> ঘরে বসান: <button onClick={() => copy('textbelt', 'tb2')} className="bg-slate-800 px-1 rounded text-emerald-300 font-mono">textbelt</button> {copied === 'tb2' && <span className="text-emerald-400"> ✓</span>} (এটিই ফ্রি কী)</li>
+            <li>ফোন নম্বর অবশ্যই <strong className="text-amber-300">E.164 ফরম্যাটে</strong> হতে হবে — অর্থাৎ কান্ট্রি কোড সহ। যেমন: বাংলাদেশ <code className="bg-slate-800 px-1 rounded">+88017XXXXXXXX</code>, ভারত <code className="bg-slate-800 px-1 rounded">+91XXXXXXXXXX</code>, যুক্তরাষ্ট্র <code className="bg-slate-800 px-1 rounded">+1XXXXXXXXXX</code></li>
+            <li>Limit হিসেবে <strong className="text-white">1</strong> দিন (কারণ ফ্রি টিয়ারে প্রতিদিন ১টি)। Save করুন।</li>
           </ol>
 
           <div className="bg-slate-800/50 border border-slate-700/30 rounded-md p-3 mt-2">
-            <p className="text-[10px] text-slate-500 uppercase mb-1">API Request Format (for reference):</p>
-            <pre className="text-[11px] text-green-300 font-mono overflow-x-auto">{`POST https://api.textbee.dev/api/v1/gateway/send-sms
-Headers: { "x-api-key": "YOUR_API_KEY" }
-Body: {
-  "deviceId": "YOUR_DEVICE_ID",
-  "recipients": ["+88017XXXXXXXX"],
-  "message": "Your message here"
+            <p className="text-[10px] text-slate-500 uppercase mb-1">API রিকোয়েস্ট ফরম্যাট (রেফারেন্স):</p>
+            <pre className="text-[11px] text-green-300 font-mono overflow-x-auto">{`POST https://textbelt.com/text
+Body (form-data or JSON):
+{
+  "phone": "+8801712345678",
+  "message": "আপনার মেসেজ এখানে",
+  "key": "textbelt"
 }`}</pre>
           </div>
 
           <div className="flex items-start gap-2 text-xs text-amber-300 bg-amber-950/20 border border-amber-800/30 rounded-md p-3">
             <span>⚠️</span>
-            <p><strong>Limitations:</strong> The gateway phone must be online. SMS uses your SIM's plan (free if you have an SMS bundle). 300 SMS/month on the free plan. Works great for low-volume testing and small campaigns in Bangladesh.</p>
+            <p><strong>সীমাবদ্ধতা:</strong> ফ্রি টিয়ারে প্রতিদিন মাত্র ১টি SMS। আরও বেশি পাঠাতে চাইলে <a href="https://textbelt.com/purchase" target="_blank" rel="noopener" className="underline">textbelt.com/purchase</a> থেকে ক্রেডিট কিনুন (খুব সস্তা — প্রায় $0.01/SMS)। বাল্ক স্প্যাম পাঠানো নিষিদ্ধ।</p>
           </div>
         </div>
       </div>
 
-      {/* ── Option 2: Alpha SMS (Bangladesh) ── */}
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 space-y-4">
+      {/* ── Option 2: TextBee (Your own Android phone) ── */}
+      <div className="bg-slate-900/50 border border-sky-800/40 rounded-xl p-6 space-y-4">
         <div className="flex items-center gap-3">
-          <span className="text-2xl">🇧🇩</span>
+          <span className="text-2xl">📱</span>
           <div>
-            <h3 className="text-lg font-semibold text-white">Option 2: Alpha SMS (Bangladesh Local)</h3>
-            <p className="text-xs text-sky-400">Local BD provider · Trial available · Call to activate</p>
+            <h3 className="text-lg font-semibold text-white">অপশন ২: TextBee (নিজের ফোন + SIM দিয়ে)</h3>
+            <p className="text-xs text-sky-400">৩০০ SMS/মাস ফ্রি · যেকোনো দেশের SIM কাজ করে · কোনো কার্ড নেই</p>
           </div>
         </div>
 
         <div className="bg-slate-950/60 border border-slate-700/50 rounded-lg p-4 space-y-3">
-          <p className="text-xs text-gray-400">Alpha SMS is a Bangladesh-based bulk SMS provider. They offer a trial balance (free credits) when you register. No international card needed — you can pay via bKash later if you want more.</p>
+          <p className="text-sm text-gray-300">TextBee আপনার Android ফোনকে একটি SMS গেটওয়ে বানিয়ে দেয়। আপনার ফোনে একটি SIM থাকলে এবং ইন্টারনেট চালু থাকলে — API এর মাধ্যমে সেই ফোন থেকে SMS পাঠানো যায়। <strong className="text-amber-300">কোনো ক্রেডিট কার্ড লাগে না</strong> — আপনার SIM এর SMS প্যাকেজই ব্যবহার হয়।</p>
 
-          <p className="text-sm font-semibold text-white pt-2">Step-by-step setup:</p>
+          <p className="text-sm font-semibold text-white pt-1">ধাপে ধাপে সেটআপ:</p>
           <ol className="list-decimal list-inside space-y-2 text-xs text-gray-300">
-            <li>Go to <button onClick={() => copy('https://api.sms.net.bd', 'url3')} className="text-sky-400 hover:underline font-mono">api.sms.net.bd</button> {copied === 'url3' && <span className="text-emerald-400">✓</span>} or the main site <button onClick={() => copy('https://sms.net.bd', 'url4')} className="text-sky-400 hover:underline font-mono">sms.net.bd</button> {copied === 'url4' && <span className="text-emerald-400">✓</span>}</li>
-            <li>Register an account with your Bangladeshi phone number.</li>
-            <li><strong className="text-amber-300">Call their support</strong> at <button onClick={() => copy('+88 09613 250 250', 'phone1')} className="text-green-300 hover:underline font-mono">+88 09613 250 250</button> {copied === 'phone1' && <span className="text-emerald-400">✓</span>} and ask for a <strong className="text-white">trial balance</strong> for testing. They typically give free credits.</li>
-            <li>Once approved, get your <strong className="text-white">API Key</strong> from the dashboard.</li>
-            <li>In this admin panel, go to <strong className="text-sky-400">API Management</strong> → Add Sender API → <strong className="text-white">Custom HTTP</strong>.</li>
-            <li>Set endpoint to: <button onClick={() => copy('https://api.sms.net.bd/sendsms', 'url5')} className="text-green-300 hover:underline font-mono text-[11px]">https://api.sms.net.bd/sendsms</button> {copied === 'url5' && <span className="text-emerald-400">✓</span>}</li>
-            <li>Set <strong className="text-white">apiKey</strong> = your Alpha SMS API key.</li>
+            <li><a href="https://textbee.dev" target="_blank" rel="noopener" className="text-sky-400 hover:underline">textbee.dev</a> এ যান এবং একটি ফ্রি অ্যাকাউন্ট খোলুন (শুধু ইমেইল দিয়ে, কোনো কার্ড নেই)।</li>
+            <li>Google Play Store থেকে <strong className="text-white">TextBee Gateway</strong> অ্যাপ ডাউনলোড করুন — যে ফোনটি গেটওয়ে হিসেবে ব্যবহার করবেন সেই ফোনে।</li>
+            <li>অ্যাপ ওপেন করুন, আপনার TextBee অ্যাকাউন্ট দিয়ে লগইন করুন, SMS পারমিশন দিন। ফোনটি অন থাকতে হবে এবং ইন্টারনেট কানেক্টেড থাকতে হবে।</li>
+            <li>TextBee ওয়েবসাইটে ড্যাশবোর্ড থেকে আপনার <strong className="text-white">API Key</strong> এবং <strong className="text-white">Device ID</strong> নিন।</li>
+            <li>এই অ্যাডমিন প্যানেলে যান: <strong className="text-sky-400">API Management</strong> → Add Sender API → provider <strong className="text-white">Custom HTTP</strong>।</li>
+            <li>Endpoint বসান: <button onClick={() => copy('https://api.textbee.dev/api/v1/gateway/send-sms', 'tb3')} className="text-green-300 hover:underline font-mono text-[11px]">https://api.textbee.dev/api/v1/gateway/send-sms</button> {copied === 'tb3' && <span className="text-emerald-400"> ✓</span>}</li>
+            <li><strong className="text-white">apiKey</strong> = আপনার TextBee API key। <strong className="text-white">apiSecret</strong> = আপনার Device ID। Limit দিন ৩০০। Save করুন।</li>
           </ol>
 
-          <div className="bg-slate-800/50 border border-slate-700/30 rounded-md p-3 mt-2">
-            <p className="text-[10px] text-slate-500 uppercase mb-1">API Request Format (for reference):</p>
-            <pre className="text-[11px] text-green-300 font-mono overflow-x-auto">{`GET https://api.sms.net.bd/sendsms?
-  api_key=YOUR_API_KEY
-  &msg=Your message
-  &to=88017XXXXXXXX`}</pre>
+          <div className="flex items-start gap-2 text-xs text-amber-300 bg-amber-950/20 border border-amber-800/30 rounded-md p-3">
+            <span>⚠️</span>
+            <p><strong>সীমাবদ্ধতা:</strong> গেটওয়ে ফোনটি অনলাইন থাকতে হবে। SMS আপনার SIM প্যাকেজ থেকে যায় (SMS বান্ডল থাকলে ফ্রি)। ফ্রি প্ল্যানে ৩০০ SMS/মাস।</p>
           </div>
         </div>
       </div>
 
-      {/* ── Comparison ── */}
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-white mb-3">Quick Comparison</h3>
+      {/* ── Option 3: Alpha SMS (Bangladesh) ── */}
+      <div className="bg-slate-900/50 border border-sky-800/40 rounded-xl p-6 space-y-4">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">🇧🇩</span>
+          <div>
+            <h3 className="text-lg font-semibold text-white">অপশন ৩: Alpha SMS (শুধু বাংলাদেশের জন্য)</h3>
+            <p className="text-xs text-sky-400">বাংলাদেশি প্রোভাইডার · ট্রায়াল ক্রেডিট · কল করে অ্যাক্টিভেট</p>
+          </div>
+        </div>
+
+        <div className="bg-slate-950/60 border border-slate-700/50 rounded-lg p-4 space-y-3">
+          <p className="text-xs text-gray-400">Alpha SMS বাংলাদেশের একটি বাল্ক SMS প্রোভাইডার। রেজিস্টার করলে ট্রায়াল ব্যালেন্স (ফ্রি ক্রেডিট) দেয়। আন্তর্জাতিক কার্ড লাগে না — পরে bKash দিয়ে রিচার্জ করা যায়।</p>
+
+          <p className="text-sm font-semibold text-white pt-1">ধাপে ধাপে সেটআপ:</p>
+          <ol className="list-decimal list-inside space-y-2 text-xs text-gray-300">
+            <li><a href="https://sms.net.bd" target="_blank" rel="noopener" className="text-sky-400 hover:underline">sms.net.bd</a> এ যান এবং বাংলাদেশি নম্বর দিয়ে রেজিস্টার করুন।</li>
+            <li><strong className="text-amber-300">তাদের সাপোর্টে কল করুন</strong>: <button onClick={() => copy('+88 09613 250 250', 'tb4')} className="text-green-300 hover:underline font-mono">+88 09613 250 250</button> {copied === 'tb4' && <span className="text-emerald-400"> ✓</span>} — ট্রায়াল ব্যালেন্সের জন্য বলুন। সাধারণত ফ্রি ক্রেডিট দেয়।</li>
+            <li>অনুমোদন পেলে ড্যাশবোর্ড থেকে <strong className="text-white">API Key</strong> নিন।</li>
+            <li>এই প্যানেলে: <strong className="text-sky-400">API Management</strong> → Add Sender API → <strong className="text-white">Custom HTTP</strong>।</li>
+            <li>Endpoint বসান: <button onClick={() => copy('https://api.sms.net.bd/sendsms', 'tb5')} className="text-green-300 hover:underline font-mono text-[11px]">https://api.sms.net.bd/sendsms</button> {copied === 'tb5' && <span className="text-emerald-400"> ✓</span>}</li>
+            <li><strong className="text-white">apiKey</strong> = আপনার Alpha SMS API key। Save করুন।</li>
+          </ol>
+        </div>
+      </div>
+
+      {/* ── How to send to ANY country ── */}
+      <div className="bg-blue-950/20 border border-blue-800/40 rounded-xl p-6 space-y-3">
+        <h3 className="text-lg font-semibold text-white">🌐 যেকোনো দেশে SMS কিভাবে পাঠাবেন</h3>
+        <p className="text-xs text-gray-300 leading-relaxed">SMS পাঠানোর সময় ফোন নম্বর অবশ্যই <strong className="text-blue-300">E.164 ফরম্যাটে</strong> হতে হবে। এর মানে হলো: <code className="bg-slate-800 px-1 rounded text-blue-300">+</code> চিহ্ন + কান্ট্রি কোড + ফোন নম্বর (শূন্য ছাড়া)।</p>
+
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-slate-700">
-                <th className="text-left py-2 px-3 text-slate-400 font-medium">Feature</th>
-                <th className="text-left py-2 px-3 text-slate-400 font-medium">TextBee</th>
-                <th className="text-left py-2 px-3 text-slate-400 font-medium">Alpha SMS</th>
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">দেশ</th>
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">কান্ট্রি কোড</th>
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">লোকাল নম্বর</th>
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">E.164 ফরম্যাট</th>
               </tr>
             </thead>
             <tbody className="text-gray-300">
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">Credit card needed</td><td className="py-2 px-3 text-emerald-400">❌ No</td><td className="py-2 px-3 text-emerald-400">❌ No</td></tr>
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">Free quota</td><td className="py-2 px-3">300 SMS/month</td><td className="py-2 px-3">Trial credits (call to get)</td></tr>
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">Requires Android phone</td><td className="py-2 px-3 text-amber-400">✅ Yes (as gateway)</td><td className="py-2 px-3 text-emerald-400">❌ No (cloud-based)</td></tr>
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">Bangladesh numbers</td><td className="py-2 px-3 text-emerald-400">✅ Yes (via your SIM)</td><td className="py-2 px-3 text-emerald-400">✅ Yes (native BD)</td></tr>
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">Setup time</td><td className="py-2 px-3">~10 min</td><td className="py-2 px-3">~1 day (wait for call)</td></tr>
-              <tr><td className="py-2 px-3 text-slate-500">Best for</td><td className="py-2 px-3">Quick testing, small volume</td><td className="py-2 px-3">Production BD campaigns</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3">🇧🇩 বাংলাদেশ</td><td className="py-2 px-3 text-blue-300">+880</td><td className="py-2 px-3 font-mono">01712345678</td><td className="py-2 px-3 font-mono text-green-300">+8801712345678</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3">🇮🇳 ভারত</td><td className="py-2 px-3 text-blue-300">+91</td><td className="py-2 px-3 font-mono">09876543210</td><td className="py-2 px-3 font-mono text-green-300">+919876543210</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3">🇺🇸 যুক্তরাষ্ট্র</td><td className="py-2 px-3 text-blue-300">+1</td><td className="py-2 px-3 font-mono">5551234567</td><td className="py-2 px-3 font-mono text-green-300">+15551234567</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3">🇬🇧 যুক্তরাজ্য</td><td className="py-2 px-3 text-blue-300">+44</td><td className="py-2 px-3 font-mono">07123456789</td><td className="py-2 px-3 font-mono text-green-300">+447123456789</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3">🇸🇦 সৌদি আরব</td><td className="py-2 px-3 text-blue-300">+966</td><td className="py-2 px-3 font-mono">0551234567</td><td className="py-2 px-3 font-mono text-green-300">+966551234567</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3">🇲🇾 মালয়েশিয়া</td><td className="py-2 px-3 text-blue-300">+60</td><td className="py-2 px-3 font-mono">0123456789</td><td className="py-2 px-3 font-mono text-green-300">+60123456789</td></tr>
+              <tr><td className="py-2 px-3">🇦🇪 আমিরাত</td><td className="py-2 px-3 text-blue-300">+971</td><td className="py-2 px-3 font-mono">0501234567</td><td className="py-2 px-3 font-mono text-green-300">+971501234567</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs text-gray-400 mt-2">নিয়ম: লোকাল নম্বরের শুরুর <strong className="text-white">0</strong> বাদ দিন, তার আগে <strong className="text-white">+ এবং কান্ট্রি কোড</strong> বসান। এই সিস্টেম নম্বরগুলো আপনার ক্যাম্পেইনে এই ফরম্যাটে দিলেই হবে।</p>
+        <p className="text-xs text-emerald-300">✅ আরও কান্ট্রি কোড: <a href="https://countrycode.org" target="_blank" rel="noopener" className="underline">countrycode.org</a> থেকে যেকোনো দেশের কোড বের করুন।</p>
+      </div>
+
+      {/* ── Comparison ── */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
+        <h3 className="text-lg font-semibold text-white mb-3">তুলনা</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-slate-700">
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">ফিচার</th>
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">🌍 Textbelt</th>
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">📱 TextBee</th>
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">🇧🇩 Alpha SMS</th>
+              </tr>
+            </thead>
+            <tbody className="text-gray-300">
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">কার্ড লাগে?</td><td className="py-2 px-3 text-emerald-400">❌ না</td><td className="py-2 px-3 text-emerald-400">❌ না</td><td className="py-2 px-3 text-emerald-400">❌ না</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">ফ্রি কোটা</td><td className="py-2 px-3">১ SMS/দিন</td><td className="py-2 px-3">৩০০ SMS/মাস</td><td className="py-2 px-3">ট্রায়াল ক্রেডিট</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">দেশ</td><td className="py-2 px-3 text-emerald-400">১০০+ দেশ</td><td className="py-2 px-3">যেকোনো (SIM অনুযায়ী)</td><td className="py-2 px-3">শুধু বাংলাদেশ</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">Android ফোন লাগে?</td><td className="py-2 px-3 text-emerald-400">❌ না</td><td className="py-2 px-3 text-amber-400">✅ হ্যাঁ</td><td className="py-2 px-3 text-emerald-400">❌ না</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">সেটআপ সময়</td><td className="py-2 px-3">২ মিনিট</td><td className="py-2 px-3">১০ মিনিট</td><td className="py-2 px-3">১ দিন (কলের জন্য)</td></tr>
+              <tr><td className="py-2 px-3 text-slate-500">ভালো কিসের জন্য</td><td className="py-2 px-3">দ্রুত টেস্ট, আন্তর্জাতিক</td><td className="py-2 px-3">ফ্রি বাল্ক, যেকোনো দেশ</td><td className="py-2 px-3">বাংলাদেশ প্রোডাকশন</td></tr>
             </tbody>
           </table>
         </div>
@@ -1557,8 +1874,8 @@ Body: {
 
       {/* ── How to add in this system ── */}
       <div className="bg-blue-950/20 border border-blue-800/40 rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-white mb-2">📌 How to add your API in this system</h3>
-        <p className="text-xs text-gray-300 leading-relaxed">Once you have your API key from either provider, go to <strong className="text-sky-400">API Management</strong> tab → click <strong className="text-white">Add Sender API</strong> → select <strong className="text-white">Custom HTTP</strong> as provider → paste the endpoint URL and your API key → set a limit (e.g. 300 for TextBee free plan) → save. The system will automatically use it for sending campaigns and auto-replies.</p>
+        <h3 className="text-lg font-semibold text-white mb-2">📌 এই সিস্টেমে কিভাবে API যোগ করবেন</h3>
+        <p className="text-xs text-gray-300 leading-relaxed">API key পাওয়ার পর: <strong className="text-sky-400">API Management</strong> ট্যাব → <strong className="text-white">Add Sender API</strong> → <strong className="text-white">Custom HTTP</strong> সিলেক্ট করুন → endpoint URL ও API key পেস্ট করুন → limit দিন → save করুন। সিস্টেম অটোমেটিক ক্যাম্পেইন ও অটো-রিপ্লাইতে এটি ব্যবহার করবে। টেস্ট করতে চাইলে API Management এ প্রতিটি API এর পাশে <strong className="text-white">Test</strong> বাটন আছে।</p>
       </div>
     </div>
   );
@@ -1575,7 +1892,7 @@ function LogsTab() {
     (async () => { const data = await api('getActivityLogs', { limit: 200 }); if (data.success) setLogs(data.logs); setLoading(false); })();
   }, []);
 
-  if (loading) return <Spinner />;
+  if (loading) return <Spinner label="Loading activity logs..." />;
 
   return (
     <div className="space-y-6">
@@ -1606,26 +1923,30 @@ function SecurityTab({ user }) {
   const [verificationCode, setVerificationCode] = useState('');
   const [pendingAction, setPendingAction] = useState(null);
   const [message, setMessage] = useState('');
+  const [acting, setActing] = useState(false);
 
   const load = async () => { setLoading(true); const data = await api('getAdminCredentials'); if (data.success) setInfo(data.credentials); setLoading(false); };
   useEffect(() => { load(); }, []);
 
   const doAction = async (action, data) => {
-    const res = await api(action, { ...data, verificationCode });
-    if (res.needVerification) {
-      setPendingAction(action);
-      setMessage(`Verification code sent to ${info?.email || 'admin email'}. Code: ${res.code || '(check console)'}`);
-    } else if (res.success) {
-      setMessage(`${action} completed successfully!`);
-      setVerificationCode(''); setPendingAction(null);
-      if (action === 'updateAdminApiKey') setMessage(`New API Key: ${res.apiKey}`);
-      load();
-    } else {
-      setMessage(res.error || 'Failed');
-    }
+    setActing(true);
+    try {
+      const res = await api(action, { ...data, verificationCode });
+      if (res.needVerification) {
+        setPendingAction(action);
+        setMessage(`Verification code sent to ${info?.email || 'admin email'}. Code: ${res.code || '(check console)'}`);
+      } else if (res.success) {
+        setMessage(`${action} completed successfully!`);
+        setVerificationCode(''); setPendingAction(null);
+        if (action === 'updateAdminApiKey') setMessage(`New API Key: ${res.apiKey}`);
+        load();
+      } else {
+        setMessage(res.error || 'Failed');
+      }
+    } finally { setActing(false); }
   };
 
-  if (loading) return <Spinner />;
+  if (loading) return <Spinner label="Loading security..." />;
 
   return (
     <div className="space-y-6">
@@ -1646,7 +1967,7 @@ function SecurityTab({ user }) {
             <label className="text-gray-400 text-sm font-medium block mb-1.5">Verification Code</label>
             <div className="flex gap-2">
               <input className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="6-digit code" value={verificationCode} onChange={e => setVerificationCode(e.target.value)} />
-              <button onClick={() => doAction(pendingAction, pendingAction === 'updateAdminUsername' ? { newUsername } : pendingAction === 'updateAdminPassword' ? { newPassword } : {})} className="bg-green-600 hover:bg-green-500 text-white text-sm px-4 py-2 rounded-lg transition">Verify & Confirm</button>
+              <button onClick={() => doAction(pendingAction, pendingAction === 'updateAdminUsername' ? { newUsername } : pendingAction === 'updateAdminPassword' ? { newPassword } : {})} disabled={acting} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white text-sm px-4 py-2 rounded-lg transition disabled:opacity-60">{acting ? <BtnSpinner /> : null}Verify & Confirm</button>
             </div>
           </div>
         )}
@@ -1654,19 +1975,19 @@ function SecurityTab({ user }) {
           <label className="text-gray-400 text-sm font-medium block mb-1.5">Change Username</label>
           <div className="flex gap-2">
             <input className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="New username" value={newUsername} onChange={e => setNewUsername(e.target.value)} />
-            <button onClick={() => doAction('updateAdminUsername', { newUsername })} className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-2 rounded-lg transition">Change</button>
+            <button onClick={() => doAction('updateAdminUsername', { newUsername })} disabled={acting} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white text-sm px-4 py-2 rounded-lg transition disabled:opacity-60">{acting ? <BtnSpinner size={12} /> : null}Change</button>
           </div>
         </div>
         <div>
           <label className="text-gray-400 text-sm font-medium block mb-1.5">Change Password</label>
           <div className="flex gap-2">
             <input type="password" className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="New password (min 8 chars)" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
-            <button onClick={() => doAction('updateAdminPassword', { newPassword })} className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-2 rounded-lg transition">Change</button>
+            <button onClick={() => doAction('updateAdminPassword', { newPassword })} disabled={acting} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white text-sm px-4 py-2 rounded-lg transition disabled:opacity-60">{acting ? <BtnSpinner size={12} /> : null}Change</button>
           </div>
         </div>
         <div>
           <label className="text-gray-400 text-sm font-medium block mb-1.5">Regenerate API Key</label>
-          <button onClick={() => doAction('updateAdminApiKey', {})} className="bg-yellow-600 hover:bg-yellow-500 text-white text-sm px-4 py-2 rounded-lg transition">Generate New API Key</button>
+          <button onClick={() => doAction('updateAdminApiKey', {})} disabled={acting} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white text-sm px-4 py-2 rounded-lg transition disabled:opacity-60">{acting ? <BtnSpinner size={12} /> : null}Generate New API Key</button>
         </div>
         <div>
           <label className="text-gray-400 text-sm font-medium block mb-1.5">Set Admin Email (for verification)</label>
@@ -1685,17 +2006,21 @@ function SecurityTab({ user }) {
 function SettingsTab() {
   const [settings, setSettings] = useState({});
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     (async () => { const data = await api('getAppSettings'); if (data.success) setSettings(data.settings); setLoading(false); })();
   }, []);
 
   const save = async () => {
-    const data = await api('updateAppSettings', { settings });
-    if (data.success) alert('Settings saved'); else alert(data.error);
+    setSaving(true);
+    try {
+      const data = await api('updateAppSettings', { settings });
+      if (data.success) alert('Settings saved'); else alert(data.error);
+    } finally { setSaving(false); }
   };
 
-  if (loading) return <Spinner />;
+  if (loading) return <Spinner label="Loading settings..." />;
 
   return (
     <div className="space-y-6">
@@ -1755,7 +2080,7 @@ function SettingsTab() {
           <label className="text-gray-400 text-sm font-medium block mb-1.5">Country Rules (JSON)</label>
           <textarea className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" rows="3" placeholder='{"BD": "allow", "US": "allow"}' value={settings.countryRules || ''} onChange={e => setSettings({...settings, countryRules: e.target.value})} />
         </div>
-        <button onClick={save} className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-6 py-2.5 rounded-lg transition font-semibold">Save All Settings</button>
+        <button onClick={save} disabled={saving} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white text-sm px-6 py-2.5 rounded-lg transition font-semibold disabled:opacity-60">{saving ? <BtnSpinner /> : null}Save All Settings</button>
       </div>
     </div>
   );

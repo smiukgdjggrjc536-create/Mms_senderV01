@@ -384,7 +384,7 @@ export async function POST(req) {
       if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
       await connectDB();
       const apis = await GeminiApi.find().sort({ priority: -1, createdAt: 1 }).lean();
-      return jsonResponse({ success: true, apis: apis.map(a => ({ ...a, apiKey: a.apiKey.substring(0, 6) + '••••••' })) });
+      return jsonResponse({ success: true, apis: apis.map(a => ({ ...a, apiKey: a.apiKey.substring(0, 6) + '••••••', lastError: a.lastError || null })) });
     }
 
     if (action === 'addGeminiApi') {
@@ -396,7 +396,7 @@ export async function POST(req) {
       const { name, apiKey, model, endpoint, limit, priority, autoRoute } = body;
       if (!name || !apiKey) return jsonResponse({ error: 'Name and API key required' }, 400);
       const api = await GeminiApi.create({
-        name, apiKey, model: model || 'gemini-1.5-flash',
+        name, apiKey, model: model || 'gemini-2.5-flash',
         endpoint: endpoint || 'https://generativelanguage.googleapis.com/v1beta/models',
         limit: limit || 1500, remaining: limit || 1500,
         priority: priority || 0, autoRoute: autoRoute !== false,
@@ -426,6 +426,102 @@ export async function POST(req) {
       const { id } = body;
       await GeminiApi.findByIdAndDelete(id);
       return jsonResponse({ success: true });
+    }
+
+    // ===== ACTION: testGeminiApi (admin tests a Gemini API key from the module) =====
+    if (action === 'testGeminiApi') {
+      const auth = await verifyAdmin(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const { id, apiKey, model, endpoint } = body;
+      // Either pass an existing API id, or pass raw values to test before saving
+      let testKey = apiKey;
+      let testModel = model;
+      let testEndpoint = endpoint;
+      let apiDoc = null;
+      if (id) {
+        apiDoc = await GeminiApi.findById(id).lean();
+        if (!apiDoc) return jsonResponse({ error: 'Gemini API not found' }, 404);
+        testKey = testKey || apiDoc.apiKey;
+        testModel = testModel || apiDoc.model;
+        testEndpoint = testEndpoint || apiDoc.endpoint;
+      }
+      if (!testKey) return jsonResponse({ error: 'API key required to test' }, 400);
+      // Validate key format
+      if (!testKey.startsWith('AIza')) {
+        return jsonResponse({
+          success: false,
+          ok: false,
+          status: 400,
+          error: `API key format is WRONG. It starts with "${testKey.substring(0, 8)}..." but a valid Gemini API key MUST start with "AIzaSy...".`,
+          hint: 'Go to https://aistudio.google.com/apikey and create a free API key. It will start with "AIzaSy". Then paste it here.',
+        });
+      }
+      const ep = testEndpoint || 'https://generativelanguage.googleapis.com/v1beta/models';
+      const fallbackModels = [];
+      if (testModel) fallbackModels.push(testModel);
+      for (const m of ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-flash-latest']) {
+        if (!fallbackModels.includes(m)) fallbackModels.push(m);
+      }
+      const testPrompt = 'Reply with exactly: "Gemini API test successful."';
+      let lastStatus = 0;
+      let lastErr = '';
+      for (const mdl of fallbackModels) {
+        const url = `${ep}/${mdl}:generateContent?key=${testKey}`;
+        try {
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: testPrompt }] }],
+              generationConfig: { temperature: 0, maxOutputTokens: 32 },
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text || '(empty response)';
+            // Persist the working model if we have a doc
+            if (apiDoc && mdl !== apiDoc.model) {
+              await GeminiApi.findByIdAndUpdate(apiDoc._id, { model: mdl, lastError: null }).catch(() => {});
+            } else if (apiDoc) {
+              await GeminiApi.findByIdAndUpdate(apiDoc._id, { lastError: null }).catch(() => {});
+            }
+            return jsonResponse({
+              success: true, ok: true,
+              status: 200,
+              model: mdl,
+              reply: replyText,
+              message: `✅ Test successful! Model "${mdl}" works. The API key is valid.`,
+            });
+          }
+          lastStatus = res.status;
+          lastErr = await res.text().catch(() => '');
+          if (res.status === 404) continue; // try next model
+          if (res.status === 400 || res.status === 403 || res.status === 429) break;
+          continue;
+        } catch (e) {
+          lastStatus = 0;
+          lastErr = e.message;
+          continue;
+        }
+      }
+      // All failed
+      let hint = '';
+      if (lastStatus === 403) hint = 'The API key is invalid OR the "Generative Language API" is not enabled. Create a new key at https://aistudio.google.com/apikey';
+      else if (lastStatus === 400) hint = 'Bad request — the API key format is wrong. It must start with "AIzaSy...". Get one from https://aistudio.google.com/apikey';
+      else if (lastStatus === 429) hint = 'Rate limit / quota exceeded. Wait a moment and try again, or add another key.';
+      else if (lastStatus === 404) hint = `All models returned 404. The API key is likely invalid. Get a free key from https://aistudio.google.com/apikey`;
+      else hint = 'Network error. Check the endpoint URL and your internet connection.';
+      if (apiDoc) {
+        await GeminiApi.findByIdAndUpdate(apiDoc._id, { lastError: `Test failed (HTTP ${lastStatus}): ${lastErr.slice(0, 200)}` }).catch(() => {});
+      }
+      return jsonResponse({
+        success: false, ok: false,
+        status: lastStatus,
+        error: `Test FAILED (HTTP ${lastStatus || 'network'}). ${lastErr.slice(0, 200)}`,
+        hint,
+        modelsTried: fallbackModels,
+      });
     }
 
     // ================================================================
@@ -1439,8 +1535,57 @@ User question: ${message}`;
           await logActivity(auth.decoded.userId, 'user', userIdentifier, 'ai_chat', `Q: ${message.slice(0, 80)}`, null).catch(() => {});
           return jsonResponse({ success: true, reply: aiText });
         }
+        // If 404 (model not found), try fallback models automatically
+        if (geminiRes.status === 404) {
+          const fallbackModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-flash-latest'];
+          let fallbackSuccess = false;
+          let fallbackReply = null;
+          let lastErr = '';
+          for (const fbModel of fallbackModels) {
+            if (fbModel === geminiApi.model) continue;
+            const fbUrl = `${geminiApi.endpoint}/${fbModel}:generateContent?key=${geminiApi.apiKey}`;
+            try {
+              const fbRes = await fetch(fbUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  contents: [{ parts: [{ text: systemPrompt }] }],
+                  generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
+                }),
+              });
+              if (fbRes.ok) {
+                const fbData = await fbRes.json();
+                const fbText = fbData.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (fbText) {
+                  fallbackSuccess = true;
+                  fallbackReply = fbText;
+                  // Update the API's model in DB so future requests use the working model
+                  await GeminiApi.findByIdAndUpdate(geminiApi._id, { model: fbModel }).catch(() => {});
+                  break;
+                }
+              } else {
+                lastErr = await fbRes.text().catch(() => '');
+              }
+            } catch (e) { lastErr = e.message; }
+          }
+          if (fallbackSuccess) {
+            await updateGeminiApiUsage(geminiApi._id, 1);
+            await logActivity(auth.decoded.userId, 'user', userIdentifier, 'ai_chat', `Q: ${message.slice(0, 80)}`, null).catch(() => {});
+            return jsonResponse({ success: true, reply: fallbackReply });
+          }
+          return jsonResponse({
+            error: 'AI request failed: model not found (404). Tried fallback models but all failed. The Gemini API key may be invalid (should start with "AIza...") or the model name is wrong.',
+            detail: lastErr.slice(0, 300),
+            hint: 'Go to Admin Panel → API Management → edit the Gemini API. Set model to "gemini-2.5-flash" and make sure the API key starts with "AIzaSy..." (get it from https://aistudio.google.com/apikey)',
+          }, 502);
+        }
         const errText = await geminiRes.text().catch(() => '');
-        return jsonResponse({ error: 'AI request failed: ' + geminiRes.status, detail: errText.slice(0, 200) }, 502);
+        // Provide helpful error based on status
+        let helpfulError = `AI request failed: ${geminiRes.status}`;
+        if (geminiRes.status === 400) helpfulError += ' — Bad request. The API key format may be wrong (should start with "AIzaSy..."). Get a free key from https://aistudio.google.com/apikey';
+        else if (geminiRes.status === 403) helpfulError += ' — API key invalid or permission denied. Check the Gemini API key in Admin Panel → API Management.';
+        else if (geminiRes.status === 429) helpfulError += ' — Rate limit exceeded. Try again in a moment.';
+        return jsonResponse({ error: helpfulError, detail: errText.slice(0, 300) }, 502);
       } catch (e) {
         return jsonResponse({ error: 'AI error: ' + e.message }, 500);
       }

@@ -289,7 +289,7 @@ const senderApiSchema = new mongoose.Schema({
 const geminiApiSchema = new mongoose.Schema({
   name: { type: String, required: true },
   apiKey: { type: String, required: true },
-  model: { type: String, default: 'gemini-1.5-flash' },
+  model: { type: String, default: 'gemini-2.5-flash' },
   endpoint: { type: String, default: 'https://generativelanguage.googleapis.com/v1beta/models' },
   limit: { type: Number, default: 1500 }, // requests per day free tier
   used: { type: Number, default: 0 },
@@ -739,6 +739,103 @@ async function updateGeminiApiUsage(apiId, requestCount) {
     api.status = 'warning';
   }
   await api.save();
+}
+
+// ============================================================================
+// SHARED GEMINI CALL HELPER
+// ----------------------------------------------------------------------------
+// A single robust entry point for ALL Gemini API calls across the app.
+// Handles:
+//   • API-key format validation (must start with "AIza")
+//   • Automatic model fallback on 404 (tries a list of known-good models)
+//   • Clear, structured error objects with human-readable hints
+//   • Auto-updates the DB record to the working model
+//   • Records lastError on the GeminiApi document for admin diagnostics
+// Usage:
+//   const result = await callGemini(geminiApi, promptText, { temperature, maxOutputTokens });
+//   if (result.ok) { result.text } else { result.error, result.status, result.hint }
+// ============================================================================
+const GEMINI_FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-flash-latest'];
+
+async function callGemini(geminiApi, promptText, opts = {}) {
+  if (!geminiApi) {
+    return { ok: false, status: 0, error: 'No Gemini API configured', hint: 'Admin must add a Gemini API key in API Management.' };
+  }
+  // Validate key format — real Gemini keys start with "AIza"
+  if (!geminiApi.apiKey || !geminiApi.apiKey.startsWith('AIza')) {
+    const msg = `Gemini API key format looks invalid (should start with "AIzaSy..."). Current key starts with "${(geminiApi.apiKey || '').substring(0, 8)}..."`;
+    await GeminiApi.findByIdAndUpdate(geminiApi._id, { lastError: msg }).catch(() => {});
+    return {
+      ok: false, status: 400, error: msg,
+      hint: 'Get a FREE valid key from https://aistudio.google.com/apikey — then update it in Admin Panel → API Management → Gemini.',
+    };
+  }
+  const temperature = opts.temperature ?? 0.7;
+  const maxOutputTokens = opts.maxOutputTokens ?? 1024;
+  const endpoint = geminiApi.endpoint || 'https://generativelanguage.googleapis.com/v1beta/models';
+
+  // Build the candidate model list: the configured model first, then fallbacks (deduped)
+  const modelList = [];
+  if (geminiApi.model) modelList.push(geminiApi.model);
+  for (const m of GEMINI_FALLBACK_MODELS) {
+    if (!modelList.includes(m)) modelList.push(m);
+  }
+
+  let lastStatus = 0;
+  let lastErrBody = '';
+  for (const model of modelList) {
+    const url = `${endpoint}/${model}:generateContent?key=${geminiApi.apiKey}`;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: promptText }] }],
+          generationConfig: { temperature, maxOutputTokens },
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (text) {
+          // If we fell back to a different model, persist it so future calls are fast
+          if (model !== geminiApi.model) {
+            await GeminiApi.findByIdAndUpdate(geminiApi._id, { model, lastError: null }).catch(() => {});
+          } else {
+            await GeminiApi.findByIdAndUpdate(geminiApi._id, { lastError: null }).catch(() => {});
+          }
+          return { ok: true, text, model };
+        }
+        lastStatus = res.status;
+        lastErrBody = 'Empty response from model';
+        continue;
+      }
+      lastStatus = res.status;
+      lastErrBody = await res.text().catch(() => '');
+      // 404 = model not found → try next model in the list
+      if (res.status === 404) continue;
+      // For 400/403/429 the issue is the key or quota, not the model — stop trying other models
+      if (res.status === 400 || res.status === 403 || res.status === 429) break;
+      // Other errors — try next model as a last resort
+      continue;
+    } catch (e) {
+      lastStatus = 0;
+      lastErrBody = e.message;
+      continue;
+    }
+  }
+
+  // All models failed — build a helpful error
+  let hint = '';
+  if (lastStatus === 403) hint = 'API key is invalid or the Generative Language API is not enabled for this key. Get a new key from https://aistudio.google.com/apikey';
+  else if (lastStatus === 400) hint = 'Bad request — usually means the API key format is wrong. It must start with "AIzaSy...". Get one from https://aistudio.google.com/apikey';
+  else if (lastStatus === 429) hint = 'Rate limit / quota exceeded. Wait a moment or add another Gemini API key.';
+  else if (lastStatus === 404) hint = `Tried models [${modelList.join(', ')}] but all returned 404. The API key may be invalid. Get a free key from https://aistudio.google.com/apikey`;
+  else hint = 'Network or unknown error. Check the endpoint URL and try again. Get a valid key from https://aistudio.google.com/apikey';
+
+  const errorMsg = `Gemini request failed (HTTP ${lastStatus || 'network'}). ${lastErrBody.slice(0, 200)}`;
+  await GeminiApi.findByIdAndUpdate(geminiApi._id, { lastError: errorMsg.slice(0, 300) }).catch(() => {});
+  return { ok: false, status: lastStatus, error: errorMsg, hint, model: geminiApi.model };
 }
 
 // ============================================================================
@@ -1505,7 +1602,7 @@ function refreshConfigFile(keyName, keyValue) {
 
   switch (keyName) {
     case 'GEMINI_API_KEY':
-      content = `export const GEMINI_CONFIG = {\n  apiKey: '${keyValue}',\n  model: 'gemini-1.5-flash',\n  endpoint: 'https://generativelanguage.googleapis.com/v1beta/models',\n};\n`;
+      content = `export const GEMINI_CONFIG = {\n  apiKey: '${keyValue}',\n  model: 'gemini-2.5-flash',\n  endpoint: 'https://generativelanguage.googleapis.com/v1beta/models',\n};\n`;
       break;
     case 'MONGODB_URI':
       content = `export const DB_CONFIG = {\n  uri: '${keyValue}',\n  options: {\n    bufferCommands: false,\n  },\n};\n`;
@@ -1575,6 +1672,7 @@ export {
   // API routing
   getBestSenderApi,
   getBestGeminiApi,
+  callGemini,
   updateSenderApiUsage,
   updateGeminiApiUsage,
   // Bulk send engine (real provider integrations)

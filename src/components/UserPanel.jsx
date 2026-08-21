@@ -1718,9 +1718,11 @@ function AIChatPopup({ language }) {
             ))}
             {loading && (
               <div className="flex justify-start">
-                <div className="bg-gray-800 px-3 py-2 rounded-lg flex items-center gap-2">
-                  <Spinner size={12} />
-                  <span className="text-xs text-gray-400">Typing...</span>
+                <div className="bg-gray-800 px-4 py-3 rounded-lg flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-2 h-2 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                  <span className="text-xs text-gray-400 ml-1">Typing...</span>
                 </div>
               </div>
             )}
@@ -1739,9 +1741,9 @@ function AIChatPopup({ language }) {
             <button
               onClick={handleSend}
               disabled={loading || !input.trim()}
-              className="px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg"
+              className="px-3 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white rounded-lg transition flex items-center justify-center"
             >
-              <Icon.Send2 className="w-4 h-4" />
+              {loading ? <Spinner size={14} /> : <Icon.Send2 className="w-4 h-4" />}
             </button>
           </div>
         </div>

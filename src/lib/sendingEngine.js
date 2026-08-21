@@ -351,31 +351,49 @@ export function scoreSpamHeuristic(message) {
 // ---------------------------------------------------------------------------
 // Gemini AI spam review
 // ---------------------------------------------------------------------------
+const GEMINI_FB_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-flash-latest'];
+
 export async function geminiSpamReview(message, geminiApi) {
   if (!geminiApi) return null;
-  try {
-    const geminiUrl = `${geminiApi.endpoint}/${geminiApi.model}:generateContent?key=${geminiApi.apiKey}`;
-    const res = await fetch(geminiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: `You are a spam detection expert for SMS/MMS marketing messages. Analyze this message and respond with ONLY a JSON object (no markdown): {"spam_score": 0-100, "is_spam": true/false, "inbox_likelihood": 0-100, "suggestion": "brief improvement tip"}. Message: "${message.substring(0, 800)}"` }] }],
-      }),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const cleaned = text.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(cleaned);
-    return {
-      spam_score: typeof parsed.spam_score === 'number' ? parsed.spam_score : (parsed.is_spam ? 80 : 20),
-      is_spam: parsed.is_spam,
-      inbox_likelihood: parsed.inbox_likelihood,
-      suggestion: parsed.suggestion || '',
-    };
-  } catch {
-    return null;
+  // Validate key format early — real Gemini keys start with "AIza"
+  if (!geminiApi.apiKey || !geminiApi.apiKey.startsWith('AIza')) return null;
+  const endpoint = geminiApi.endpoint || 'https://generativelanguage.googleapis.com/v1beta/models';
+  const prompt = `You are a spam detection expert for SMS/MMS marketing messages. Analyze this message and respond with ONLY a JSON object (no markdown): {"spam_score": 0-100, "is_spam": true/false, "inbox_likelihood": 0-100, "suggestion": "brief improvement tip"}. Message: "${message.substring(0, 800)}"`;
+  // Build candidate model list (configured model first, then fallbacks)
+  const models = [];
+  if (geminiApi.model) models.push(geminiApi.model);
+  for (const m of GEMINI_FB_MODELS) { if (!models.includes(m)) models.push(m); }
+  for (const model of models) {
+    try {
+      const geminiUrl = `${endpoint}/${model}:generateContent?key=${geminiApi.apiKey}`;
+      const res = await fetch(geminiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.3, maxOutputTokens: 512 },
+        }),
+      });
+      if (!res.ok) {
+        if (res.status === 404) continue; // model not found → try next
+        if (res.status === 400 || res.status === 403 || res.status === 429) break; // key/quota issue → stop
+        continue;
+      }
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const cleaned = text.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(cleaned);
+      return {
+        spam_score: typeof parsed.spam_score === 'number' ? parsed.spam_score : (parsed.is_spam ? 80 : 20),
+        is_spam: parsed.is_spam,
+        inbox_likelihood: parsed.inbox_likelihood,
+        suggestion: parsed.suggestion || '',
+      };
+    } catch {
+      continue;
+    }
   }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -389,35 +407,54 @@ export async function aiRankSenderApis(senderApis, message, geminiApi) {
       .sort((a, b) => (b.healthScore || 0) - (a.healthScore || 0) || (b.inboxRate || 0) - (a.inboxRate || 0) || (b.priority || 0) - (a.priority || 0) || (b.remaining || 0) - (a.remaining || 0))
       .map((a) => a._id.toString());
   }
-  try {
-    const geminiUrl = `${geminiApi.endpoint}/${geminiApi.model}:generateContent?key=${geminiApi.apiKey}`;
-    const apiList = senderApis.map((a, i) => `${i + 1}. ${a.name} (health:${a.healthScore}, inbox:${a.inboxRate}%, provider:${a.provider})`).join('\n');
-    const res = await fetch(geminiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: `You are an SMS delivery expert. Given this marketing message and a list of sender APIs, rank them best-first for inbox delivery quality. Respond with ONLY a JSON array of API indices (1-based) in priority order. Message: "${message.substring(0, 300)}". APIs:\n${apiList}` }] }],
-      }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      const cleaned = text.replace(/```json|```/g, '').trim();
-      const order = JSON.parse(cleaned);
-      if (Array.isArray(order)) {
-        const result = [];
-        for (const idx of order) {
-          const api = senderApis[idx - 1];
-          if (api) result.push(api._id.toString());
+  // Validate key format early
+  if (!geminiApi.apiKey || !geminiApi.apiKey.startsWith('AIza')) {
+    return senderApis
+      .slice()
+      .sort((a, b) => (b.healthScore || 0) - (a.healthScore || 0) || (b.inboxRate || 0) - (a.inboxRate || 0) || (b.priority || 0) - (a.priority || 0) || (b.remaining || 0) - (a.remaining || 0))
+      .map((a) => a._id.toString());
+  }
+  const endpoint = geminiApi.endpoint || 'https://generativelanguage.googleapis.com/v1beta/models';
+  const apiList = senderApis.map((a, i) => `${i + 1}. ${a.name} (health:${a.healthScore}, inbox:${a.inboxRate}%, provider:${a.provider})`).join('\n');
+  const prompt = `You are an SMS delivery expert. Given this marketing message and a list of sender APIs, rank them best-first for inbox delivery quality. Respond with ONLY a JSON array of API indices (1-based) in priority order. Message: "${message.substring(0, 300)}". APIs:\n${apiList}`;
+  const models = [];
+  if (geminiApi.model) models.push(geminiApi.model);
+  for (const m of GEMINI_FB_MODELS) { if (!models.includes(m)) models.push(m); }
+  for (const model of models) {
+    try {
+      const geminiUrl = `${endpoint}/${model}:generateContent?key=${geminiApi.apiKey}`;
+      const res = await fetch(geminiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.3, maxOutputTokens: 256 },
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const cleaned = text.replace(/```json|```/g, '').trim();
+        const order = JSON.parse(cleaned);
+        if (Array.isArray(order)) {
+          const result = [];
+          for (const idx of order) {
+            const api = senderApis[idx - 1];
+            if (api) result.push(api._id.toString());
+          }
+          // Append any not included
+          for (const api of senderApis) {
+            if (!result.includes(api._id.toString())) result.push(api._id.toString());
+          }
+          return result;
         }
-        // Append any not included
-        for (const api of senderApis) {
-          if (!result.includes(api._id.toString())) result.push(api._id.toString());
-        }
-        return result;
+      } else {
+        if (res.status === 404) continue;
+        if (res.status === 400 || res.status === 403 || res.status === 429) break;
+        continue;
       }
-    }
-  } catch {}
+    } catch {}
+  }
   // Fallback
   return senderApis
     .slice()
