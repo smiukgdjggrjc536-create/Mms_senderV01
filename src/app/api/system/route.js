@@ -55,6 +55,7 @@ import {
   scoreSpamHeuristic,
   geminiSpamReview,
   enforceCountryRules,
+  computeExpiryDate,
 } from '@/lib/core';
 
 // Helper: extract token from request cookies
@@ -447,16 +448,12 @@ export async function POST(req) {
         testEndpoint = testEndpoint || apiDoc.endpoint;
       }
       if (!testKey) return jsonResponse({ error: 'API key required to test' }, 400);
-      // Validate key format
-      if (!testKey.startsWith('AIza')) {
-        return jsonResponse({
-          success: false,
-          ok: false,
-          status: 400,
-          error: `API key format is WRONG. It starts with "${testKey.substring(0, 8)}..." but a valid Gemini API key MUST start with "AIzaSy...".`,
-          hint: 'Go to https://aistudio.google.com/apikey and create a free API key. It will start with "AIzaSy". Then paste it here.',
-        });
-      }
+      // NOTE: We no longer hard-reject keys that don't start with "AIza".
+      // The admin may use keys in any format (custom gateway keys, partner
+      // keys, etc.). We attempt the real API call and report the actual
+      // upstream response. A soft warning is included for non-AIza keys.
+      const isStandardFormat = testKey.startsWith('AIza');
+      const formatWarning = isStandardFormat ? '' : ` (Note: this key does not start with "AIza" — it may be a custom/partner key. Testing anyway.)`;
       const ep = testEndpoint || 'https://generativelanguage.googleapis.com/v1beta/models';
       const fallbackModels = [];
       if (testModel) fallbackModels.push(testModel);
@@ -491,7 +488,7 @@ export async function POST(req) {
               status: 200,
               model: mdl,
               reply: replyText,
-              message: `✅ Test successful! Model "${mdl}" works. The API key is valid.`,
+              message: `✅ Test successful! Model "${mdl}" works. The API key is valid.${formatWarning}`,
             });
           }
           lastStatus = res.status;
@@ -660,6 +657,8 @@ export async function POST(req) {
         success: true,
         users: users.map(u => ({
           ...u,
+          // loginId is the username the user types to log in (userId preferred, email fallback)
+          loginId: u.userId || u.email || '',
           isOnline: u.lastActiveAt && new Date(now.getTime() - 5 * 60 * 1000) < u.lastActiveAt,
           expiryDaysLeft: u.expiryDate ? Math.ceil((u.expiryDate - now) / (24 * 60 * 60 * 1000)) : null,
           lastActiveAgo: u.lastActiveAt ? timeAgoStr(u.lastActiveAt, now) : 'Never',
@@ -672,22 +671,50 @@ export async function POST(req) {
       const auth = await verifyAdmin(req);
       if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
       await connectDB();
-      const { email, password, sendingLimit, expiryDays } = body;
-      if (!email || !password) return jsonResponse({ error: 'Email and password required' }, 400);
-      const existing = await User.findOne({ email: email.toLowerCase() });
-      if (existing) return jsonResponse({ error: 'Email already exists' }, 409);
+      // NEW: username + password (email is now optional). Admin sets the
+      // login credentials exactly as they wish — no format restrictions.
+      const { username, userId, email, password, sendingLimit, expiryValue, expiryUnit, expiryDays } = body;
+      const rawUsername = (username || userId || '').trim();
+      if (!rawUsername || !password) {
+        return jsonResponse({ error: 'Username and password are required' }, 400);
+      }
+      // Store the login identifier in the userId field (uppercase-trimmed is NOT
+      // forced anymore — we keep the original casing so admins can use any
+      // username format they like). We DO lowercase an email if one is given.
+      const loginId = rawUsername;
+      // Check for duplicates on BOTH userId and email (sparse) so we never
+      // accidentally create a colliding account.
+      const dupQuery = { $or: [{ userId: loginId }] };
+      if (email && String(email).trim()) {
+        dupQuery.$or.push({ email: String(email).trim().toLowerCase() });
+      }
+      const existing = await User.findOne(dupQuery);
+      if (existing) return jsonResponse({ error: 'This username already exists. Choose a different one.' }, 409);
       const settings = await getAppSettings();
-      const expiryDate = expiryDays ? new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000) : new Date(Date.now() + settings.defaultUserExpiryDays * 24 * 60 * 60 * 1000);
-      const newUser = new User({
-        email: email.toLowerCase(),
+      // Expiry: prefer the new { value, unit } system; fall back to legacy
+      // expiryDays for older admin-panel builds.
+      let expiryDate;
+      if (expiryValue && expiryUnit) {
+        expiryDate = computeExpiryDate(expiryValue, expiryUnit);
+      } else if (expiryDays) {
+        expiryDate = computeExpiryDate(expiryDays, 'days');
+      } else {
+        expiryDate = computeExpiryDate(settings.defaultUserExpiryDays || 30, 'days');
+      }
+      const newUserDoc = {
+        userId: loginId,
         password,
         role: 'user',
         sendingLimit: sendingLimit || settings.defaultUserLimit,
         expiryDate,
-      });
+      };
+      if (email && String(email).trim()) {
+        newUserDoc.email = String(email).trim().toLowerCase();
+      }
+      const newUser = new User(newUserDoc);
       await newUser.save();
-      await logActivity(auth.decoded.userId, 'admin', auth.decoded.username, 'create_user', `Created: ${email}`, clientIP);
-      return jsonResponse({ success: true, id: newUser._id, expiryDate });
+      await logActivity(auth.decoded.userId, 'admin', auth.decoded.username, 'create_user', `Created user: ${loginId}`, clientIP);
+      return jsonResponse({ success: true, id: newUser._id, loginId: loginId, expiryDate });
     }
 
     if (action === 'updateUserLimit') {
@@ -704,11 +731,22 @@ export async function POST(req) {
       const auth = await verifyAdmin(req);
       if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
       await connectDB();
-      const { userId, expiryDays } = body;
-      const expiryDate = new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000);
+      // NEW: accept { expiryValue, expiryUnit } (hours/days/weeks/months/years)
+      // and also keep backward compat with the old { expiryDays } field.
+      const { userId, expiryValue, expiryUnit, expiryDays } = body;
+      let expiryDate;
+      if (expiryValue && expiryUnit) {
+        expiryDate = computeExpiryDate(expiryValue, expiryUnit);
+      } else if (expiryDays) {
+        expiryDate = computeExpiryDate(expiryDays, 'days');
+      } else {
+        return jsonResponse({ error: 'expiryValue and expiryUnit (or expiryDays) required' }, 400);
+      }
+      if (!expiryDate) return jsonResponse({ error: 'Invalid expiry value' }, 400);
       await User.findByIdAndUpdate(userId, { expiryDate });
-      await logActivity(auth.decoded.userId, 'admin', auth.decoded.username, 'update_expiry', `User: ${userId}, days: ${expiryDays}`, clientIP);
-      return jsonResponse({ success: true });
+      const label = (expiryValue && expiryUnit) ? `${expiryValue} ${expiryUnit}` : `${expiryDays} days`;
+      await logActivity(auth.decoded.userId, 'admin', auth.decoded.username, 'update_expiry', `User: ${userId}, expiry: ${label}`, clientIP);
+      return jsonResponse({ success: true, expiryDate });
     }
 
     if (action === 'suspendUser') {
@@ -922,38 +960,36 @@ export async function POST(req) {
 
     // ===== ACTION: registerUser (admin-created account, role='user') =====
     // Self-registration is DISABLED on the user panel (login only).
-    // This action remains for admin-created accounts and validates the 4-letter+2-digit ID format.
+    // This action remains for admin-created accounts. NO format restriction —
+    // any username the admin chooses is accepted.
     if (action === 'registerUser') {
       await connectDB();
-      const { email, password, userId } = body;
+      const { email, password, userId, username } = body;
       if (!password) return jsonResponse({ error: 'Password required' }, 400);
-      if (password.length < 6) return jsonResponse({ error: 'Password must be at least 6 characters' }, 400);
-      // Determine the login identifier: prefer userId (new format), fall back to email (legacy)
+      // Determine the login identifier: prefer userId/username (any format),
+      // fall back to email (legacy).
       let loginId = null;
-      if (userId) {
-        const cleanId = String(userId).trim().toUpperCase();
-        if (!/^[A-Z]{4}[0-9]{2}$/.test(cleanId)) {
-          return jsonResponse({ error: 'User ID must be exactly 4 letters followed by 2 digits (e.g. SAMU01). No @ symbol.' }, 400);
-        }
-        const exists = await User.findOne({ userId: cleanId });
-        if (exists) return jsonResponse({ error: 'This User ID is already taken.' }, 409);
-        loginId = cleanId;
+      const rawUsername = (userId || username || '').trim();
+      if (rawUsername) {
+        const exists = await User.findOne({ $or: [{ userId: rawUsername }, { email: rawUsername.toLowerCase() }] });
+        if (exists) return jsonResponse({ error: 'This username is already taken.' }, 409);
+        loginId = rawUsername;
       } else if (email) {
         const exists = await User.findOne({ email: email.toLowerCase() });
         if (exists) return jsonResponse({ error: 'Email already registered. Please login.' }, 409);
         loginId = email.toLowerCase();
       } else {
-        return jsonResponse({ error: 'User ID (4 letters + 2 digits) required' }, 400);
+        return jsonResponse({ error: 'Username required' }, 400);
       }
       const settings = await getAppSettings();
       const newUserDoc = {
         password,
         role: 'user',
         sendingLimit: settings.defaultUserLimit,
-        expiryDate: new Date(Date.now() + settings.defaultUserExpiryDays * 24 * 60 * 60 * 1000),
+        expiryDate: computeExpiryDate(settings.defaultUserExpiryDays || 30, 'days'),
         ipAddress: clientIP,
       };
-      if (userId) newUserDoc.userId = loginId; else newUserDoc.email = loginId;
+      if (rawUsername) newUserDoc.userId = loginId; else newUserDoc.email = loginId;
       const newUser = new User(newUserDoc);
       await newUser.save();
       const displayId = newUser.userId || newUser.email;
@@ -964,30 +1000,38 @@ export async function POST(req) {
       return res;
     }
 
-    // ===== ACTION: login (user login — 4-letter+2-digit ID or legacy email + password) =====
+    // ===== ACTION: login (user login — username OR email + password) =====
+    // NO format restrictions: the user logs in with whatever username/password
+    // the admin created the account with.
     if (action === 'login') {
       await connectDB();
       const { email, password, loginId } = body;
       // Accept loginId (new) or email (legacy field name from old client)
       const rawId = (loginId || email || '').trim();
-      if (!rawId || !password) return jsonResponse({ error: 'User ID and password required' }, 400);
-      // Try userId lookup first (4 letters + 2 digits), then fall back to email lookup
+      if (!rawId || !password) return jsonResponse({ error: 'Username and password required' }, 400);
+      // Look up the user by userId (case-insensitive) OR by email.
+      // No more "4 letters + 2 digits" format requirement.
       let user = null;
-      const upperId = rawId.toUpperCase();
-      if (/^[A-Z]{4}[0-9]{2}$/.test(upperId)) {
-        user = await User.findOne({ userId: upperId });
+      // 1) exact userId match
+      user = await User.findOne({ userId: rawId });
+      // 2) case-insensitive userId match (admin may have used mixed case)
+      if (!user) {
+        try {
+          user = await User.findOne({ userId: { $regex: new RegExp('^' + rawId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') } });
+        } catch (_) { /* regex escape safety */ }
       }
+      // 3) email match (legacy accounts)
       if (!user && rawId.includes('@')) {
         user = await User.findOne({ email: rawId.toLowerCase() });
       }
-      if (!user) return jsonResponse({ error: 'Invalid User ID or password' }, 401);
+      if (!user) return jsonResponse({ error: 'Invalid username or password' }, 401);
       if (user.status === 'suspended') return jsonResponse({ error: 'Account suspended. Contact admin.' }, 403);
       // Check expiry
       if (user.expiryDate && user.expiryDate < new Date()) {
         return jsonResponse({ error: 'Account expired. Contact admin.' }, 403);
       }
       const match = await comparePassword(password, user.password);
-      if (!match) return jsonResponse({ error: 'Invalid User ID or password' }, 401);
+      if (!match) return jsonResponse({ error: 'Invalid username or password' }, 401);
       // Update last active + IP
       user.lastActiveAt = new Date();
       user.ipAddress = clientIP;

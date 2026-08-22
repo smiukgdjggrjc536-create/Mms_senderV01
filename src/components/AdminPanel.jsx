@@ -1121,10 +1121,21 @@ function UserManagementTab() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ email: '', password: '', sendingLimit: 100, expiryDays: 30 });
+  // NEW form: username + password (no email required), expiry as { value, unit }
+  const [form, setForm] = useState({ username: '', password: '', sendingLimit: 100, expiryValue: 30, expiryUnit: 'days' });
   const [creating, setCreating] = useState(false);
   const [acting, setActing] = useState(null); // userId being acted on
+  // per-row expiry editor state
+  const [expiryEditor, setExpiryEditor] = useState({}); // { [userId]: { value, unit } }
   const withLoading = useLoading();
+
+  const EXPIRY_UNITS = [
+    { value: 'hours', label: 'ঘন্টা (Hours)' },
+    { value: 'days', label: 'দিন (Days)' },
+    { value: 'weeks', label: 'সপ্তাহ (Weeks)' },
+    { value: 'months', label: 'মাস (Months)' },
+    { value: 'years', label: 'বছর (Years)' },
+  ];
 
   const load = async () => { setLoading(true); const data = await api('getUsers'); if (data.success) setUsers(data.users); setLoading(false); };
   useEffect(() => { load(); }, []);
@@ -1134,9 +1145,18 @@ function UserManagementTab() {
     setCreating(true);
     try {
       const data = await api('createUser', form);
-      if (data.success) { setShowForm(false); setForm({ email: '', password: '', sendingLimit: 100, expiryDays: 30 }); load(); }
+      if (data.success) { setShowForm(false); setForm({ username: '', password: '', sendingLimit: 100, expiryValue: 30, expiryUnit: 'days' }); load(); }
       else alert(data.error);
     } finally { setCreating(false); }
+  };
+
+  // Per-row expiry update using the new { value, unit } system
+  const applyRowExpiry = async (userId) => {
+    const ed = expiryEditor[userId];
+    if (!ed || !ed.value) return;
+    const data = await api('updateUserExpiry', { userId, expiryValue: parseInt(ed.value), expiryUnit: ed.unit });
+    if (data.success) { setExpiryEditor(prev => { const n = { ...prev }; delete n[userId]; return n; }); load(); }
+    else alert(data.error);
   };
 
   if (loading) return <Spinner label="Loading users..." />;
@@ -1148,41 +1168,80 @@ function UserManagementTab() {
         <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm px-3 py-1.5 rounded-lg transition"><Icon.Plus />Create User</button>
       </div>
       {showForm && (
-        <form onSubmit={createUser} className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 grid grid-cols-1 md:grid-cols-4 gap-3">
-          <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} required />
-          <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} required />
-          <input type="number" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Send Limit" value={form.sendingLimit} onChange={e => setForm({...form, sendingLimit: parseInt(e.target.value)})} />
-          <input type="number" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Expiry (days)" value={form.expiryDays} onChange={e => setForm({...form, expiryDays: parseInt(e.target.value)})} />
+        <form onSubmit={createUser} className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Username <span className="text-emerald-400/70">(যেভাবে খুশি দিতে পারেন — কোনো নিয়ম নেই)</span></label>
+              <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="e.g. samir123 or any username" value={form.username} onChange={e => setForm({...form, username: e.target.value})} required />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Password <span className="text-emerald-400/70">(যেভাবে খুশি দিতে পারেন)</span></label>
+              <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} required />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Send Limit</label>
+              <input type="number" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Send Limit" value={form.sendingLimit} onChange={e => setForm({...form, sendingLimit: parseInt(e.target.value) || 100})} />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Expiry Value</label>
+              <input type="number" min="1" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Expiry value" value={form.expiryValue} onChange={e => setForm({...form, expiryValue: parseInt(e.target.value) || 1})} />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Expiry Unit</label>
+              <select className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={form.expiryUnit} onChange={e => setForm({...form, expiryUnit: e.target.value})}>
+                {EXPIRY_UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+              </select>
+            </div>
+          </div>
           <button type="submit" disabled={creating} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white text-sm px-4 py-2 rounded-lg transition disabled:opacity-60">{creating ? <BtnSpinner /> : <Icon.Plus />}Create User</button>
         </form>
       )}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr className="text-gray-500 text-xs uppercase border-b border-slate-800">
-            <th className="text-left p-2">Email</th><th className="text-left p-2">Status</th><th className="text-left p-2">Limit</th><th className="text-left p-2">Sent</th><th className="text-left p-2">Expiry</th><th className="text-left p-2">IP</th><th className="text-left p-2">Last Active</th><th className="text-left p-2">Last Send</th><th className="text-left p-2">Actions</th>
+            <th className="text-left p-2">Username</th><th className="text-left p-2">Status</th><th className="text-left p-2">Limit</th><th className="text-left p-2">Sent</th><th className="text-left p-2">Expiry</th><th className="text-left p-2">IP</th><th className="text-left p-2">Last Active</th><th className="text-left p-2">Last Send</th><th className="text-left p-2">Actions</th>
           </tr></thead>
           <tbody>
             {users.map(u => (
               <tr key={u._id} className="border-b border-slate-800/50 hover:bg-slate-900/30">
-                <td className="p-2 text-white">{u.email}</td>
+                <td className="p-2 text-white">
+                  <div className="font-medium">{u.loginId || u.userId || u.email || '—'}</div>
+                  {u.email && u.email !== (u.userId || u.loginId) && <div className="text-[10px] text-gray-500">{u.email}</div>}
+                </td>
                 <td className="p-2"><span className={`text-xs px-2 py-0.5 rounded ${u.status === 'active' ? 'bg-green-900/40 text-green-400' : 'bg-red-900/40 text-red-400'}`}>{u.isOnline ? 'Online' : u.status}</span></td>
-                <td className="p-2 text-gray-400">{u.sendingLimit}</td>
+                <td className="p-2 text-gray-400">
+                  <input type="number" placeholder="Limit" className="w-16 bg-slate-800 border border-slate-700 rounded px-1 py-1 text-white text-xs" defaultValue={u.sendingLimit} onBlur={async (e) => { await api('updateUserLimit', { userId: u._id, limit: parseInt(e.target.value) }); }} />
+                </td>
                 <td className="p-2 text-gray-400">{u.sentCount}</td>
-                <td className="p-2 text-gray-400">{u.expiryDaysLeft != null ? `${u.expiryDaysLeft}d left` : 'No expiry'}</td>
+                <td className="p-2 text-gray-400">
+                  <div className="text-xs mb-1">{u.expiryDaysLeft != null ? `${u.expiryDaysLeft}d left` : 'No expiry'}</div>
+                  {expiryEditor[u._id] ? (
+                    <div className="flex gap-1 items-center">
+                      <input type="number" min="1" placeholder="Val" className="w-12 bg-slate-800 border border-slate-700 rounded px-1 py-0.5 text-white text-[11px]" value={expiryEditor[u._id].value || ''} onChange={e => setExpiryEditor(prev => ({ ...prev, [u._id]: { ...prev[u._id], value: e.target.value } }))} />
+                      <select className="bg-slate-800 border border-slate-700 rounded px-1 py-0.5 text-white text-[11px]" value={expiryEditor[u._id].unit} onChange={e => setExpiryEditor(prev => ({ ...prev, [u._id]: { ...prev[u._id], unit: e.target.value } }))}>
+                        {EXPIRY_UNITS.map(unit => <option key={unit.value} value={unit.value}>{unit.value}</option>)}
+                      </select>
+                      <button onClick={() => applyRowExpiry(u._id)} className="text-emerald-400 text-[10px] px-1">✓</button>
+                      <button onClick={() => setExpiryEditor(prev => { const n = { ...prev }; delete n[u._id]; return n; })} className="text-gray-500 text-[10px] px-1">✕</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setExpiryEditor(prev => ({ ...prev, [u._id]: { value: '', unit: 'days' } }))} className="text-blue-400 text-[11px] underline">Set expiry</button>
+                  )}
+                </td>
                 <td className="p-2 text-gray-500 text-xs">{u.ipAddress || '-'}</td>
                 <td className="p-2 text-gray-500 text-xs">{u.lastActiveAgo}</td>
                 <td className="p-2 text-gray-500 text-xs">{u.lastSendAgo}</td>
                 <td className="p-2">
                   <div className="flex gap-1">
-                    <input type="number" placeholder="Limit" className="w-16 bg-slate-800 border border-slate-700 rounded px-1 py-1 text-white text-xs" defaultValue={u.sendingLimit} onBlur={async (e) => { await api('updateUserLimit', { userId: u._id, limit: parseInt(e.target.value) }); }} />
-                    <input type="number" placeholder="Days" className="w-16 bg-slate-800 border border-slate-700 rounded px-1 py-1 text-white text-xs" onBlur={async (e) => { if (e.target.value) { await api('updateUserExpiry', { userId: u._id, expiryDays: parseInt(e.target.value) }); load(); } }} />
                     {u.status === 'active' ? <button disabled={acting === u._id} onClick={async () => { setActing(u._id); await withLoading?.('Blocking user...', async () => { await api('suspendUser', { userId: u._id }); }); setActing(null); load(); }} className="text-yellow-400 text-xs px-2 disabled:opacity-50">{acting === u._id ? <BtnSpinner size={10} /> : 'Block'}</button> : <button disabled={acting === u._id} onClick={async () => { setActing(u._id); await withLoading?.('Activating user...', async () => { await api('activateUser', { userId: u._id }); }); setActing(null); load(); }} className="text-green-400 text-xs px-2 disabled:opacity-50">{acting === u._id ? <BtnSpinner size={10} /> : 'Unblock'}</button>}
                     <button disabled={acting === u._id} onClick={async () => { if (confirm('Delete user?')) { setActing(u._id); await withLoading?.('Deleting user...', async () => { await api('deleteUser', { userId: u._id }); }); setActing(null); load(); } }} className="text-red-400 disabled:opacity-50">{acting === u._id ? <BtnSpinner size={12} color="text-red-400" /> : <Icon.Trash />}</button>
                   </div>
                 </td>
               </tr>
             ))}
-            {users.length === 0 && <tr><td colSpan="9" className="text-center text-gray-600 py-8">No users yet.</td></tr>}
+            {users.length === 0 && <tr><td colSpan="9" className="text-center text-gray-600 py-8">No users yet. Click "Create User" to add one.</td></tr>}
           </tbody>
         </table>
       </div>

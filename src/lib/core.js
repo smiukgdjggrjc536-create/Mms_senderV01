@@ -783,14 +783,15 @@ async function callGemini(geminiApi, promptText, opts = {}) {
   if (!geminiApi) {
     return { ok: false, status: 0, error: 'No Gemini API configured', hint: 'Admin must add a Gemini API key in API Management.' };
   }
-  // Validate key format — real Gemini keys start with "AIza"
-  if (!geminiApi.apiKey || !geminiApi.apiKey.startsWith('AIza')) {
-    const msg = `Gemini API key format looks invalid (should start with "AIzaSy..."). Current key starts with "${(geminiApi.apiKey || '').substring(0, 8)}..."`;
+  // NOTE: We no longer hard-reject keys that don't start with "AIza".
+  // The admin may configure keys in any format (e.g. custom gateway keys,
+  // partner API keys, etc.). We attempt the real API call and let the
+  // upstream service decide. We only record a soft warning on the doc so
+  // the admin can see it in diagnostics — but we still try.
+  if (!geminiApi.apiKey) {
+    const msg = 'Gemini API key is empty. Add a key in Admin → API Management → Gemini.';
     await GeminiApi.findByIdAndUpdate(geminiApi._id, { lastError: msg }).catch(() => {});
-    return {
-      ok: false, status: 400, error: msg,
-      hint: 'Get a FREE valid key from https://aistudio.google.com/apikey — then update it in Admin Panel → API Management → Gemini.',
-    };
+    return { ok: false, status: 400, error: msg, hint: 'Add a Gemini API key in Admin → API Management → Gemini.' };
   }
   const temperature = opts.temperature ?? 0.7;
   const maxOutputTokens = opts.maxOutputTokens ?? 1024;
@@ -1544,6 +1545,35 @@ async function logActivity(actorId, actorType, actorEmail, action, details, ipAd
 }
 
 // ============================================================================
+// Expiry Calculation Helper
+// ----------------------------------------------------------------------------
+// Converts a { value, unit } pair into a concrete future Date.
+// Supported units: 'hours' | 'days' | 'weeks' | 'months' | 'years'
+// Falls back to days if the unit is unknown, and to a sensible default if
+// no value is supplied.
+// ============================================================================
+const EXPIRY_UNIT_MS = {
+  hours: 60 * 60 * 1000,
+  days: 24 * 60 * 60 * 1000,
+  weeks: 7 * 24 * 60 * 60 * 1000,
+};
+function computeExpiryDate(value, unit) {
+  const v = Number(value);
+  if (!Number.isFinite(v) || v <= 0) return null;
+  const u = String(unit || 'days').toLowerCase();
+  if (u === 'months' || u === 'month' || u === 'মাস') {
+    // approximate month = 30 days
+    return new Date(Date.now() + v * 30 * 24 * 60 * 60 * 1000);
+  }
+  if (u === 'years' || u === 'year' || u === 'বছর') {
+    // approximate year = 365 days
+    return new Date(Date.now() + v * 365 * 24 * 60 * 60 * 1000);
+  }
+  const ms = EXPIRY_UNIT_MS[u] || EXPIRY_UNIT_MS.days;
+  return new Date(Date.now() + v * ms);
+}
+
+// ============================================================================
 // App Settings Helper
 // ============================================================================
 
@@ -1761,6 +1791,8 @@ export {
   // App settings
   getAppSettings,
   updateAppSettings,
+  // Expiry calculation
+  computeExpiryDate,
   // Alerts
   sendAlert,
   // Config files

@@ -88,10 +88,11 @@ function UserLogin({ onLoginSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    // Client-side validation: 4 letters + 2 digits, no @
-    const cleanId = loginId.trim().toUpperCase();
-    if (!/^[A-Z]{4}[0-9]{2}$/.test(cleanId)) {
-      setError('User ID must be exactly 4 letters followed by 2 digits (e.g. SAMU01). No @ symbol, no email.');
+    // NO format restrictions — the user logs in with whatever username/password
+    // the admin created the account with. We only check that both fields are filled.
+    const cleanId = loginId.trim();
+    if (!cleanId || !password) {
+      setError('Please enter your username and password.');
       return;
     }
     setLoading(true);
@@ -154,12 +155,12 @@ function UserLogin({ onLoginSuccess }) {
         <div className="bg-gray-900/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-800 shadow-2xl">
           <div className="mb-6 text-center">
             <h2 className="text-xl font-semibold text-white">Sign In to Your Account</h2>
-            <p className="text-xs text-gray-500 mt-1">Enter your User ID and password to continue</p>
+            <p className="text-xs text-gray-500 mt-1">Enter your username and password to continue</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1.5">User ID <span className="text-purple-400/70 text-xs">(4 letters + 2 digits)</span></label>
+              <label className="block text-sm text-gray-400 mb-1.5">Username</label>
               <div className="relative">
                 <Icon.User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
                 <input
@@ -167,14 +168,13 @@ function UserLogin({ onLoginSuccess }) {
                   value={loginId}
                   onChange={(e) => setLoginId(e.target.value)}
                   required
-                  autoCapitalize="characters"
                   autoCorrect="off"
                   spellCheck={false}
-                  placeholder="e.g. SAMU01"
-                  className="w-full pl-10 pr-3 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm uppercase tracking-wider font-mono"
+                  placeholder="Enter your username"
+                  className="w-full pl-10 pr-3 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm font-mono"
                 />
               </div>
-              <p className="text-[10px] text-gray-600 mt-1.5">Format: exactly 4 letters then 2 numbers (no @, no email). Contact admin if you don't have an ID.</p>
+              <p className="text-[10px] text-gray-600 mt-1.5">Use the username and password your admin gave you. No format restrictions.</p>
             </div>
 
             <div>
