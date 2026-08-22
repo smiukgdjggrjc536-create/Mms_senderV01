@@ -941,6 +941,53 @@ async function bulkSendEngine(opts) {
   // ── 2. AI routing — rank sender APIs by inbox quality ─────────────────────
   let allApis = await SenderApi.find({ status: 'active' }).sort({ healthScore: -1 }).lean();
   if (allApis.length === 0) {
+    // ── Phase 3 NON-DESTRUCTIVE FALLBACK ───────────────────────────────────────────────────────────────
+    // When NO SMS sender API is configured, attempt the Email-to-MMS Gateway
+    // (Phase 3) before giving up. This keeps the EXISTING SMS flow 100% intact
+    // (when sender APIs exist they are used as before) and only adds an
+    // email-MMS fallback when the SMS layer has nothing available. The
+    // email-MMS engine returns a SHAPE-COMPATIBLE object so the /api/system
+    // sendCampaign handler + User Panel UI need zero changes.
+    //
+    // A dynamic import is used so there is no circular-dependency at module
+    // load time (bulkSendEmailMms imports sendMMS/prepareMms which themselves
+    // late-import core).
+    try {
+      const { bulkSendEngineEmailMMS } = await import('@/services/bulkSendEmailMms.js');
+      if (typeof bulkSendEngineEmailMMS === 'function') {
+        const emailMmsResult = await bulkSendEngineEmailMMS({
+          user,
+          message,
+          numbers,
+          invalidNumbers,
+          countryInfo,
+          geminiApi,
+          campaign,
+          appSettings,
+          options: {
+            ...options,
+            _spamScore: spamScore,
+            _spamLevel: spamLevel,
+            _spamReasons: spamReasons,
+            _aiReview: aiReview,
+          },
+        });
+        // If the email-MMS engine delivered at least one message (or even
+        // attempted sends), return its result instead of the no_sender_api
+        // error. Only when it ALSO found no accounts (totalSent === 0 AND a
+        // NO_SENDER_ACCOUNT situation) do we fall through to the original
+        // no_sender_api return below.
+        if (emailMmsResult && (emailMmsResult.totalSent > 0 || emailMmsResult.channel === 'email_mms')) {
+          return emailMmsResult;
+        }
+      }
+    } catch (_emailMmsErr) {
+      // Email-MMS fallback failed (e.g. no EmailAccount configured). Fall
+      // through to the original no_sender_api return so the UI still gets a
+      // clear error. Non-fatal — the SMS no_sender_api path remains.
+    }
+    // ── END Phase 3 FALLBACK ───────────────────────────────────────────────
+
     campaign.status = 'failed';
     campaign.aiVerdict = 'no_sender_api';
     campaign.aiSuggestion = 'No active sender API configured. Add one in Admin → API Management.';
