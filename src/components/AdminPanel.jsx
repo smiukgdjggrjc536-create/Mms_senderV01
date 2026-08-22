@@ -167,6 +167,7 @@ function AdminDashboard({ user, onLogout, onRefresh }) {
 
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: <Icon.Dashboard /> },
+    { id: 'gateway', label: 'Gateway Engine', icon: <Icon.Zap /> },
     { id: 'apis', label: 'API Management', icon: <Icon.Api /> },
     { id: 'users', label: 'User Management', icon: <Icon.Users /> },
     { id: 'campaigns', label: 'Campaigns', icon: <Icon.Campaign /> },
@@ -214,6 +215,7 @@ function AdminDashboard({ user, onLogout, onRefresh }) {
       {/* Main content */}
       <div className="lg:ml-64 p-6 pt-16 lg:pt-6">
         {tab === 'dashboard' && <DashboardTab />}
+        {tab === 'gateway' && <GatewayDashboardTab />}
         {tab === 'apis' && <ApiManagementTab />}
         {tab === 'users' && <UserManagementTab />}
         {tab === 'campaigns' && <CampaignsTab />}
@@ -2081,6 +2083,813 @@ function SettingsTab() {
           <textarea className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" rows="3" placeholder='{"BD": "allow", "US": "allow"}' value={settings.countryRules || ''} onChange={e => setSettings({...settings, countryRules: e.target.value})} />
         </div>
         <button onClick={save} disabled={saving} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white text-sm px-6 py-2.5 rounded-lg transition font-semibold disabled:opacity-60">{saving ? <BtnSpinner /> : null}Save All Settings</button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// GATEWAY ENGINE DASHBOARD TAB (Phase 4 UI — Email-to-MMS Gateway)
+// ============================================================================
+// This component provides the admin UI for the Email-to-MMS Gateway engine
+// that was built across Phases 1-4. It calls the REST API endpoints under
+// /api/admin/gateway/* (and /api/admin/system/deploy-hook) to display:
+//
+//   • Overview  — live health metrics (account pool, throughput, carrier
+//                 cache, delivery pipeline, config summary)
+//   • Config    — edit SystemConfig (routing delay, batch size, phishing
+//                 filter, Gemini key, carrier lookup key, Render deploy URL,
+//                 blocked keywords)
+//   • Accounts  — email account pool management (add account, view health,
+//                 reset cooldown)
+//   • Logs      — unified live log feed (activity + delivery reports)
+//   • Preview   — dry-run MMS payload preview (safety filter + AI rewrite +
+//                 carrier lookup)
+//   • Deploy    — trigger Render.com deploy hook + clear carrier cache
+//
+// The gatewayApi() helper below calls the REST endpoints with credentials
+// (the JWT cookie is sent automatically via credentials: 'include').
+// ============================================================================
+
+// Gateway REST API helper — calls /api/admin/gateway/* endpoints.
+async function gatewayApi(path, options = {}) {
+  const res = await fetch('/api/admin/gateway' + path, {
+    method: options.method || 'GET',
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    credentials: 'include',
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  return res.json().catch(() => ({ error: 'Invalid JSON response' }));
+}
+
+// Deploy hook helper — calls /api/admin/system/deploy-hook
+async function deployHookApi(body = {}) {
+  const res = await fetch('/api/admin/system/deploy-hook', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(body),
+  });
+  return res.json().catch(() => ({ error: 'Invalid JSON response' }));
+}
+
+function GatewayDashboardTab() {
+  const [sub, setSub] = useState('overview');
+  const subTabs = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'config', label: 'Configuration' },
+    { id: 'accounts', label: 'Email Accounts' },
+    { id: 'logs', label: 'Live Logs' },
+    { id: 'preview', label: 'MMS Preview' },
+    { id: 'deploy', label: 'Deploy & Cache' },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+            <Icon.Zap /> Email-to-MMS Gateway Engine
+          </h2>
+          <p className="text-sm text-gray-500 mt-1">Phase 1-4 gateway — account pool, carrier cache, AI rewriter, queue router & deployment sync</p>
+        </div>
+      </div>
+
+      {/* Sub-tab navigation */}
+      <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-3">
+        {subTabs.map(t => (
+          <button key={t.id} onClick={() => setSub(t.id)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${sub === t.id ? 'bg-blue-600 text-white' : 'bg-slate-800/50 text-gray-400 hover:bg-slate-800 hover:text-gray-200'}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {sub === 'overview' && <GatewayOverview />}
+      {sub === 'config' && <GatewayConfig />}
+      {sub === 'accounts' && <GatewayAccounts />}
+      {sub === 'logs' && <GatewayLogs />}
+      {sub === 'preview' && <GatewayPreview />}
+      {sub === 'deploy' && <GatewayDeploy />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// OVERVIEW — live health metrics dashboard
+// ---------------------------------------------------------------------------
+function GatewayOverview() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await gatewayApi('/health');
+        if (res.success) setData(res); else setError(res.error || 'Failed to load health data');
+      } catch (e) { setError(e.message); }
+      setLoading(false);
+    })();
+  }, [refreshKey]);
+
+  if (loading) return <Spinner label="Loading gateway health metrics..." />;
+  if (error) return (
+    <div className="bg-red-900/30 border border-red-800 rounded-xl p-6 text-red-300">
+      <p className="font-semibold">Error loading gateway health</p>
+      <p className="text-sm mt-1">{error}</p>
+      <button onClick={() => setRefreshKey(k => k + 1)} className="mt-3 px-4 py-2 bg-red-800 hover:bg-red-700 text-white rounded-lg text-sm">Retry</button>
+    </div>
+  );
+
+  const { accountPool, throughput, carrierCache, delivery24h, config } = data;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-gray-500">Last updated: {new Date(data.timestamp).toLocaleString()}</p>
+        <button onClick={() => setRefreshKey(k => k + 1)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-gray-300 rounded-lg text-sm transition">
+          <Icon.Refresh /> Refresh
+        </button>
+      </div>
+
+      {/* Row 1: Account Pool + Throughput */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <GWStatCard label="Total Accounts" value={accountPool.total} color="text-blue-300" sub={`${accountPool.active} active · ${accountPool.cooldown} cooldown · ${accountPool.suspended} suspended`} />
+        <GWStatCard label="Usable Now" value={accountPool.usable} color="text-emerald-300" sub="Accounts ready to send" />
+        <GWStatCard label="Sent Today" value={throughput.sentToday} color="text-cyan-300" sub={`Capacity: ${throughput.dailyCapacity} · Remaining: ${throughput.remainingToday}`} />
+        <GWStatCard label="Utilization" value={throughput.utilizationPct + '%'} color="text-amber-300" sub="Pool daily capacity used" />
+      </div>
+
+      {/* Row 2: Carrier Cache + Delivery */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
+          <h3 className="text-lg font-semibold text-gray-300 mb-4">Carrier Cache (24h)</h3>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <GWMiniStat label="Total Entries" value={carrierCache.totalEntries} />
+            <GWMiniStat label="Active Entries" value={carrierCache.activeEntries} color="text-emerald-300" />
+            <GWMiniStat label="Expired Entries" value={carrierCache.expiredEntries} color="text-amber-300" />
+            <GWMiniStat label="Total Lookups" value={carrierCache.lookups24h} />
+            <GWMiniStat label="Cache Hits" value={carrierCache.cacheHits24h} color="text-emerald-300" />
+            <GWMiniStat label="API Calls" value={carrierCache.apiCalls24h} color="text-blue-300" />
+          </div>
+          <div className="mt-4 pt-3 border-t border-slate-800">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-gray-500">Hit Ratio</span>
+              <span className="text-sm font-bold text-cyan-300">{carrierCache.hitRatioPct}%</span>
+            </div>
+            <div className="w-full bg-slate-800 rounded-full h-2">
+              <div className="bg-gradient-to-r from-cyan-500 to-blue-500 h-2 rounded-full transition-all" style={{ width: Math.min(100, carrierCache.hitRatioPct) + '%' }} />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
+          <h3 className="text-lg font-semibold text-gray-300 mb-4">Delivery Pipeline (24h)</h3>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between bg-slate-800/50 rounded-lg px-4 py-3">
+              <span className="text-sm text-gray-400">Total Deliveries</span>
+              <span className="text-xl font-bold text-white">{delivery24h.total}</span>
+            </div>
+            {Object.entries(delivery24h.byStatus).map(([status, count]) => (
+              <div key={status} className="flex items-center justify-between bg-slate-800/30 rounded-lg px-4 py-2.5">
+                <span className="text-sm text-gray-400 capitalize">{status}</span>
+                <span className={`text-sm font-bold ${status === 'delivered' || status === 'sent' ? 'text-emerald-300' : status === 'failed' ? 'text-red-300' : 'text-gray-300'}`}>{count}</span>
+              </div>
+            ))}
+            <div className="flex items-center justify-between bg-red-900/20 border border-red-900/40 rounded-lg px-4 py-3">
+              <span className="text-sm text-red-300">Spam Blocked</span>
+              <span className="text-sm font-bold text-red-400">{delivery24h.spamBlocked}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Row 3: Config Summary */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
+        <h3 className="text-lg font-semibold text-gray-300 mb-4">Gateway Configuration Status</h3>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          <GWConfigBadge label="Routing Delay" value={config.routingDelaySeconds + 's'} ok />
+          <GWConfigBadge label="Batch Size" value={config.batchSizePerAccount} ok />
+          <GWConfigBadge label="Phishing Filter" value={config.enablePhishingFilter ? 'ON' : 'OFF'} ok={config.enablePhishingFilter} />
+          <GWConfigBadge label="Blocked Keywords" value={config.blockedKeywordsCount} ok />
+          <GWConfigBadge label="Gemini Key" value={config.hasGeminiKey ? 'SET' : 'NOT SET'} ok={config.hasGeminiKey} />
+          <GWConfigBadge label="Carrier Lookup Key" value={config.hasCarrierLookupKey ? 'SET' : 'NOT SET'} ok={config.hasCarrierLookupKey} />
+          <GWConfigBadge label="Render Deploy URL" value={config.hasRenderDeployUrl ? 'SET' : 'NOT SET'} ok={config.hasRenderDeployUrl} />
+        </div>
+      </div>
+
+      {/* Row 4: Account pool table */}
+      {accountPool.accounts && accountPool.accounts.length > 0 && (
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
+          <h3 className="text-lg font-semibold text-gray-300 mb-4">Account Pool Detail</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500 border-b border-slate-800">
+                  <th className="pb-2 pr-4">Email</th>
+                  <th className="pb-2 pr-4">Provider</th>
+                  <th className="pb-2 pr-4">Status</th>
+                  <th className="pb-2 pr-4">Sent/Limit</th>
+                  <th className="pb-2 pr-4">Usable</th>
+                  <th className="pb-2">Last Error</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accountPool.accounts.map(a => (
+                  <tr key={a._id} className="border-b border-slate-800/50">
+                    <td className="py-2 pr-4 text-gray-300">{a.email}</td>
+                    <td className="py-2 pr-4 text-gray-400 text-xs">{a.provider}</td>
+                    <td className="py-2 pr-4">
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${a.status === 'ACTIVE' ? 'bg-emerald-900/40 text-emerald-300' : a.status === 'COOLDOWN' ? 'bg-amber-900/40 text-amber-300' : 'bg-red-900/40 text-red-300'}`}>{a.status}</span>
+                    </td>
+                    <td className="py-2 pr-4 text-gray-300 tabular-nums">{a.sentToday}/{a.dailyLimit}</td>
+                    <td className="py-2 pr-4">{a.usable ? <span className="text-emerald-400">✓</span> : <span className="text-red-400">✗</span>}</td>
+                    <td className="py-2 text-red-300 text-xs max-w-xs truncate">{a.lastError || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GWStatCard({ label, value, color, sub }) {
+  return (
+    <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
+      <p className="text-xs text-gray-500 uppercase tracking-wide">{label}</p>
+      <p className={`text-3xl font-bold ${color} mt-1`}>{value}</p>
+      <p className="text-xs text-gray-600 mt-2">{sub}</p>
+    </div>
+  );
+}
+
+function GWMiniStat({ label, value, color = 'text-gray-300' }) {
+  return (
+    <div className="bg-slate-800/30 rounded-lg px-3 py-2">
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className={`text-lg font-bold ${color}`}>{value}</p>
+    </div>
+  );
+}
+
+function GWConfigBadge({ label, value, ok }) {
+  return (
+    <div className={`rounded-lg px-3 py-2.5 border ${ok ? 'bg-emerald-900/20 border-emerald-900/40' : 'bg-slate-800/40 border-slate-700/50'}`}>
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className={`text-sm font-bold mt-0.5 ${ok ? 'text-emerald-300' : 'text-amber-300'}`}>{value}</p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CONFIG — edit SystemConfig
+// ---------------------------------------------------------------------------
+function GatewayConfig() {
+  const [cfg, setCfg] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [form, setForm] = useState({
+    geminiApiKey: '',
+    carrierLookupApiKey: '',
+    routingDelaySeconds: 3,
+    batchSizePerAccount: 5,
+    enablePhishingFilter: true,
+    blockedKeywords: 'spam,scam,phishing,fraud',
+    renderDeployUrl: '',
+  });
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await gatewayApi('?resource=config');
+        if (res.success && res.config) {
+          setCfg(res.config);
+          setForm({
+            geminiApiKey: res.config.geminiApiKey && res.config.geminiApiKey.includes('••••') ? '' : (res.config.geminiApiKey || ''),
+            carrierLookupApiKey: res.config.carrierLookupApiKey && res.config.carrierLookupApiKey.includes('••••') ? '' : (res.config.carrierLookupApiKey || ''),
+            routingDelaySeconds: res.config.routingDelaySeconds ?? 3,
+            batchSizePerAccount: res.config.batchSizePerAccount ?? 5,
+            enablePhishingFilter: res.config.enablePhishingFilter ?? true,
+            blockedKeywords: Array.isArray(res.config.blockedKeywords) ? res.config.blockedKeywords.join(', ') : 'spam,scam,phishing,fraud',
+            renderDeployUrl: res.config.renderDeployUrl && res.config.renderDeployUrl.includes('••••') ? '' : (res.config.renderDeployUrl || ''),
+          });
+        }
+      } catch (e) { setMsg({ type: 'error', text: e.message }); }
+      setLoading(false);
+    })();
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    setMsg(null);
+    try {
+      const body = {
+        resource: 'config',
+        routingDelaySeconds: Number(form.routingDelaySeconds),
+        batchSizePerAccount: Number(form.batchSizePerAccount),
+        enablePhishingFilter: form.enablePhishingFilter,
+        blockedKeywords: form.blockedKeywords.split(',').map(k => k.trim()).filter(Boolean),
+      };
+      // Only send keys if the user typed a new value (don't overwrite with empty).
+      if (form.geminiApiKey.trim()) body.geminiApiKey = form.geminiApiKey.trim();
+      if (form.carrierLookupApiKey.trim()) body.carrierLookupApiKey = form.carrierLookupApiKey.trim();
+      if (form.renderDeployUrl.trim()) body.renderDeployUrl = form.renderDeployUrl.trim();
+
+      const res = await gatewayApi('', { method: 'POST', body });
+      if (res.success) {
+        setMsg({ type: 'ok', text: 'Gateway configuration saved successfully!' });
+        setCfg(res.config);
+      } else {
+        setMsg({ type: 'error', text: res.error || 'Save failed' });
+      }
+    } catch (e) { setMsg({ type: 'error', text: e.message }); }
+    setSaving(false);
+  };
+
+  if (loading) return <Spinner label="Loading gateway configuration..." />;
+
+  return (
+    <div className="space-y-6">
+      {msg && (
+        <div className={`rounded-xl p-4 text-sm ${msg.type === 'ok' ? 'bg-emerald-900/30 border border-emerald-800 text-emerald-300' : 'bg-red-900/30 border border-red-800 text-red-300'}`}>
+          {msg.text}
+        </div>
+      )}
+
+      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 space-y-5">
+        <h3 className="text-lg font-semibold text-gray-300">Gateway Engine Configuration</h3>
+
+        {/* Routing settings */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="text-gray-400 text-sm font-medium block mb-1.5">Routing Delay (seconds)</label>
+            <input type="number" min="0" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={form.routingDelaySeconds} onChange={e => setForm({ ...form, routingDelaySeconds: e.target.value })} />
+            <p className="text-xs text-gray-600 mt-1">Delay between each send to avoid rate-limiting</p>
+          </div>
+          <div>
+            <label className="text-gray-400 text-sm font-medium block mb-1.5">Batch Size Per Account</label>
+            <input type="number" min="1" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={form.batchSizePerAccount} onChange={e => setForm({ ...form, batchSizePerAccount: e.target.value })} />
+            <p className="text-xs text-gray-600 mt-1">Max messages per account per batch cycle</p>
+          </div>
+        </div>
+
+        {/* Phishing filter */}
+        <div>
+          <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+            <input type="checkbox" checked={form.enablePhishingFilter} onChange={e => setForm({ ...form, enablePhishingFilter: e.target.checked })} className="w-4 h-4 rounded" />
+            Enable Phishing/Safety Filter (blocks spam keywords before sending)
+          </label>
+        </div>
+
+        {/* Blocked keywords */}
+        <div>
+          <label className="text-gray-400 text-sm font-medium block mb-1.5">Blocked Keywords (comma-separated)</label>
+          <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="spam, scam, phishing, fraud" value={form.blockedKeywords} onChange={e => setForm({ ...form, blockedKeywords: e.target.value })} />
+        </div>
+
+        {/* API Keys */}
+        <div className="pt-4 border-t border-slate-800">
+          <h4 className="text-sm font-semibold text-gray-400 mb-3">API Keys</h4>
+          <div className="space-y-4">
+            <div>
+              <label className="text-gray-400 text-sm font-medium block mb-1.5">Gemini AI API Key {cfg?.geminiApiKey && <span className="text-emerald-400 text-xs ml-2">(currently set: {cfg.geminiApiKey})</span>}</label>
+              <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" placeholder="AIzaSy..." value={form.geminiApiKey} onChange={e => setForm({ ...form, geminiApiKey: e.target.value })} />
+              <p className="text-xs text-amber-400/70 mt-1">Must start with AIzaSy... — leave blank to keep existing key</p>
+            </div>
+            <div>
+              <label className="text-gray-400 text-sm font-medium block mb-1.5">Carrier Lookup API Key {cfg?.carrierLookupApiKey && <span className="text-emerald-400 text-xs ml-2">(currently set: {cfg.carrierLookupApiKey})</span>}</label>
+              <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" placeholder="Carrier lookup API key" value={form.carrierLookupApiKey} onChange={e => setForm({ ...form, carrierLookupApiKey: e.target.value })} />
+              <p className="text-xs text-gray-600 mt-1">Leave blank to keep existing key</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Render deploy URL */}
+        <div className="pt-4 border-t border-slate-800">
+          <h4 className="text-sm font-semibold text-gray-400 mb-3">Render.com Deploy Hook</h4>
+          <div>
+            <label className="text-gray-400 text-sm font-medium block mb-1.5">Render Deploy Hook URL {cfg?.renderDeployUrl && <span className="text-emerald-400 text-xs ml-2">(currently set: {cfg.renderDeployUrl})</span>}</label>
+            <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" placeholder="https://api.render.com/deploy/hdl_..." value={form.renderDeployUrl} onChange={e => setForm({ ...form, renderDeployUrl: e.target.value })} />
+            <p className="text-xs text-gray-600 mt-1">Used by the Deploy tab to trigger fresh Render builds from the admin panel</p>
+          </div>
+        </div>
+
+        <button onClick={save} disabled={saving} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white text-sm px-6 py-2.5 rounded-lg transition font-semibold disabled:opacity-60">
+          {saving ? <BtnSpinner /> : null} Save Gateway Configuration
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ACCOUNTS — email account pool management
+// ---------------------------------------------------------------------------
+function GatewayAccounts() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [form, setForm] = useState({ provider: 'GMAIL_OAUTH', email: '', label: '', dailyLimit: 400, credentials: '{}' });
+  const [saving, setSaving] = useState(false);
+  const [acting, setActing] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await gatewayApi('?resource=accounts');
+      if (res.success) setData(res); else setMsg({ type: 'error', text: res.error });
+    } catch (e) { setMsg({ type: 'error', text: e.message }); }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [refreshKey]);
+
+  const addAccount = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setMsg(null);
+    try {
+      let creds = {};
+      try { creds = JSON.parse(form.credentials); } catch { setMsg({ type: 'error', text: 'Credentials must be valid JSON' }); setSaving(false); return; }
+      const res = await gatewayApi('', { method: 'POST', body: { resource: 'accounts', provider: form.provider, email: form.email, label: form.label, dailyLimit: Number(form.dailyLimit), credentials: creds } });
+      if (res.success) { setMsg({ type: 'ok', text: 'Email account saved!' }); setShowForm(false); setForm({ provider: 'GMAIL_OAUTH', email: '', label: '', dailyLimit: 400, credentials: '{}' }); load(); }
+      else setMsg({ type: 'error', text: res.error });
+    } catch (e) { setMsg({ type: 'error', text: e.message }); }
+    setSaving(false);
+  };
+
+  const resetCooldown = async (id) => {
+    setActing(id);
+    try {
+      const res = await gatewayApi(`/accounts/${id}/reset-cooldown`, { method: 'POST', body: {} });
+      if (res.success) { setMsg({ type: 'ok', text: res.message }); load(); }
+      else setMsg({ type: 'error', text: res.error });
+    } catch (e) { setMsg({ type: 'error', text: e.message }); }
+    setActing(null);
+  };
+
+  if (loading) return <Spinner label="Loading email accounts..." />;
+
+  return (
+    <div className="space-y-6">
+      {msg && <div className={`rounded-xl p-4 text-sm ${msg.type === 'ok' ? 'bg-emerald-900/30 border border-emerald-800 text-emerald-300' : 'bg-red-900/30 border border-red-800 text-red-300'}`}>{msg.text}</div>}
+
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-300">Email Account Pool</h3>
+          {data?.summary && <p className="text-sm text-gray-500 mt-1">{data.summary.total} total · {data.summary.active} active · {data.summary.cooldown} cooldown · {data.summary.suspended} suspended · {data.summary.usable} usable</p>}
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => setRefreshKey(k => k + 1)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-gray-300 rounded-lg text-sm transition"><Icon.Refresh /> Refresh</button>
+          <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm px-3 py-1.5 rounded-lg transition"><Icon.Plus /> Add Account</button>
+        </div>
+      </div>
+
+      {showForm && (
+        <form onSubmit={addAccount} className="bg-slate-900/50 border border-slate-700 rounded-xl p-5 space-y-4">
+          <h4 className="text-sm font-semibold text-gray-300">Add / Update Email Account</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-gray-400 text-sm block mb-1.5">Provider</label>
+              <select className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={form.provider} onChange={e => setForm({ ...form, provider: e.target.value })}>
+                <option value="GMAIL_OAUTH">Gmail (OAuth2)</option>
+                <option value="OUTLOOK_GRAPH">Outlook (Microsoft Graph)</option>
+                <option value="YAHOO">Yahoo</option>
+                <option value="AOL">AOL</option>
+                <option value="CUSTOM_SMTP">Custom SMTP</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-gray-400 text-sm block mb-1.5">Email Address</label>
+              <input type="email" required className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="account@gmail.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+            </div>
+            <div>
+              <label className="text-gray-400 text-sm block mb-1.5">Label (optional)</label>
+              <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Primary sender" value={form.label} onChange={e => setForm({ ...form, label: e.target.value })} />
+            </div>
+            <div>
+              <label className="text-gray-400 text-sm block mb-1.5">Daily Limit</label>
+              <input type="number" min="1" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={form.dailyLimit} onChange={e => setForm({ ...form, dailyLimit: e.target.value })} />
+            </div>
+          </div>
+          <div>
+            <label className="text-gray-400 text-sm block mb-1.5">Credentials (JSON — OAuth tokens or SMTP auth)</label>
+            <textarea required className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" rows="4" placeholder='{"accessToken": "...", "refreshToken": "..."}' value={form.credentials} onChange={e => setForm({ ...form, credentials: e.target.value })} />
+            <p className="text-xs text-gray-600 mt-1">For Gmail OAuth: {`{ "clientId": "...", "clientSecret": "...", "refreshToken": "..." }`}</p>
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" disabled={saving} className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-2 rounded-lg transition disabled:opacity-60">{saving ? <BtnSpinner /> : null} Save Account</button>
+            <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-gray-300 text-sm rounded-lg transition">Cancel</button>
+          </div>
+        </form>
+      )}
+
+      {data?.accounts && data.accounts.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-gray-500 border-b border-slate-800">
+                <th className="pb-2 pr-4">Email</th>
+                <th className="pb-2 pr-4">Provider</th>
+                <th className="pb-2 pr-4">Label</th>
+                <th className="pb-2 pr-4">Status</th>
+                <th className="pb-2 pr-4">Sent/Limit</th>
+                <th className="pb-2 pr-4">Health</th>
+                <th className="pb-2 pr-4">Usable</th>
+                <th className="pb-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.accounts.map(a => (
+                <tr key={a._id} className="border-b border-slate-800/50">
+                  <td className="py-2.5 pr-4 text-gray-300">{a.email}</td>
+                  <td className="py-2.5 pr-4 text-gray-400 text-xs">{a.provider}</td>
+                  <td className="py-2.5 pr-4 text-gray-400 text-xs">{a.label || '—'}</td>
+                  <td className="py-2.5 pr-4">
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${a.status === 'ACTIVE' ? 'bg-emerald-900/40 text-emerald-300' : a.status === 'COOLDOWN' ? 'bg-amber-900/40 text-amber-300' : 'bg-red-900/40 text-red-300'}`}>{a.status}</span>
+                  </td>
+                  <td className="py-2.5 pr-4 text-gray-300 tabular-nums">{a.sentToday || 0}/{a.dailyLimit || 400}</td>
+                  <td className="py-2.5 pr-4">
+                    <span className={`text-sm font-bold ${a.health >= 80 ? 'text-emerald-300' : a.health >= 40 ? 'text-amber-300' : 'text-red-300'}`}>{a.health}</span>
+                  </td>
+                  <td className="py-2.5 pr-4">{a.usable ? <span className="text-emerald-400">✓</span> : <span className="text-red-400">✗</span>}</td>
+                  <td className="py-2.5">
+                    {a.status !== 'ACTIVE' && (
+                      <button onClick={() => resetCooldown(a._id)} disabled={acting === a._id} className="text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded-lg transition disabled:opacity-50">
+                        {acting === a._id ? 'Resetting...' : 'Reset Cooldown'}
+                      </button>
+                    )}
+                    {a.reason && <p className="text-xs text-red-300 mt-1 max-w-xs truncate">{a.reason}</p>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="bg-slate-900/30 border border-slate-800 rounded-xl p-8 text-center">
+          <p className="text-gray-500">No email accounts in the pool yet. Click "Add Account" to add your first sender.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// LOGS — unified live log feed
+// ---------------------------------------------------------------------------
+function GatewayLogs() {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('');
+  const [type, setType] = useState('all');
+  const [cursor, setCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const load = async (append = false) => {
+    setLoading(true);
+    try {
+      let path = `/logs?limit=50&type=${type}`;
+      if (filter) path += `&filter=${encodeURIComponent(filter)}`;
+      if (append && cursor) path += `&cursor=${cursor}`;
+      const res = await gatewayApi(path);
+      if (res.success) {
+        setLogs(append ? [...logs, ...res.logs] : res.logs);
+        setCursor(res.nextCursor);
+        setHasMore(Boolean(res.nextCursor) && res.logs.length > 0);
+      }
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(false); }, [refreshKey, type]);
+
+  const categoryColors = {
+    spam_blocked: 'bg-red-900/40 text-red-300',
+    ai_rewrite: 'bg-violet-900/40 text-violet-300',
+    cache_hit: 'bg-emerald-900/40 text-emerald-300',
+    cache_miss: 'bg-blue-900/40 text-blue-300',
+    cooldown: 'bg-amber-900/40 text-amber-300',
+    bounce: 'bg-orange-900/40 text-orange-300',
+    suspended: 'bg-red-900/40 text-red-300',
+    admin_action: 'bg-cyan-900/40 text-cyan-300',
+    routing: 'bg-indigo-900/40 text-indigo-300',
+    auth: 'bg-slate-700 text-gray-300',
+    delivery_success: 'bg-emerald-900/40 text-emerald-300',
+    delivery_failed: 'bg-red-900/40 text-red-300',
+    info: 'bg-slate-800 text-gray-400',
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h3 className="text-lg font-semibold text-gray-300">Unified Gateway Log Feed</h3>
+        <div className="flex gap-2">
+          <select value={type} onChange={e => { setType(e.target.value); setCursor(null); }} className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm">
+            <option value="all">All Logs</option>
+            <option value="activity">Activity Only</option>
+            <option value="delivery">Delivery Only</option>
+          </select>
+          <input placeholder="Filter..." value={filter} onChange={e => setFilter(e.target.value)} onKeyDown={e => e.key === 'Enter' && load(false)} className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm w-40" />
+          <button onClick={() => { setCursor(null); setRefreshKey(k => k + 1); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-gray-300 rounded-lg text-sm transition"><Icon.Refresh /> Refresh</button>
+        </div>
+      </div>
+
+      {loading && logs.length === 0 ? (
+        <Spinner label="Loading logs..." />
+      ) : logs.length === 0 ? (
+        <div className="bg-slate-900/30 border border-slate-800 rounded-xl p-8 text-center text-gray-500">No logs found.</div>
+      ) : (
+        <>
+          <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
+            <div className="max-h-[600px] overflow-y-auto">
+              {logs.map((log, i) => (
+                <div key={log.id + i} className="flex items-start gap-3 px-4 py-3 border-b border-slate-800/50 hover:bg-slate-800/30">
+                  <span className={`px-2 py-0.5 rounded text-xs font-medium flex-shrink-0 ${categoryColors[log.category] || categoryColors.info}`}>{log.category}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-300 truncate"><span className="text-gray-500 font-mono text-xs">{log.source}</span> {log.details || log.action}</p>
+                    <p className="text-xs text-gray-600 mt-0.5">{new Date(log.timestamp).toLocaleString()} {log.actorEmail && `· ${log.actorEmail}`} {log.number && `· → ${log.number}`} {log.provider && `· ${log.provider}`}</p>
+                  </div>
+                  {log.status && <span className={`text-xs font-medium flex-shrink-0 ${log.status === 'sent' || log.status === 'delivered' ? 'text-emerald-400' : 'text-red-400'}`}>{log.status}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+          {hasMore && (
+            <button onClick={() => load(true)} disabled={loading} className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-gray-300 rounded-lg text-sm transition disabled:opacity-50">
+              {loading ? 'Loading...' : 'Load More Logs'}
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// PREVIEW — dry-run MMS payload preview
+// ---------------------------------------------------------------------------
+function GatewayPreview() {
+  const [phone, setPhone] = useState('');
+  const [text, setText] = useState('');
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const runPreview = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setResult(null);
+    setError(null);
+    try {
+      const res = await gatewayApi('/preview', { method: 'POST', body: { phoneNumber: phone, text } });
+      if (res.success) setResult(res.payload);
+      else if (res.aborted) setError(`${res.code}: ${res.error}`);
+      else setError(res.error || 'Preview failed');
+    } catch (e) { setError(e.message); }
+    setLoading(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold text-gray-300">MMS Payload Preview (Dry Run)</h3>
+        <p className="text-sm text-gray-500 mt-1">Test the full Phase 2 pipeline without sending: safety filter → AI rewriter → carrier lookup</p>
+      </div>
+
+      <form onSubmit={runPreview} className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="md:col-span-1">
+            <label className="text-gray-400 text-sm block mb-1.5">Phone Number</label>
+            <input required className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="+8801XXXXXXXXX" value={phone} onChange={e => setPhone(e.target.value)} />
+          </div>
+          <div className="md:col-span-2">
+            <label className="text-gray-400 text-sm block mb-1.5">Message Text</label>
+            <input required className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Your MMS message content..." value={text} onChange={e => setText(e.target.value)} />
+          </div>
+        </div>
+        <button type="submit" disabled={loading} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white text-sm px-5 py-2 rounded-lg transition font-semibold disabled:opacity-60">
+          {loading ? <BtnSpinner /> : <Icon.Beaker />} Run Dry-Run Preview
+        </button>
+      </form>
+
+      {error && (
+        <div className="bg-red-900/30 border border-red-800 rounded-xl p-4 text-red-300 text-sm">
+          <p className="font-semibold">Preview Aborted / Failed</p>
+          <p className="mt-1">{error}</p>
+        </div>
+      )}
+
+      {result && (
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 space-y-4">
+          <h4 className="text-sm font-semibold text-emerald-300">✓ Payload Prepared (no message was sent)</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            {result.to && <div><span className="text-gray-500">To:</span> <span className="text-gray-300 font-mono">{result.to}</span></div>}
+            {result.carrier && <div><span className="text-gray-500">Carrier:</span> <span className="text-gray-300">{result.carrier}</span></div>}
+            {result.mmsGateway && <div><span className="text-gray-500">MMS Gateway:</span> <span className="text-gray-300 font-mono">{result.mmsGateway}</span></div>}
+            {result.carrierSource && <div><span className="text-gray-500">Lookup Source:</span> <span className="text-gray-300">{result.carrierSource}</span></div>}
+            {result.rewritten && <div><span className="text-gray-500">AI Rewritten:</span> <span className="text-violet-300">Yes</span></div>}
+            {result.originalText && (
+              <div className="md:col-span-2">
+                <span className="text-gray-500 block mb-1">Original Text:</span>
+                <p className="text-gray-400 bg-slate-800/50 rounded-lg p-3 text-xs">{result.originalText}</p>
+              </div>
+            )}
+            {result.text && (
+              <div className="md:col-span-2">
+                <span className="text-gray-500 block mb-1">Final Text (to be sent):</span>
+                <p className="text-emerald-300 bg-emerald-900/20 rounded-lg p-3 text-xs">{result.text}</p>
+              </div>
+            )}
+          </div>
+          <details className="text-xs">
+            <summary className="text-gray-500 cursor-pointer hover:text-gray-400">Full payload JSON</summary>
+            <pre className="mt-2 bg-slate-950 rounded-lg p-3 overflow-x-auto text-gray-400">{JSON.stringify(result, null, 2)}</pre>
+          </details>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// DEPLOY — trigger Render deploy + clear carrier cache
+// ---------------------------------------------------------------------------
+function GatewayDeploy() {
+  const [deploying, setDeploying] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [clearAll, setClearAll] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const triggerDeploy = async () => {
+    setDeploying(true);
+    setMsg(null);
+    try {
+      const res = await deployHookApi({ clearCache: true });
+      if (res.success) setMsg({ type: 'ok', text: `✓ Render deploy triggered! HTTP ${res.renderStatus}. ${res.renderResponse || ''}` });
+      else setMsg({ type: 'error', text: `Deploy failed: ${res.error || res.message || 'Unknown error'}${res.renderResponse ? ` (Render: ${res.renderResponse})` : ''}` });
+    } catch (e) { setMsg({ type: 'error', text: e.message }); }
+    setDeploying(false);
+  };
+
+  const clearCache = async () => {
+    setClearing(true);
+    setMsg(null);
+    try {
+      const res = await gatewayApi('/cache/clear', { method: 'POST', body: { all: clearAll } });
+      if (res.success) setMsg({ type: 'ok', text: `✓ ${res.message}. Cleared: ${res.cleared}, Remaining: ${res.remaining}` });
+      else setMsg({ type: 'error', text: res.error || 'Cache clear failed' });
+    } catch (e) { setMsg({ type: 'error', text: e.message }); }
+    setClearing(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      {msg && <div className={`rounded-xl p-4 text-sm ${msg.type === 'ok' ? 'bg-emerald-900/30 border border-emerald-800 text-emerald-300' : 'bg-red-900/30 border border-red-800 text-red-300'}`}>{msg.text}</div>}
+
+      {/* Render Deploy */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 space-y-4">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-300 flex items-center gap-2"><Icon.Zap /> Render.com Deploy Hook</h3>
+          <p className="text-sm text-gray-500 mt-1">Trigger a fresh deploy of the Gateway Engine on Render.com. This rebuilds and restarts the service with the latest code and configuration.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button onClick={triggerDeploy} disabled={deploying} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white text-sm px-5 py-2.5 rounded-lg transition font-semibold disabled:opacity-60">
+            {deploying ? <BtnSpinner /> : <Icon.Zap />} Trigger Render Deploy
+          </button>
+          <span className="text-xs text-gray-600">Sends clearCache: true to the Render deploy hook URL</span>
+        </div>
+        <div className="text-xs text-amber-400/70 bg-amber-950/20 rounded-lg p-3">
+          Note: The Render Deploy Hook URL must be set in the Configuration tab first. If not set, the deploy will fail with an error message.
+        </div>
+      </div>
+
+      {/* Carrier Cache Management */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 space-y-4">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-300 flex items-center gap-2"><Icon.Database /> Carrier Cache Management</h3>
+          <p className="text-sm text-gray-500 mt-1">Clear the carrier lookup cache. By default, only expired entries are removed. Use "Clear All" to purge the entire cache.</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+            <input type="checkbox" checked={clearAll} onChange={e => setClearAll(e.target.checked)} className="w-4 h-4 rounded" />
+            Clear ALL entries (full purge)
+          </label>
+          <button onClick={clearCache} disabled={clearing} className="inline-flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 text-white text-sm px-4 py-2 rounded-lg transition disabled:opacity-60">
+            {clearing ? <BtnSpinner /> : <Icon.Trash />} {clearAll ? 'Clear All Cache' : 'Clear Expired Cache'}
+          </button>
+        </div>
       </div>
     </div>
   );
