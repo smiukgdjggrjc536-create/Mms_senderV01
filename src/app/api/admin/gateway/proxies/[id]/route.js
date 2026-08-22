@@ -50,8 +50,9 @@ export async function GET(req, { params }) {
     const auth = await verifyAdmin(req);
     if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
 
+    const { id } = await params;
     await connectDB();
-    const proxy = await ProxyConfig.findById(params.id).lean();
+    const proxy = await ProxyConfig.findById(id).lean();
     if (!proxy) {
       return jsonResponse({ error: 'Proxy not found' }, 404);
     }
@@ -91,10 +92,11 @@ export async function PATCH(req, { params }) {
     const auth = await verifyAdmin(req);
     if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
 
+    const { id } = await params;
     const body = await req.json();
     await connectDB();
 
-    const proxy = await ProxyConfig.findById(params.id);
+    const proxy = await ProxyConfig.findById(id);
     if (!proxy) {
       return jsonResponse({ error: 'Proxy not found' }, 404);
     }
@@ -161,11 +163,12 @@ export async function POST(req, { params }) {
     const auth = await verifyAdmin(req);
     if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
 
+    const { id } = await params;
     const body = await req.json();
     const { action } = body;
     await connectDB();
 
-    const proxy = await ProxyConfig.findById(params.id);
+    const proxy = await ProxyConfig.findById(id);
     if (!proxy) {
       return jsonResponse({ error: 'Proxy not found' }, 404);
     }
@@ -264,14 +267,15 @@ export async function DELETE(req, { params }) {
     const auth = await verifyAdmin(req);
     if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
 
+    const { id } = await params;
     await connectDB();
-    const proxy = await ProxyConfig.findById(params.id);
+    const proxy = await ProxyConfig.findById(id);
     if (!proxy) {
       return jsonResponse({ error: 'Proxy not found' }, 404);
     }
 
     const label = proxy.label;
-    await ProxyConfig.findByIdAndDelete(params.id);
+    await ProxyConfig.findByIdAndDelete(id);
     await invalidateProxyCache();
 
     await logActivity(
@@ -280,7 +284,7 @@ export async function DELETE(req, { params }) {
       auth.decoded.username,
       'proxy_delete',
       `Deleted proxy: ${label}`,
-      params.id
+      id
     );
 
     return jsonResponse({
