@@ -16,6 +16,6 @@
 
 ## Section G: Build, Deploy & Verify
 - [x] G1. npm run build — zero errors, zero warnings
-- [x] G2. Commit + push to GitHub (f2c7b0f)
-- [ ] G3. Verify Render headless + proxy endpoints live (deploy in progress)
-- [ ] G4. Report to user
+- [x] G2. Commit + push to GitHub (66ddee1)
+- [x] G3. Verify Render headless + proxy endpoints live (all 11 CRUD tests passed on Render, Netlify, Vercel)
+- [x] G4. Report to user
