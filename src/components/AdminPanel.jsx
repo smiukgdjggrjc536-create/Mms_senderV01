@@ -715,6 +715,10 @@ function ApiManagementTab() {
   const [savingGemini, setSavingGemini] = useState(false);
   const [savingSender, setSavingSender] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
+  // Per-card inline add (add one Gemini API at a time under each box)
+  const [inlineGeminiCard, setInlineGeminiCard] = useState(null); // card id showing the inline form (or 'new' for the empty-state card)
+  const [inlineGeminiForm, setInlineGeminiForm] = useState({ name: '', apiKey: '', model: 'gemini-2.5-flash', limit: 1500, priority: 0 });
+  const [geminiSuccess, setGeminiSuccess] = useState(null); // { name } — shown as confirmation banner
 
   // Provider templates — auto-fill endpoint + fields when provider changes
   const PROVIDER_TEMPLATES = {
@@ -780,8 +784,40 @@ function ApiManagementTab() {
     setSavingGemini(true);
     const data = await api('addGeminiApi', geminiForm);
     setSavingGemini(false);
-    if (data.success) { setShowGeminiForm(false); setGeminiForm({ name: '', apiKey: '', model: 'gemini-2.5-flash', limit: 1500, priority: 0 }); setGeminiTestResult(null); load(); }
+    if (data.success) { setShowGeminiForm(false); setGeminiForm({ name: '', apiKey: '', model: 'gemini-2.5-flash', limit: 1500, priority: 0 }); setGeminiTestResult(null); setGeminiSuccess({ name: geminiForm.name || 'Gemini API' }); setTimeout(() => setGeminiSuccess(null), 5000); load(); }
     else alert(data.error);
+  };
+
+  // Add ONE Gemini API at a time — inline under a specific card
+  const addGeminiInline = async (e) => {
+    e.preventDefault();
+    if (!inlineGeminiForm.apiKey || !inlineGeminiForm.apiKey.startsWith('AIza')) {
+      setGeminiTestResult({ ok: false, error: 'API key অবশ্যই AIzaSy... দিয়ে শুরু হতে হবে।' });
+      return;
+    }
+    setSavingGemini(true);
+    const data = await api('addGeminiApi', inlineGeminiForm);
+    setSavingGemini(false);
+    if (data.success) {
+      setInlineGeminiCard(null);
+      setInlineGeminiForm({ name: '', apiKey: '', model: 'gemini-2.5-flash', limit: 1500, priority: 0 });
+      setGeminiTestResult(null);
+      setGeminiSuccess({ name: inlineGeminiForm.name || 'Gemini API' });
+      setTimeout(() => setGeminiSuccess(null), 5000);
+      load();
+    } else {
+      setGeminiTestResult({ ok: false, error: data.error || 'Failed to add Gemini API' });
+    }
+  };
+
+  // Test the inline Gemini key before saving
+  const testGeminiInline = async () => {
+    if (!inlineGeminiForm.apiKey) { setGeminiTestResult({ ok: false, error: 'Enter an API key first.' }); return; }
+    setTestingGemini(true);
+    setGeminiTestResult(null);
+    const data = await api('testGeminiApi', { apiKey: inlineGeminiForm.apiKey, model: inlineGeminiForm.model });
+    setGeminiTestResult(data);
+    setTestingGemini(false);
   };
 
   // Test a saved Gemini API from the list
@@ -1007,38 +1043,120 @@ function ApiManagementTab() {
         )}
         <div className="space-y-2">
           {geminiApis.map(a => (
-            <div key={a._id} className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-medium text-white">{a.name}</span>
-                  <span className="text-xs text-gray-500">{a.model}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded ${a.status === 'active' ? 'bg-green-900/40 text-green-400' : a.status === 'warning' ? 'bg-yellow-900/40 text-yellow-400' : 'bg-red-900/40 text-red-400'}`}>{a.status}</span>
-                  {a.apiKey && !a.apiKey.startsWith('AIza') && (
-                    <span className="text-xs px-2 py-0.5 rounded bg-red-900/50 text-red-300 border border-red-700/40">⚠️ Key format wrong</span>
+            <div key={a._id}>
+              <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-white">{a.name}</span>
+                    <span className="text-xs text-gray-500">{a.model}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded ${a.status === 'active' ? 'bg-green-900/40 text-green-400' : a.status === 'warning' ? 'bg-yellow-900/40 text-yellow-400' : 'bg-red-900/40 text-red-400'}`}>{a.status}</span>
+                    {a.apiKey && !a.apiKey.startsWith('AIza') && (
+                      <span className="text-xs px-2 py-0.5 rounded bg-red-900/50 text-red-300 border border-red-700/40">⚠️ Key format wrong</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => testGeminiApi(a._id)} disabled={testingGemini === a._id} className="flex items-center gap-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white text-xs px-2.5 py-1 rounded-lg transition">
+                      {testingGemini === a._id ? <><span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block"></span>Testing</> : <><Icon.Beaker />Test</>}
+                    </button>
+                    <label className="flex items-center gap-1 text-xs text-gray-500"><input type="checkbox" checked={a.autoRoute} onChange={async (e) => { await api('setAutoRoute', { id: a._id, type: 'gemini', autoRoute: e.target.checked }); load(); }} />Auto-Route</label>
+                    <button onClick={async () => { if (confirm('Delete?')) { await api('deleteGeminiApi', { id: a._id }); load(); } }} className="text-red-400 hover:text-red-300"><Icon.Trash /></button>
+                  </div>
+                </div>
+                <div className="flex gap-4 text-xs text-gray-500 mt-2"><span>Key: {a.apiKey}</span><span>Used: {a.used}/{a.limit}</span><span>Remaining: {a.remaining}</span><span>Health: {a.healthScore}%</span></div>
+                <div className="mt-2"><ProgressBar percent={a.limit > 0 ? Math.round((a.used / a.limit) * 100) : 0} /></div>
+                {geminiResult[a._id] && (
+                  <div className={`mt-2 text-xs p-2 rounded-lg ${geminiResult[a._id].ok ? 'bg-green-900/30 text-green-300 border border-green-800/40' : 'bg-red-900/30 text-red-300 border border-red-800/40'}`}>
+                    {geminiResult[a._id].ok ? `✅ ${geminiResult[a._id].message} (model: ${geminiResult[a._id].model})` : `❌ ${geminiResult[a._id].error}${geminiResult[a._id].hint ? ` — ${geminiResult[a._id].hint}` : ''}`}
+                  </div>
+                )}
+                {a.lastError && !geminiResult[a._id] && (
+                  <div className="mt-2 text-xs p-2 rounded-lg bg-red-900/20 text-red-300/80 border border-red-800/30">Last error: {a.lastError}</div>
+                )}
+              </div>
+              {/* Add button UNDER this box — add one Gemini API at a time */}
+              {geminiApis.length < 10 && (
+                <div className="mt-1.5">
+                  {inlineGeminiCard === a._id ? (
+                    <form onSubmit={addGeminiInline} className="bg-slate-800/40 border border-dashed border-blue-600/40 rounded-lg p-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Name (e.g. Gemini Backup)" value={inlineGeminiForm.name} onChange={e => setInlineGeminiForm({...inlineGeminiForm, name: e.target.value})} required />
+                      <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Gemini API Key (AIzaSy...)" value={inlineGeminiForm.apiKey} onChange={e => { setInlineGeminiForm({...inlineGeminiForm, apiKey: e.target.value}); setGeminiTestResult(null); }} required />
+                      <select className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={inlineGeminiForm.model} onChange={e => setInlineGeminiForm({...inlineGeminiForm, model: e.target.value})}>
+                        <option value="gemini-2.5-flash">gemini-2.5-flash (Recommended)</option>
+                        <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
+                        <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                        <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                        <option value="gemini-flash-latest">gemini-flash-latest</option>
+                      </select>
+                      <input type="number" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Daily Limit (default 1500)" value={inlineGeminiForm.limit} onChange={e => setInlineGeminiForm({...inlineGeminiForm, limit: parseInt(e.target.value)})} />
+                      <div className="md:col-span-2 flex items-center gap-2 flex-wrap">
+                        <button type="button" onClick={testGeminiInline} disabled={testingGemini} className="flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg transition">
+                          {testingGemini ? <><span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block"></span>Testing...</> : <><Icon.Beaker />Test before saving</>}
+                        </button>
+                        <button type="submit" disabled={savingGemini} className="flex items-center gap-1.5 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg transition">
+                          {savingGemini ? <><span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block"></span>Saving...</> : <><Icon.Plus />Add this Gemini API</>}
+                        </button>
+                        <button type="button" onClick={() => { setInlineGeminiCard(null); setInlineGeminiForm({ name: '', apiKey: '', model: 'gemini-2.5-flash', limit: 1500, priority: 0 }); setGeminiTestResult(null); }} className="text-xs text-gray-400 hover:text-white px-2 py-1.5">Cancel</button>
+                        {geminiTestResult && (
+                          <span className={`text-xs px-2.5 py-1 rounded-lg ${geminiTestResult.ok ? 'bg-green-900/40 text-green-300' : 'bg-red-900/40 text-red-300'}`}>
+                            {geminiTestResult.ok ? `✅ ${geminiTestResult.message}` : `❌ ${geminiTestResult.error}`}
+                          </span>
+                        )}
+                      </div>
+                    </form>
+                  ) : (
+                    <button onClick={() => { setInlineGeminiCard(a._id); setInlineGeminiForm({ name: '', apiKey: '', model: 'gemini-2.5-flash', limit: 1500, priority: 0 }); setGeminiTestResult(null); }} className="flex items-center gap-1.5 w-full justify-center bg-slate-800/30 hover:bg-blue-900/30 border border-dashed border-slate-700 hover:border-blue-600/50 text-gray-400 hover:text-blue-300 text-xs px-3 py-2 rounded-lg transition">
+                      <Icon.Plus /> Add Gemini API (একটা করে যোগ করুন)
+                    </button>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => testGeminiApi(a._id)} disabled={testingGemini === a._id} className="flex items-center gap-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white text-xs px-2.5 py-1 rounded-lg transition">
-                    {testingGemini === a._id ? <><span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block"></span>Testing</> : <><Icon.Beaker />Test</>}
-                  </button>
-                  <label className="flex items-center gap-1 text-xs text-gray-500"><input type="checkbox" checked={a.autoRoute} onChange={async (e) => { await api('setAutoRoute', { id: a._id, type: 'gemini', autoRoute: e.target.checked }); load(); }} />Auto-Route</label>
-                  <button onClick={async () => { if (confirm('Delete?')) { await api('deleteGeminiApi', { id: a._id }); load(); } }} className="text-red-400 hover:text-red-300"><Icon.Trash /></button>
-                </div>
-              </div>
-              <div className="flex gap-4 text-xs text-gray-500 mt-2"><span>Key: {a.apiKey}</span><span>Used: {a.used}/{a.limit}</span><span>Remaining: {a.remaining}</span><span>Health: {a.healthScore}%</span></div>
-              <div className="mt-2"><ProgressBar percent={a.limit > 0 ? Math.round((a.used / a.limit) * 100) : 0} /></div>
-              {geminiResult[a._id] && (
-                <div className={`mt-2 text-xs p-2 rounded-lg ${geminiResult[a._id].ok ? 'bg-green-900/30 text-green-300 border border-green-800/40' : 'bg-red-900/30 text-red-300 border border-red-800/40'}`}>
-                  {geminiResult[a._id].ok ? `✅ ${geminiResult[a._id].message} (model: ${geminiResult[a._id].model})` : `❌ ${geminiResult[a._id].error}${geminiResult[a._id].hint ? ` — ${geminiResult[a._id].hint}` : ''}`}
-                </div>
-              )}
-              {a.lastError && !geminiResult[a._id] && (
-                <div className="mt-2 text-xs p-2 rounded-lg bg-red-900/20 text-red-300/80 border border-red-800/30">Last error: {a.lastError}</div>
               )}
             </div>
           ))}
-          {geminiApis.length === 0 && <p className="text-gray-600 text-sm py-4 text-center">No Gemini APIs. Add one for AI spam filtering & chat support.</p>}
+          {geminiApis.length === 0 && (
+            <div className="bg-slate-900/30 border border-dashed border-slate-700 rounded-xl p-6 text-center">
+              <p className="text-gray-500 text-sm mb-3">No Gemini APIs yet. Add one for AI spam filtering & chat support.</p>
+              {inlineGeminiCard === 'new' ? (
+                <form onSubmit={addGeminiInline} className="bg-slate-800/40 border border-dashed border-blue-600/40 rounded-lg p-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-left">
+                  <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Name (e.g. Gemini Primary)" value={inlineGeminiForm.name} onChange={e => setInlineGeminiForm({...inlineGeminiForm, name: e.target.value})} required />
+                  <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Gemini API Key (AIzaSy...)" value={inlineGeminiForm.apiKey} onChange={e => { setInlineGeminiForm({...inlineGeminiForm, apiKey: e.target.value}); setGeminiTestResult(null); }} required />
+                  <select className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={inlineGeminiForm.model} onChange={e => setInlineGeminiForm({...inlineGeminiForm, model: e.target.value})}>
+                    <option value="gemini-2.5-flash">gemini-2.5-flash (Recommended)</option>
+                    <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
+                    <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                    <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                    <option value="gemini-flash-latest">gemini-flash-latest</option>
+                  </select>
+                  <input type="number" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Daily Limit (default 1500)" value={inlineGeminiForm.limit} onChange={e => setInlineGeminiForm({...inlineGeminiForm, limit: parseInt(e.target.value)})} />
+                  <div className="md:col-span-2 flex items-center gap-2 flex-wrap">
+                    <button type="button" onClick={testGeminiInline} disabled={testingGemini} className="flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg transition">
+                      {testingGemini ? <><span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block"></span>Testing...</> : <><Icon.Beaker />Test before saving</>}
+                    </button>
+                    <button type="submit" disabled={savingGemini} className="flex items-center gap-1.5 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg transition">
+                      {savingGemini ? <><span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block"></span>Saving...</> : <><Icon.Plus />Add this Gemini API</>}
+                    </button>
+                    <button type="button" onClick={() => { setInlineGeminiCard(null); setGeminiTestResult(null); }} className="text-xs text-gray-400 hover:text-white px-2 py-1.5">Cancel</button>
+                    {geminiTestResult && (
+                      <span className={`text-xs px-2.5 py-1 rounded-lg ${geminiTestResult.ok ? 'bg-green-900/40 text-green-300' : 'bg-red-900/40 text-red-300'}`}>
+                        {geminiTestResult.ok ? `✅ ${geminiTestResult.message}` : `❌ ${geminiTestResult.error}`}
+                      </span>
+                    )}
+                  </div>
+                </form>
+              ) : (
+                <button onClick={() => { setInlineGeminiCard('new'); setInlineGeminiForm({ name: '', apiKey: '', model: 'gemini-2.5-flash', limit: 1500, priority: 0 }); setGeminiTestResult(null); }} className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-2 rounded-lg transition">
+                  <Icon.Plus /> Add Gemini API
+                </button>
+              )}
+            </div>
+          )}
         </div>
+        {/* Success confirmation banner — "Gemini added successfully" */}
+        {geminiSuccess && (
+          <div className="mt-3 bg-green-900/30 border border-green-700/50 rounded-xl p-3 flex items-center gap-2 text-sm text-green-300 animate-pulse">
+            <span className="text-lg">✅</span>
+            <span><span className="font-bold text-green-200">{geminiSuccess.name}</span> নিজে অ্যাড হয়ে গেছে — Gemini API successfully added!</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2690,6 +2808,80 @@ function GatewayAccounts() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ provider: 'GMAIL_OAUTH', email: '', label: '', dailyLimit: 400, credentials: {} });
   const [testResult, setTestResult] = useState({});
+  // Gmail OAuth — candidates.json upload + auto-setup
+  const [gmailFile, setGmailFile] = useState(null);          // parsed candidates.json
+  const [gmailFileName, setGmailFileName] = useState('');    // display name
+  const [gmailFileError, setGmailFileError] = useState('');
+  const [oauthLoading, setOauthLoading] = useState(false);
+  const [oauthResult, setOauthResult] = useState(null);      // { success, message }
+
+  // Parse the uploaded candidates.json (Google OAuth client credentials JSON)
+  const handleGmailFile = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setGmailFileError(''); setOauthResult(null);
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      // Google's downloaded credentials JSON has shape:
+      //   { "installed": { "client_id", "client_secret", ... } }
+      // or { "web": { ... } }
+      const creds = json.installed || json.web || json;
+      const clientId = creds.client_id;
+      const clientSecret = creds.client_secret;
+      if (!clientId || !clientSecret) {
+        setGmailFileError('Invalid candidates.json — missing client_id or client_secret.');
+        setGmailFile(null); setGmailFileName('');
+        return;
+      }
+      setGmailFile({ clientId, clientSecret, redirectUris: creds.redirect_uris || [] });
+      setGmailFileName(file.name);
+      // Auto-fill the credentials in the form so manual save still works as fallback
+      setForm(f => ({ ...f, credentials: { ...f.credentials, clientId, clientSecret } }));
+    } catch {
+      setGmailFileError('Could not parse the file. Please upload a valid candidates.json from Google Cloud Console.');
+      setGmailFile(null); setGmailFileName('');
+    }
+  };
+
+  // Start the OAuth consent flow — opens a popup window
+  const startGmailOAuth = async () => {
+    if (!gmailFile) { setOauthResult({ success: false, message: 'Please upload candidates.json first.' }); return; }
+    setOauthLoading(true); setOauthResult(null);
+    const statePayload = {
+      clientId: gmailFile.clientId,
+      clientSecret: gmailFile.clientSecret,
+      label: form.label || '',
+      dailyLimit: form.dailyLimit || 400,
+      redirectOrigin: typeof window !== 'undefined' ? window.location.origin : '',
+    };
+    const state = btoa(JSON.stringify(statePayload));
+    const oauthUrl = `/api/auth/gmail?state=${encodeURIComponent(state)}`;
+    // Open in a centered popup
+    const w = 520, h = 700;
+    const left = (window.screen.width - w) / 2, top = (window.screen.height - h) / 2;
+    const popup = window.open(oauthUrl, 'gmail-oauth', `width=${w},height=${h},left=${left},top=${top},noopener,noreferrer`);
+    // Listen for the postMessage result from the callback page
+    const handler = (event) => {
+      if (event.data && event.data.type === 'gmail-oauth-result') {
+        window.removeEventListener('message', handler);
+        setOauthLoading(false);
+        setOauthResult({ success: event.data.success, message: event.data.message });
+        if (event.data.success) {
+          // Close the form + reload accounts after a short delay
+          setTimeout(() => { setShowForm(false); setGmailFile(null); setGmailFileName(''); load(); }, 1500);
+        }
+      }
+    };
+    window.addEventListener('message', handler);
+    // Fallback timeout — if popup closes without sending a message
+    setTimeout(() => {
+      if (popup && popup.closed) {
+        window.removeEventListener('message', handler);
+        setOauthLoading(false);
+      }
+    }, 120000);
+  };
 
   const load = async () => {
     try {
@@ -2809,10 +3001,47 @@ function GatewayAccounts() {
             <div className="bg-slate-900/50 rounded-xl p-4 border border-white/10">
               <p className="text-xs text-slate-400 uppercase font-semibold mb-3">Credentials — {providerInfo(form.provider).label}</p>
               {form.provider === 'GMAIL_OAUTH' && (
-                <div className="space-y-2">
+                <div className="space-y-3">
+                  {/* Candidates.json upload — the new OAuth flow */}
+                  <div className="bg-emerald-900/15 border border-emerald-700/30 rounded-lg p-3 space-y-2">
+                    <p className="text-xs text-emerald-300 font-semibold flex items-center gap-1.5">
+                      <IconByName name="upload" size={12} /> Gmail OAuth — candidates.json আপলোড করুন
+                    </p>
+                    <p className="text-[10px] text-slate-400 leading-relaxed">
+                      Google Cloud Console → APIs &amp; Services → Credentials → OAuth 2.0 Client ID →
+                      "Download JSON" করে ফাইলটি এখানে আপলোড করুন। তারপপর নিচের "Add" বাটনে চাপ দিলে
+                      ডিরেক্ট Google পারমিশন উইন্ডো ওপেন হবে — পারমিশন দিলে অ্যাকাউন্ট অটো-সেটআপ হয়ে যাবে।
+                    </p>
+                    <label className="flex items-center justify-center gap-2 cursor-pointer border-2 border-dashed border-emerald-600/40 hover:border-emerald-500/60 rounded-lg py-3 px-3 transition bg-emerald-900/10 hover:bg-emerald-900/20">
+                      <IconByName name="upload" size={16} className="text-emerald-400" />
+                      <span className="text-xs text-emerald-200">
+                        {gmailFileName ? `✓ ${gmailFileName}` : 'candidates.json নির্বাচন করুন (Click to upload)'}
+                      </span>
+                      <input type="file" accept=".json,application/json" onChange={handleGmailFile} className="hidden" />
+                    </label>
+                    {gmailFileError && <p className="text-xs text-rose-400">{gmailFileError}</p>}
+                    {gmailFile && (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button type="button" onClick={startGmailOAuth} disabled={oauthLoading}
+                          className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 disabled:opacity-50 text-white text-xs px-4 py-2 rounded-lg font-semibold transition">
+                          {oauthLoading ? <><span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block"></span>Waiting for Google permission…</> : <>🔗 Add (Google Permission খুলবে)</>}
+                        </button>
+                        <span className="text-[10px] text-slate-500">Client ID: {String(gmailFile.clientId).substring(0, 25)}…</span>
+                      </div>
+                    )}
+                    {oauthResult && (
+                      <div className={`text-xs p-2 rounded-lg ${oauthResult.success ? 'bg-green-900/40 text-green-300 border border-green-700/40' : 'bg-rose-900/40 text-rose-300 border border-rose-700/40'}`}>
+                        {oauthResult.success ? '✅' : '❌'} {oauthResult.message}
+                      </div>
+                    )}
+                    <p className="text-[10px] text-slate-500 border-t border-white/5 pt-2">
+                      ⚙️ Manual mode (optional): নিচের ঘরগুলোতা manually clientId / clientSecret / refreshToken বসালেও কাজ করবে।
+                    </p>
+                  </div>
+                  {/* Manual credential fields (fallback) */}
                   <input value={form.credentials.clientId || ''} onChange={e => setForm({ ...form, credentials: { ...form.credentials, clientId: e.target.value } })} placeholder="OAuth Client ID" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
                   <input value={form.credentials.clientSecret || ''} onChange={e => setForm({ ...form, credentials: { ...form.credentials, clientSecret: e.target.value } })} placeholder="OAuth Client Secret" type="password" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
-                  <input value={form.credentials.refreshToken || ''} onChange={e => setForm({ ...form, credentials: { ...form.credentials, refreshToken: e.target.value } })} placeholder="Refresh Token" type="password" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
+                  <input value={form.credentials.refreshToken || ''} onChange={e => setForm({ ...form, credentials: { ...form.credentials, refreshToken: e.target.value } })} placeholder="Refresh Token (auto-filled by OAuth)" type="password" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
                 </div>
               )}
               {form.provider === 'OUTLOOK_GRAPH' && (

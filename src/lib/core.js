@@ -348,6 +348,11 @@ const campaignSchema = new mongoose.Schema({
   countryCode: { type: String, default: null },
   batchSize: { type: Number, default: 5 },
   delayMs: { type: Number, default: 1200 },
+  jitterPct: { type: Number, default: 0 },        // Enterprise anti-spam: randomized delay ±%
+  humanize: { type: Boolean, default: false },    // Enterprise anti-spam: human-like timing patterns
+  polymorph: { type: Boolean, default: false },   // Enterprise anti-spam: AI per-message rewrite
+  dripMode: { type: Boolean, default: false },    // Enterprise anti-spam: spread sends over time
+  totalPolymorphed: { type: Number, default: 0 }, // count of messages rewritten by AI
   totalSent: { type: Number, default: 0 },
   totalDelivered: { type: Number, default: 0 },
   totalUndelivered: { type: Number, default: 0 },
@@ -999,6 +1004,42 @@ async function bulkSendEngine(opts) {
   const perHour = options.perHour || (appSettings && appSettings.rateLimitPerHour) || 0;
   const maxRetries = options.maxRetries != null ? options.maxRetries : 2;
 
+  // ── Enterprise Anti-Spam Sending Config (User Panel) ────────────────────
+  const jitterPct = Math.min(Math.max(Number(options.jitterPct) || 0, 0), 100); // 0-100%
+  const humanize = options.humanize === true;
+  const polymorph = options.polymorph === true;
+  const dripMode = options.dripMode === true;
+
+  // Helper: apply jitter to a base delay (randomized ±jitterPct%)
+  function applyJitter(base) {
+    if (jitterPct <= 0 || base <= 0) return base;
+    const variance = base * (jitterPct / 100);
+    return Math.round(base + (Math.random() * 2 - 1) * variance);
+  }
+
+  // Helper: humanize inter-message pause — simulates a human typing & pausing
+  // Adds occasional "micro-bursts" (short) and "thinking" (long) delays so
+  // the sending pattern never looks perfectly robotic / evenly-spaced.
+  function humanizedDelay(base) {
+    const jittered = applyJitter(base);
+    if (!humanize) return jittered;
+    const roll = Math.random();
+    if (roll < 0.15) return Math.round(jittered * 0.4);      // quick reply burst
+    if (roll < 0.30) return Math.round(jittered * 1.8);      // thoughtful pause
+    if (roll < 0.40) return Math.round(jittered * 2.5);      // longer break
+    return jittered + Math.round(Math.random() * 800);       // baseline + small noise
+  }
+
+  // Drip mode multiplies the base delay to spread the campaign gently over time.
+  // Effective delay ≈ base × 3 + extra per-batch ramp, preventing burst spikes.
+  function effectiveBatchDelay() {
+    let base = delayMs;
+    if (dripMode) {
+      base = Math.round(base * 3 + 2000); // gentle ramp, min 2s extra
+    }
+    return base;
+  }
+
   // ── 1. Spam scoring (heuristic + optional Gemini AI) ──────────────────────
   const heuristic = scoreSpamHeuristic(message);
   const spamReasons = [...(heuristic.reasons || [])];
@@ -1135,6 +1176,10 @@ async function bulkSendEngine(opts) {
   campaign.spamLevel = spamLevel;
   campaign.batchSize = batchSize;
   campaign.delayMs = delayMs;
+  campaign.jitterPct = jitterPct;
+  campaign.humanize = humanize;
+  campaign.polymorph = polymorph;
+  campaign.dripMode = dripMode;
   campaign.totalInvalid = invalidNumbers.length;
   await campaign.save();
 
@@ -1142,6 +1187,7 @@ async function bulkSendEngine(opts) {
   let totalSent = 0;
   let totalDelivered = 0;
   let totalUndelivered = 0;
+  let totalPolymorphed = 0;
   const apisUsed = new Set();
   let currentApiIndex = 0;
   let senderApiUsed = rankedApis[0] ? rankedApis[0].name : null;
@@ -1230,7 +1276,27 @@ async function bulkSendEngine(opts) {
 
       recordRateHit(apiId);
 
-      const result = await sendWithRetry(apiDoc, number, message, mediaUrl, maxRetries);
+      // ── Enterprise Anti-Spam: AI Polymorphism ──────────────────────────
+      // When polymorph is enabled, rewrite the message for THIS recipient so
+      // every message is structurally unique (carrier spam-filter evasion).
+      let effectiveMessage = message;
+      if (polymorph) {
+        try {
+          const rewriteOpts = geminiApi
+            ? { geminiApiKey: geminiApi.apiKey, model: geminiApi.model }
+            : {};
+          const pm = await rewriteWithPolymorph(message, rewriteOpts);
+          if (pm && pm.text && pm.rewritten) {
+            effectiveMessage = pm.text;
+            totalPolymorphed++;
+          }
+        } catch (_pmErr) {
+          // polymorph failure must NEVER halt the send — use original message
+          effectiveMessage = message;
+        }
+      }
+
+      const result = await sendWithRetry(apiDoc, number, effectiveMessage, mediaUrl, maxRetries);
       totalSent++;
 
       const dr = {
@@ -1270,24 +1336,39 @@ async function bulkSendEngine(opts) {
       if (!apiDoc || apiDoc.status !== 'active' || apiDoc.remaining <= 0) {
         if (!advanceApi()) break;
       }
+
+      // ── Enterprise Anti-Spam: Humanized inter-message pause ───────────
+      // When humanize or jitter is on, add a randomized micro-delay BETWEEN
+      // individual messages within a batch so the pattern isn't perfectly
+      // uniform (anti-spam bots flag machine-gun even spacing).
+      if (humanize || jitterPct > 0) {
+        const interMsgDelay = humanizedDelay(Math.round(delayMs * 0.35));
+        if (interMsgDelay > 0) await sleep(interMsgDelay);
+      }
     }
 
     // Live campaign progress update after each batch
     campaign.totalSent = totalSent;
     campaign.totalDelivered = totalDelivered;
     campaign.totalUndelivered = totalUndelivered;
+    campaign.totalPolymorphed = totalPolymorphed;
     campaign.senderApiName = senderApiUsed;
     await campaign.save();
 
     batchIndex++;
-    // Throttle between batches
-    if (delayMs > 0) await sleep(delayMs);
+    // Throttle between batches — apply jitter + drip + humanize to the inter-batch delay
+    const batchGap = effectiveBatchDelay();
+    if (batchGap > 0) {
+      const finalGap = humanize ? humanizedDelay(batchGap) : applyJitter(batchGap);
+      if (finalGap > 0) await sleep(finalGap);
+    }
   }
 
   // ── 5. Finalize campaign ──────────────────────────────────────────────────
   campaign.totalSent = totalSent;
   campaign.totalDelivered = totalDelivered;
   campaign.totalUndelivered = totalUndelivered;
+  campaign.totalPolymorphed = totalPolymorphed;
   campaign.status =
     totalSent === 0
       ? 'failed'
@@ -1333,6 +1414,9 @@ async function bulkSendEngine(opts) {
     deliveryReports,
     senderApiUsed,
     apisUsed: [...apisUsed],
+    // Enterprise anti-spam stats
+    antiSpamConfig: { jitterPct, humanize, polymorph, dripMode },
+    totalPolymorphed,
   };
 }
 

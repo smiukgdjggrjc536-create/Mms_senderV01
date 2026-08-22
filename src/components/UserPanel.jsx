@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { COUNTRY_SUPPORT, getCountryStats } from '@/lib/countrySupport';
 
 // ================================================================
-// Icon set (professional SVG, NO emoji)
+// Icon set (professional SVG, NO emoji in chrome — emoji only for flags)
 // ================================================================
 const Icon = {
   Send: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>,
@@ -33,6 +34,15 @@ const Icon = {
   Activity: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>,
   Upload: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>,
   Trash: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>,
+  Plus: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>,
+  Menu: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>,
+  Target: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>,
+  Layers: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>,
+  CheckCircle: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+  XCircle: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+  Pause: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+  Calendar: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>,
+  Users: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
 };
 
 // ================================================================
@@ -51,14 +61,14 @@ export default function UserPanel({ mode, user, onLoginSuccess, onLogout, onRefr
 function Spinner({ size = 16 }) {
   return (
     <div
-      className={`border-2 border-white/30 border-t-white rounded-full animate-spin`}
+      className="border-2 border-white/30 border-t-white rounded-full animate-spin"
       style={{ width: size, height: size }}
     />
   );
 }
 
 // ================================================================
-// USER LOGIN — purple/indigo enterprise theme, shows admin-set info
+// USER LOGIN — 5x enterprise polish: animated gradient, glass card, branding
 // ================================================================
 function UserLogin({ onLoginSuccess }) {
   const [loginId, setLoginId] = useState('');
@@ -68,7 +78,6 @@ function UserLogin({ onLoginSuccess }) {
   const [loading, setLoading] = useState(false);
   const [settings, setSettings] = useState(null);
 
-  // Fetch public app settings (platform name, description, contact)
   useEffect(() => {
     (async () => {
       try {
@@ -88,8 +97,6 @@ function UserLogin({ onLoginSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    // NO format restrictions — the user logs in with whatever username/password
-    // the admin created the account with. We only check that both fields are filled.
     const cleanId = loginId.trim();
     if (!cleanId || !password) {
       setError('Please enter your username and password.');
@@ -100,21 +107,13 @@ function UserLogin({ onLoginSuccess }) {
       const res = await fetch('/api/system', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ action: 'login', loginId: cleanId, password }),
       });
       const data = await res.json();
-      if (res.ok && data.success) {
-        onLoginSuccess({
-          role: data.role,
-          limit: data.limit,
-          sent: data.sent,
-          loginId: data.loginId || cleanId,
-          email: data.email || '',
-          status: 'active',
-        });
+      if (data.success) {
+        onLoginSuccess(data.user);
       } else {
-        setError(data.error || 'Login failed');
+        setError(data.error || 'Login failed. Check your credentials.');
       }
     } catch {
       setError('Network error. Please try again.');
@@ -123,118 +122,95 @@ function UserLogin({ onLoginSuccess }) {
   };
 
   const platformName = settings?.platformName || 'MMS Sender';
-  const description = settings?.description || 'Enterprise MMS Sending Platform';
-  const whatsapp = settings?.whatsapp || '';
-  const contactEmail = settings?.email || '';
-  const logoUrl = settings?.logoUrl || '';
+  const countryStats = getCountryStats();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-950 to-slate-900 flex items-center justify-center p-4">
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-72 h-72 bg-purple-600/20 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl"></div>
+    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4">
+      {/* Animated gradient background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950" />
+      <div className="absolute inset-0 opacity-30">
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-600 rounded-full mix-blend-screen filter blur-[120px] animate-pulse" />
+        <div className="absolute top-1/3 right-1/4 w-96 h-96 bg-indigo-600 rounded-full mix-blend-screen filter blur-[120px] animate-pulse" style={{ animationDelay: '1s' }} />
+        <div className="absolute bottom-0 left-1/3 w-96 h-96 bg-fuchsia-600 rounded-full mix-blend-screen filter blur-[120px] animate-pulse" style={{ animationDelay: '2s' }} />
       </div>
 
-      <div className="relative w-full max-w-md z-10">
-        {/* Logo / Title */}
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 mb-4 shadow-lg shadow-purple-500/30 overflow-hidden">
-            {logoUrl ? (
-              <img src={logoUrl} alt="logo" className="w-full h-full object-cover" />
-            ) : (
-              <Icon.Send className="w-8 h-8 text-white" />
-            )}
+      {/* Login card */}
+      <div className="relative z-10 w-full max-w-md">
+        <div className="backdrop-blur-2xl bg-white/5 border border-white/10 rounded-3xl p-8 shadow-2xl shadow-purple-900/30">
+          {/* Logo + branding */}
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 shadow-lg shadow-purple-500/30 mb-4 overflow-hidden">
+              {settings?.logoUrl ? <img src={settings.logoUrl} alt="logo" className="w-full h-full object-cover" /> : <Icon.Send className="w-10 h-10 text-white" />}
+            </div>
+            <h1 className="text-2xl font-bold text-white tracking-tight">{platformName}</h1>
+            <p className="text-sm text-gray-400 mt-1">{settings?.description || 'Enterprise Email-to-MMS Gateway Platform'}</p>
           </div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
-            {platformName}
-          </h1>
-          <p className="text-gray-400 text-sm mt-1">{description}</p>
-        </div>
 
-        {/* Login Card */}
-        <div className="bg-gray-900/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-800 shadow-2xl">
-          <div className="mb-6 text-center">
-            <h2 className="text-xl font-semibold text-white">Sign In to Your Account</h2>
-            <p className="text-xs text-gray-500 mt-1">Enter your username and password to continue</p>
+          {/* Trust indicators */}
+          <div className="flex items-center justify-center gap-4 mb-6 text-xs text-gray-400">
+            <span className="flex items-center gap-1"><Icon.Shield className="w-3.5 h-3.5 text-green-400" /> Spam-Free</span>
+            <span className="flex items-center gap-1"><Icon.Globe className="w-3.5 h-3.5 text-blue-400" /> {countryStats.totalCountries} Countries</span>
+            <span className="flex items-center gap-1"><Icon.Bolt className="w-3.5 h-3.5 text-purple-400" /> AI-Powered</span>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1.5">Username</label>
+              <label className="block text-xs font-medium text-gray-300 mb-1.5 uppercase tracking-wider">Username</label>
               <div className="relative">
                 <Icon.User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
                 <input
                   type="text"
                   value={loginId}
                   onChange={(e) => setLoginId(e.target.value)}
-                  required
-                  autoCorrect="off"
-                  spellCheck={false}
                   placeholder="Enter your username"
-                  className="w-full pl-10 pr-3 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm font-mono"
+                  className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                  autoComplete="username"
                 />
               </div>
-              <p className="text-[10px] text-gray-600 mt-1.5">Use the username and password your admin gave you. No format restrictions.</p>
             </div>
-
             <div>
-              <label className="block text-sm text-gray-400 mb-1.5">Password</label>
+              <label className="block text-xs font-medium text-gray-300 mb-1.5 uppercase tracking-wider">Password</label>
               <div className="relative">
                 <Icon.Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  required
-                  placeholder="••••••••"
-                  className="w-full pl-10 pr-10 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                  placeholder="Enter your password"
+                  className="w-full pl-11 pr-11 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                  autoComplete="current-password"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
-                >
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
                   {showPassword ? <Icon.EyeOff className="w-5 h-5" /> : <Icon.Eye className="w-5 h-5" />}
                 </button>
               </div>
             </div>
 
             {error && (
-              <div className="p-3 bg-red-900/40 border border-red-700/50 rounded-lg text-red-200 text-sm flex items-center gap-2">
-                <Icon.Alert className="w-4 h-4 flex-shrink-0" />
-                {error}
+              <div className="flex items-center gap-2 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-xl text-sm text-red-300">
+                <Icon.Alert className="w-4 h-4 flex-shrink-0" /> {error}
               </div>
             )}
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 text-white rounded-lg font-semibold transition shadow-lg shadow-purple-500/20 text-sm flex items-center justify-center gap-2"
+              className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-60 text-white rounded-xl font-semibold text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-purple-600/30"
             >
-              {loading ? <Spinner /> : null}
-              {loading ? 'Please wait...' : 'Sign In'}
+              {loading ? <><Spinner /> Signing in…</> : <><Icon.Lock className="w-4 h-4" /> Sign In</>}
             </button>
           </form>
 
-          {/* Contact info (admin-set) */}
-          {(whatsapp || contactEmail) && (
-            <div className="mt-5 pt-4 border-t border-gray-800 space-y-2">
-              <p className="text-xs text-gray-500 font-medium mb-2">Need help? Contact us:</p>
-              {whatsapp && (
-                <div className="flex items-center gap-2 text-xs text-gray-400">
-                  <Icon.Whatsapp className="w-4 h-4 text-green-500" />
-                  <span>{whatsapp}</span>
-                </div>
-              )}
-              {contactEmail && (
-                <div className="flex items-center gap-2 text-xs text-gray-400">
-                  <Icon.Mail className="w-4 h-4 text-indigo-400" />
-                  <span>{contactEmail}</span>
-                </div>
-              )}
+          {/* Contact footer */}
+          {(settings?.whatsapp || settings?.email || settings?.phone) && (
+            <div className="mt-6 pt-6 border-t border-white/10 flex items-center justify-center gap-4 text-xs">
+              {settings?.whatsapp && <a href={`https://wa.me/${settings.whatsapp.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener" className="flex items-center gap-1 text-green-400 hover:text-green-300"><Icon.Whatsapp className="w-4 h-4" /> WhatsApp</a>}
+              {settings?.email && <a href={`mailto:${settings.email}`} className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300"><Icon.Mail className="w-4 h-4" /> Email</a>}
+              {settings?.phone && <span className="flex items-center gap-1 text-blue-400"><Icon.Phone className="w-4 h-4" /> {settings.phone}</span>}
             </div>
           )}
         </div>
+        <p className="text-center text-xs text-gray-600 mt-6">© {new Date().getFullYear()} {platformName}. All rights reserved.</p>
       </div>
     </div>
   );
@@ -245,73 +221,70 @@ function UserLogin({ onLoginSuccess }) {
 // ================================================================
 function useToast() {
   const [toast, setToast] = useState(null);
-  const timer = useRef(null);
   const show = useCallback((msg, type = 'info') => {
-    if (timer.current) clearTimeout(timer.current);
     setToast({ msg, type });
-    timer.current = setTimeout(() => setToast(null), 4000);
+    setTimeout(() => setToast(null), 4000);
   }, []);
   return { toast, show };
 }
 
 // ================================================================
-// StatCard
+// Reusable UI: StatCard, ProgressBar, TabBtn
 // ================================================================
-function StatCard({ icon: I, label, value, sub, color = 'purple' }) {
+function StatCard({ icon: I, label, value, sub, color = 'purple', trend }) {
   const colors = {
-    purple: 'from-purple-600/20 to-purple-600/5 border-purple-500/20 text-purple-400',
-    green: 'from-green-600/20 to-green-600/5 border-green-500/20 text-green-400',
-    red: 'from-red-600/20 to-red-600/5 border-red-500/20 text-red-400',
-    yellow: 'from-yellow-600/20 to-yellow-600/5 border-yellow-500/20 text-yellow-400',
-    blue: 'from-blue-600/20 to-blue-600/5 border-blue-500/20 text-blue-400',
-    indigo: 'from-indigo-600/20 to-indigo-600/5 border-indigo-500/20 text-indigo-400',
+    purple: 'from-purple-500/20 to-purple-600/5 border-purple-500/20 text-purple-300',
+    green: 'from-green-500/20 to-green-600/5 border-green-500/20 text-green-300',
+    blue: 'from-blue-500/20 to-blue-600/5 border-blue-500/20 text-blue-300',
+    amber: 'from-amber-500/20 to-amber-600/5 border-amber-500/20 text-amber-300',
+    cyan: 'from-cyan-500/20 to-cyan-600/5 border-cyan-500/20 text-cyan-300',
+    red: 'from-red-500/20 to-red-600/5 border-red-500/20 text-red-300',
   };
   return (
-    <div className={`bg-gradient-to-br ${colors[color]} rounded-xl p-4 border`}>
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-gray-400 font-medium">{label}</span>
-        <I className="w-5 h-5 opacity-70" />
+    <div className={`bg-gradient-to-br ${colors[color]} border rounded-2xl p-5 transition hover:scale-[1.02] hover:shadow-lg`}>
+      <div className="flex items-center justify-between mb-3">
+        <div className={`w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center`}>
+          <I className={`w-5 h-5 ${colors[color].split(' ').pop()}`} />
+        </div>
+        {trend && <span className="text-xs text-gray-500">{trend}</span>}
       </div>
       <div className="text-2xl font-bold text-white">{value}</div>
-      {sub && <div className="text-xs text-gray-500 mt-1">{sub}</div>}
+      <div className="text-xs text-gray-400 mt-0.5">{label}</div>
+      {sub && <div className="text-[10px] text-gray-500 mt-1">{sub}</div>}
     </div>
   );
 }
 
-// ================================================================
-// ProgressBar
-// ================================================================
 function ProgressBar({ value, max, color = 'green' }) {
-  const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0;
-  const bg = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-yellow-500' : 'bg-green-500';
+  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
+  const colors = { green: 'from-green-500 to-emerald-500', purple: 'from-purple-500 to-indigo-500', blue: 'from-blue-500 to-cyan-500', red: 'from-red-500 to-orange-500', amber: 'from-amber-500 to-yellow-500' };
   return (
-    <div className="w-full h-2.5 bg-gray-800 rounded-full overflow-hidden">
-      <div className={`h-full ${bg} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
+    <div className="w-full bg-white/5 rounded-full h-2 overflow-hidden">
+      <div className={`bg-gradient-to-r ${colors[color]} h-full rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
     </div>
   );
 }
 
-// ================================================================
-// Tab button
-// ================================================================
-function TabBtn({ icon: I, label, active, onClick }) {
+function TabBtn({ icon: I, label, active, onClick, badge }) {
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition w-full text-left ${
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 w-full relative ${
         active
-          ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/20'
-          : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'
+          ? 'bg-gradient-to-r from-purple-600/30 to-indigo-600/20 text-white shadow-lg border border-purple-500/30'
+          : 'text-gray-400 hover:text-white hover:bg-white/5'
       }`}
     >
-      <I className="w-5 h-5 flex-shrink-0" />
-      <span>{label}</span>
+      <I className={`w-5 h-5 flex-shrink-0 ${active ? 'text-purple-300' : ''}`} />
+      <span className="flex-1 text-left">{label}</span>
+      {badge && <span className="text-[10px] bg-red-500 text-white rounded-full px-1.5 py-0.5 font-bold">{badge}</span>}
+      {active && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-purple-400 rounded-r-full" />}
     </button>
   );
 }
 
 // ================================================================
-// USER DASHBOARD — Enterprise
+// USER DASHBOARD — 5x polished shell: glass sidebar, live header, theme
 // ================================================================
 function UserDashboard({ user, onLogout, onRefresh }) {
   const { toast, show } = useToast();
@@ -322,15 +295,15 @@ function UserDashboard({ user, onLogout, onRefresh }) {
   const [templates, setTemplates] = useState([]);
   const [settings, setSettings] = useState(null);
   const [loadingStats, setLoadingStats] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Live countdown for quota / expiry
+  // Live clock
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
 
-  // Fetch all dashboard data
   const fetchAll = useCallback(async () => {
     try {
       const [dashRes, campRes, tmplRes, setRes] = await Promise.all([
@@ -353,18 +326,14 @@ function UserDashboard({ user, onLogout, onRefresh }) {
 
   useEffect(() => {
     fetchAll();
-    // Auto-refresh every 30 seconds
     const t = setInterval(fetchAll, 30000);
     return () => clearInterval(t);
   }, [fetchAll]);
 
-  // Refresh delivery reports when a campaign is selected
   const fetchDeliveryReports = useCallback(async (campaignId) => {
     try {
       const res = await fetch('/api/system', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
         body: JSON.stringify({ action: 'getDeliveryReports', campaignId }),
       });
       const data = await res.json();
@@ -376,98 +345,141 @@ function UserDashboard({ user, onLogout, onRefresh }) {
   const logoUrl = settings?.logoUrl || '';
   const language = settings?.language || 'en';
 
+  const tabs = [
+    { k: 'dashboard', l: 'Dashboard', I: Icon.Dashboard },
+    { k: 'send', l: 'Send MMS', I: Icon.Send },
+    { k: 'countries', l: 'Country Support', I: Icon.Globe },
+    { k: 'inbox', l: 'Inbox & Auto-Reply', I: Icon.Inbox },
+    { k: 'reports', l: 'Reports', I: Icon.Report },
+    { k: 'info', l: 'App Info', I: Icon.Info },
+  ];
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-950/20 to-slate-900">
+    <div className="min-h-screen bg-slate-950 relative overflow-hidden">
+      {/* Ambient background glow */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-0 left-1/3 w-[500px] h-[500px] bg-purple-600/5 rounded-full blur-[150px]" />
+        <div className="absolute bottom-0 right-1/3 w-[500px] h-[500px] bg-indigo-600/5 rounded-full blur-[150px]" />
+      </div>
+
       {/* Toast */}
       {toast && (
-        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-lg text-sm font-medium flex items-center gap-2 ${
-          toast.type === 'success' ? 'bg-green-600 text-white' :
-          toast.type === 'error' ? 'bg-red-600 text-white' :
-          'bg-indigo-600 text-white'
+        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[60] px-6 py-3.5 rounded-xl shadow-2xl text-sm font-medium flex items-center gap-2.5 backdrop-blur-xl border animate-[slideDown_0.3s_ease-out] ${
+          toast.type === 'success' ? 'bg-green-600/90 border-green-400/30 text-white' :
+          toast.type === 'error' ? 'bg-red-600/90 border-red-400/30 text-white' :
+          'bg-indigo-600/90 border-indigo-400/30 text-white'
         }`}>
-          {toast.type === 'success' ? <Icon.Check className="w-4 h-4" /> : toast.type === 'error' ? <Icon.Alert className="w-4 h-4" /> : <Icon.Info className="w-4 h-4" />}
+          {toast.type === 'success' ? <Icon.CheckCircle className="w-5 h-5" /> : toast.type === 'error' ? <Icon.XCircle className="w-5 h-5" /> : <Icon.Info className="w-5 h-5" />}
           {toast.msg}
         </div>
       )}
 
-      <div className="flex">
-        {/* Sidebar */}
-        <aside className="w-60 min-h-screen bg-gray-900/60 backdrop-blur border-r border-gray-800 p-4 hidden sm:flex flex-col gap-1 fixed">
-          <div className="flex items-center gap-2 px-2 py-3 mb-4">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center overflow-hidden">
-              {logoUrl ? <img src={logoUrl} alt="logo" className="w-full h-full object-cover" /> : <Icon.Send className="w-5 h-5 text-white" />}
+      <div className="flex relative z-10">
+        {/* Sidebar — desktop */}
+        <aside className={`w-64 min-h-screen bg-slate-900/60 backdrop-blur-xl border-r border-white/5 p-4 hidden lg:flex flex-col gap-1.5 fixed transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : ''}`}>
+          <div className="flex items-center gap-3 px-2 py-4 mb-2">
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center overflow-hidden shadow-lg shadow-purple-500/20">
+              {logoUrl ? <img src={logoUrl} alt="logo" className="w-full h-full object-cover" /> : <Icon.Send className="w-6 h-6 text-white" />}
             </div>
-            <div>
-              <div className="text-sm font-bold text-white">{platformName}</div>
-              <div className="text-[10px] text-gray-500">User Panel</div>
+            <div className="min-w-0">
+              <div className="text-sm font-bold text-white truncate">{platformName}</div>
+              <div className="text-[10px] text-purple-400/70 flex items-center gap-1"><span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" /> User Panel</div>
             </div>
           </div>
 
-          <TabBtn icon={Icon.Dashboard} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-          <TabBtn icon={Icon.Send} label="Send MMS" active={activeTab === 'send'} onClick={() => setActiveTab('send')} />
-          <TabBtn icon={Icon.Inbox} label="Inbox & Auto-Reply" active={activeTab === 'inbox'} onClick={() => setActiveTab('inbox')} />
-          <TabBtn icon={Icon.Report} label="Reports" active={activeTab === 'reports'} onClick={() => setActiveTab('reports')} />
-          <TabBtn icon={Icon.Info} label="App Info" active={activeTab === 'info'} onClick={() => setActiveTab('info')} />
+          {tabs.map(({ k, l, I }) => (
+            <TabBtn key={k} icon={I} label={l} active={activeTab === k} onClick={() => setActiveTab(k)} />
+          ))}
 
-          <div className="mt-auto pt-4 border-t border-gray-800 flex flex-col gap-2">
+          <div className="mt-auto pt-4 border-t border-white/5 flex flex-col gap-1.5">
             <button
               onClick={() => { onRefresh ? onRefresh() : fetchAll(); show('Panel refreshed', 'success'); }}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-gray-400 hover:text-white hover:bg-gray-800/50 transition"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs text-gray-400 hover:text-white hover:bg-white/5 transition"
             >
-              <Icon.Refresh className="w-4 h-4" /> Refresh
+              <Icon.Refresh className="w-4 h-4" /> Refresh Data
             </button>
             <button
               onClick={onLogout}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-red-400 hover:text-red-300 hover:bg-red-900/20 transition"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 transition"
             >
               <Icon.Logout className="w-4 h-4" /> Logout
             </button>
           </div>
         </aside>
 
+        {/* Mobile sidebar overlay */}
+        {sidebarOpen && (
+          <>
+            <div className="fixed inset-0 bg-black/60 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
+            <aside className="fixed left-0 top-0 bottom-0 w-64 bg-slate-900/95 backdrop-blur-xl border-r border-white/10 p-4 z-50 lg:hidden flex flex-col gap-1.5 animate-[slideIn_0.2s_ease-out]">
+              <div className="flex items-center justify-between px-2 py-4 mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center overflow-hidden">
+                    {logoUrl ? <img src={logoUrl} alt="logo" className="w-full h-full object-cover" /> : <Icon.Send className="w-5 h-5 text-white" />}
+                  </div>
+                  <span className="text-sm font-bold text-white truncate">{platformName}</span>
+                </div>
+                <button onClick={() => setSidebarOpen(false)} className="text-gray-400"><Icon.Close className="w-5 h-5" /></button>
+              </div>
+              {tabs.map(({ k, l, I }) => (
+                <TabBtn key={k} icon={I} label={l} active={activeTab === k} onClick={() => { setActiveTab(k); setSidebarOpen(false); }} />
+              ))}
+              <div className="mt-auto pt-4 border-t border-white/5">
+                <button onClick={onLogout} className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs text-red-400 hover:bg-red-500/10 transition w-full">
+                  <Icon.Logout className="w-4 h-4" /> Logout
+                </button>
+              </div>
+            </aside>
+          </>
+        )}
+
         {/* Mobile top bar */}
-        <div className="sm:hidden fixed top-0 left-0 right-0 bg-gray-900/90 backdrop-blur border-b border-gray-800 px-4 py-3 flex items-center justify-between z-40">
+        <div className="lg:hidden fixed top-0 left-0 right-0 bg-slate-900/80 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between z-30">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center overflow-hidden">
-              {logoUrl ? <img src={logoUrl} alt="logo" className="w-full h-full object-cover" /> : <Icon.Send className="w-4 h-4 text-white" />}
+            <button onClick={() => setSidebarOpen(true)} className="text-gray-300"><Icon.Menu className="w-6 h-6" /></button>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center overflow-hidden">
+                {logoUrl ? <img src={logoUrl} alt="logo" className="w-full h-full object-cover" /> : <Icon.Send className="w-4 h-4 text-white" />}
+              </div>
+              <span className="text-sm font-bold text-white truncate max-w-[140px]">{platformName}</span>
             </div>
-            <span className="text-sm font-bold text-white">{platformName}</span>
           </div>
           <button onClick={onLogout} className="text-red-400"><Icon.Logout className="w-5 h-5" /></button>
         </div>
 
         {/* Main content */}
-        <main className="flex-1 sm:ml-60 p-4 sm:p-6 mt-14 sm:mt-0">
+        <main className="flex-1 lg:ml-64 p-4 sm:p-6 lg:p-8 mt-16 lg:mt-0 min-h-screen">
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-white">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white tracking-tight">
                 {activeTab === 'dashboard' && 'Dashboard'}
                 {activeTab === 'send' && 'Send MMS Campaign'}
+                {activeTab === 'countries' && 'Country Support'}
                 {activeTab === 'inbox' && 'Inbox & Auto-Reply'}
                 {activeTab === 'reports' && 'Delivery Reports'}
                 {activeTab === 'info' && 'App Information'}
               </h1>
-              <p className="text-gray-400 text-xs mt-0.5">
-                Logged in as <span className="text-purple-300 font-medium">{stats?.loginId || user?.loginId || stats?.email || user?.email}</span>
+              <p className="text-gray-400 text-xs mt-1">
+                Welcome, <span className="text-purple-300 font-medium">{stats?.loginId || user?.loginId || stats?.email || user?.email}</span> · <span className="text-gray-500">{new Date(now).toLocaleString()}</span>
               </p>
             </div>
+            <button
+              onClick={() => { onRefresh ? onRefresh() : fetchAll(); show('Panel refreshed', 'success'); }}
+              className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 transition text-xs"
+            >
+              <Icon.Refresh className="w-4 h-4" /> Refresh
+            </button>
           </div>
 
           {/* Mobile tab bar */}
-          <div className="sm:hidden flex gap-1 mb-4 overflow-x-auto pb-1">
-            {[
-              { k: 'dashboard', l: 'Dashboard', I: Icon.Dashboard },
-              { k: 'send', l: 'Send', I: Icon.Send },
-              { k: 'inbox', l: 'Inbox', I: Icon.Inbox },
-              { k: 'reports', l: 'Reports', I: Icon.Report },
-              { k: 'info', l: 'Info', I: Icon.Info },
-            ].map(({ k, l, I }) => (
+          <div className="lg:hidden flex gap-1.5 mb-4 overflow-x-auto pb-2">
+            {tabs.map(({ k, l, I }) => (
               <button
                 key={k}
                 onClick={() => setActiveTab(k)}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap ${
-                  activeTab === k ? 'bg-purple-600 text-white' : 'bg-gray-800/50 text-gray-400'
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium whitespace-nowrap transition ${
+                  activeTab === k ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20' : 'bg-white/5 text-gray-400'
                 }`}
               >
                 <I className="w-4 h-4" /> {l}
@@ -476,206 +488,230 @@ function UserDashboard({ user, onLogout, onRefresh }) {
           </div>
 
           {/* Content */}
-          {activeTab === 'dashboard' && (
-            <DashboardTab stats={stats} loading={loadingStats} now={now} language={language} />
-          )}
-          {activeTab === 'send' && (
-            <SendTab
-              stats={stats}
-              templates={templates}
-              campaigns={campaigns}
-              onSent={(msg, type) => { show(msg, type); fetchAll(); }}
-              onCampaignClick={fetchDeliveryReports}
-              language={language}
-            />
-          )}
-          {activeTab === 'reports' && (
-            <ReportsTab
-              campaigns={campaigns}
-              deliveryReports={deliveryReports}
-              onCampaignClick={fetchDeliveryReports}
-            />
-          )}
-          {activeTab === 'inbox' && (
-            <InboxAutoReplyTab language={language} onToast={show} loginId={stats?.loginId || user?.loginId} />
-          )}
-          {activeTab === 'info' && <InfoTab settings={settings} />}
-
-          {/* Scheduled sends at bottom of dashboard */}
-          {activeTab === 'send' && <ScheduledSection language={language} onToast={show} />}
+          <div className="animate-[fadeIn_0.3s_ease-out]">
+            {activeTab === 'dashboard' && <DashboardTab stats={stats} loading={loadingStats} now={now} language={language} />}
+            {activeTab === 'send' && (
+              <>
+                <SendTab
+                  stats={stats}
+                  templates={templates}
+                  campaigns={campaigns}
+                  onSent={(msg, type) => { show(msg, type); fetchAll(); }}
+                  onCampaignClick={fetchDeliveryReports}
+                  language={language}
+                />
+                <ScheduledSection language={language} onToast={show} />
+              </>
+            )}
+            {activeTab === 'countries' && <CountrySupportTab />}
+            {activeTab === 'reports' && <ReportsTab campaigns={campaigns} deliveryReports={deliveryReports} onCampaignClick={fetchDeliveryReports} />}
+            {activeTab === 'inbox' && <InboxAutoReplyTab language={language} onToast={show} loginId={stats?.loginId || user?.loginId} />}
+            {activeTab === 'info' && <InfoTab settings={settings} />}
+          </div>
         </main>
       </div>
 
-      {/* AI Chat popup — right side floating */}
       <AIChatPopup language={language} />
+
+      <style>{`
+        @keyframes slideDown { from { transform: translate(-50%, -100%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+        @keyframes slideIn { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+      `}</style>
     </div>
   );
 }
 
 // ================================================================
-// DASHBOARD TAB — live quota, inbox rate, spam, invalid, expiry
+// DASHBOARD TAB — live stats, quota ring, country showcase
 // ================================================================
 function DashboardTab({ stats, loading, now, language }) {
+  const countryStats = getCountryStats();
+
   if (loading || !stats) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
-          <span className="text-gray-500 text-sm">Loading dashboard...</span>
-        </div>
+        <Spinner size={32} />
       </div>
     );
   }
 
-  const remaining = stats.remaining ?? Math.max((stats.limit || 0) - (stats.sent || 0), 0);
-  const usagePct = stats.limit > 0 ? Math.min((stats.sent / stats.limit) * 100, 100) : 0;
+  const sent = stats.sent || 0;
+  const limit = stats.limit || 0;
+  const remaining = Math.max(limit - sent, 0);
+  const usagePct = limit > 0 ? Math.round((sent / limit) * 100) : 0;
+  const expiry = stats.expiry;
+  const expiryMs = expiry ? new Date(expiry).getTime() - now : null;
+  const expired = expiryMs !== null && expiryMs <= 0;
+  const daysLeft = expiryMs !== null ? Math.floor(expiryMs / (1000 * 60 * 60 * 24)) : null;
+  const hoursLeft = expiryMs !== null ? Math.floor(expiryMs / (1000 * 60 * 60)) : null;
+  const todaySent = stats.todaySent || 0;
+  const todayDelivered = stats.todayDelivered || 0;
+  const deliveryRate = todaySent > 0 ? Math.round((todayDelivered / todaySent) * 100) : 0;
 
-  // Expiry countdown
-  let expiryStr = 'No expiry set';
-  let expirySeconds = null;
-  if (stats.expiryDate) {
-    const exp = new Date(stats.expiryDate).getTime();
-    expirySeconds = Math.max(0, Math.floor((exp - now) / 1000));
-    if (expirySeconds <= 0) {
-      expiryStr = 'Expired';
-    } else {
-      const d = Math.floor(expirySeconds / 86400);
-      const h = Math.floor((expirySeconds % 86400) / 3600);
-      const m = Math.floor((expirySeconds % 3600) / 60);
-      const s = expirySeconds % 60;
-      expiryStr = `${d}d ${h}h ${m}m ${s}s`;
-    }
-  }
-
-  const expired = expirySeconds !== null && expirySeconds <= 0;
+  // Quota ring (SVG circular gauge)
+  const RingSize = 140;
+  const ringR = (RingSize - 16) / 2;
+  const ringC = 2 * Math.PI * ringR;
+  const ringDash = (usagePct / 100) * ringC;
+  const ringColor = usagePct > 80 ? '#ef4444' : usagePct > 50 ? '#eab308' : '#22c55e';
 
   return (
     <div className="space-y-6">
-      {/* Suspended/expired warning */}
-      {expired && (
-        <div className="p-4 bg-red-900/40 border border-red-700 rounded-lg text-red-200 text-sm flex items-center gap-2">
-          <Icon.Alert className="w-5 h-5" /> Your account has expired. Please contact the administrator to renew.
+      {/* Top row: quota ring + key stats */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Quota ring card */}
+        <div className="bg-gradient-to-br from-purple-900/20 to-slate-900/40 border border-purple-500/20 rounded-2xl p-6 flex flex-col items-center justify-center">
+          <p className="text-xs text-gray-400 uppercase tracking-wider mb-4">Sending Quota</p>
+          <div className="relative" style={{ width: RingSize, height: RingSize }}>
+            <svg width={RingSize} height={RingSize}>
+              <circle cx={RingSize / 2} cy={RingSize / 2} r={ringR} fill="none" stroke="#1e293b" strokeWidth="10" />
+              <circle
+                cx={RingSize / 2} cy={RingSize / 2} r={ringR} fill="none" stroke={ringColor} strokeWidth="10"
+                strokeDasharray={`${ringDash} ${ringC}`} strokeLinecap="round"
+                transform={`rotate(-90 ${RingSize / 2} ${RingSize / 2})`}
+                className="transition-all duration-700"
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-3xl font-bold text-white">{remaining}</span>
+              <span className="text-xs text-gray-400">remaining</span>
+            </div>
+          </div>
+          <div className="mt-4 text-center">
+            <p className="text-sm text-gray-300"><span className="font-bold text-white">{sent}</span> / {limit} used</p>
+            <p className="text-xs text-gray-500 mt-0.5">{usagePct}% used</p>
+          </div>
+        </div>
+
+        {/* Stats grid */}
+        <div className="lg:col-span-2 grid grid-cols-2 gap-4">
+          <StatCard icon={Icon.Send} label="Total Sent" value={sent} sub={`Limit: ${limit}`} color="purple" />
+          <StatCard icon={Icon.CheckCircle} label="Today Delivered" value={todayDelivered} sub={`${deliveryRate}% delivery rate`} color="green" />
+          <StatCard icon={Icon.Activity} label="Today Sent" value={todaySent} sub="Last 24 hours" color="blue" />
+          <StatCard icon={Icon.Clock} label="Account Status" value={expired ? 'Expired' : (daysLeft !== null ? `${daysLeft}d left` : 'Active')} sub={expiry ? `Expires ${new Date(expiry).toLocaleDateString()}` : 'No expiry'} color={expired ? 'red' : 'green'} />
+        </div>
+      </div>
+
+      {/* Expiry countdown — if less than 7 days */}
+      {expiry && !expired && daysLeft !== null && daysLeft <= 7 && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-center gap-3">
+          <Icon.Alert className="w-6 h-6 text-amber-400 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-amber-200">Account expiring soon!</p>
+            <p className="text-xs text-amber-300/70">Your account will expire in {daysLeft} days ({hoursLeft} hours). Contact your administrator to extend.</p>
+          </div>
         </div>
       )}
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={Icon.Send2} label="Quota Remaining" value={remaining} sub={`of ${stats.limit || 0} total`} color="purple" />
-        <StatCard icon={Icon.Inbox} label="Inbox Rate" value={`${stats.inboxRate || 0}%`} sub={`${stats.totalInbox || 0} inbox hits`} color="green" />
-        <StatCard icon={Icon.Shield} label="Spam Rate" value={`${stats.spamRate || 0}%`} sub={`${stats.totalSpam || 0} spam hits`} color="red" />
-        <StatCard icon={Icon.Alert} label="Invalid Hits" value={stats.invalidHits || 0} sub="rejected numbers" color="yellow" />
+      {/* Country support showcase */}
+      <div className="bg-gradient-to-br from-slate-900/60 to-slate-900/30 border border-white/5 rounded-2xl p-6">
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
+              <Icon.Globe className="w-5 h-5 text-blue-400" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white">Global Coverage</h3>
+              <p className="text-xs text-gray-500">Email-to-MMS gateway supported countries</p>
+            </div>
+          </div>
+          <div className="flex gap-4 text-center">
+            <div><div className="text-xl font-bold text-blue-400">{countryStats.totalCountries}</div><div className="text-[10px] text-gray-500">Countries</div></div>
+            <div><div className="text-xl font-bold text-purple-400">{countryStats.totalCarriers}</div><div className="text-[10px] text-gray-500">Carriers</div></div>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {countryStats.allCountries.map((c, i) => (
+            <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/5 border border-white/5 text-xs text-gray-300 hover:bg-white/10 transition" title={`${c.name} (${c.code}) — ${c.carriers.length} carrier(s)`}>
+              <span>{c.flag}</span> {c.name}
+            </span>
+          ))}
+        </div>
       </div>
 
-      {/* Quota progress */}
-      <div className="bg-gray-900/60 rounded-xl p-5 border border-gray-800">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2">
-            <Icon.Send className="w-4 h-4 text-purple-400" /> Sending Quota
-          </h3>
-          <span className="text-xs text-gray-400">{stats.sent || 0} / {stats.limit || 0} sent</span>
-        </div>
-        <ProgressBar value={stats.sent || 0} max={stats.limit || 0} />
-        <div className="flex justify-between mt-2 text-xs text-gray-500">
-          <span>{remaining} remaining</span>
-          <span>{usagePct.toFixed(0)}% used</span>
-        </div>
-      </div>
-
-      {/* Expiry countdown — live */}
-      <div className={`bg-gradient-to-br rounded-xl p-5 border ${expired ? 'from-red-600/20 to-red-600/5 border-red-500/30' : 'from-blue-600/20 to-blue-600/5 border-blue-500/20'}`}>
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2">
-            <Icon.Clock className={`w-4 h-4 ${expired ? 'text-red-400' : 'text-blue-400'}`} />
-            {language === 'bn' ? 'অ্যাকাউন্ট মেয়াদ' : 'Account Expiry'}
-          </h3>
-          {stats.expiryDaysLeft !== null && stats.expiryDaysLeft > 0 && (
-            <span className="text-xs text-gray-400">{stats.expiryDaysLeft} days left</span>
-          )}
-        </div>
-        <div className={`text-2xl font-bold font-mono ${expired ? 'text-red-400' : 'text-blue-400'}`}>
-          {expiryStr}
-        </div>
-        {!expired && stats.expiryDate && (
-          <p className="text-xs text-gray-500 mt-1">
-            {language === 'bn' ? 'মেয়াদ শেষ' : 'Expires on'}: {new Date(stats.expiryDate).toLocaleDateString()}
-          </p>
-        )}
-      </div>
-
-      {/* Delivery summary */}
-      <div className="bg-gray-900/60 rounded-xl p-5 border border-gray-800">
-        <h3 className="text-sm font-semibold text-gray-200 mb-4 flex items-center gap-2">
-          <Icon.Report className="w-4 h-4 text-indigo-400" /> Delivery Summary
+      {/* Recent campaigns */}
+      <div className="bg-slate-900/40 border border-white/5 rounded-2xl p-6">
+        <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+          <Icon.Layers className="w-4 h-4 text-purple-400" /> Recent Campaigns
         </h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="bg-gray-800/50 rounded-lg p-3 text-center">
-            <div className="text-xl font-bold text-white">{stats.totalDelivered || 0}</div>
-            <div className="text-xs text-gray-500 mt-1">Delivered</div>
+        {stats.recentCampaigns && stats.recentCampaigns.length > 0 ? (
+          <div className="space-y-2">
+            {stats.recentCampaigns.slice(0, 5).map((c, i) => (
+              <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-white/5 hover:bg-white/10 transition">
+                <div className="min-w-0">
+                  <p className="text-sm text-gray-200 truncate">{c.message?.substring(0, 50) || 'Campaign'}…</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{new Date(c.createdAt).toLocaleDateString()} · {c.totalSent || 0} sent</p>
+                </div>
+                <span className={`text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 ${
+                  c.status === 'sent' ? 'bg-green-500/20 text-green-300' :
+                  c.status === 'partial' ? 'bg-amber-500/20 text-amber-300' :
+                  c.status === 'blocked_spam' ? 'bg-red-500/20 text-red-300' :
+                  c.status === 'running' ? 'bg-blue-500/20 text-blue-300 animate-pulse' :
+                  'bg-gray-500/20 text-gray-300'
+                }`}>{c.status}</span>
+              </div>
+            ))}
           </div>
-          <div className="bg-gray-800/50 rounded-lg p-3 text-center">
-            <div className="text-xl font-bold text-white">{stats.totalUndelivered || 0}</div>
-            <div className="text-xs text-gray-500 mt-1">Undelivered</div>
+        ) : (
+          <div className="text-center py-8 text-gray-500">
+            <Icon.Send className="w-12 h-12 mx-auto mb-2 opacity-20" />
+            <p className="text-sm">No campaigns yet. Head to the Send MMS tab to start your first campaign.</p>
           </div>
-          <div className="bg-gray-800/50 rounded-lg p-3 text-center">
-            <div className="text-xl font-bold text-green-400">{stats.totalInbox || 0}</div>
-            <div className="text-xs text-gray-500 mt-1">Inbox</div>
-          </div>
-          <div className="bg-gray-800/50 rounded-lg p-3 text-center">
-            <div className="text-xl font-bold text-red-400">{stats.totalSpam || 0}</div>
-            <div className="text-xs text-gray-500 mt-1">Spam</div>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
 }
 
 // ================================================================
-// SEND TAB — templates, AI suggestion, auto-new, number routing, direct paste
-// ================================================================
-// ================================================================
-// SPAM METER — SVG circular gauge (0-100)
+// SPAM METER — circular gauge
 // ================================================================
 function SpamMeter({ score, level }) {
   const size = 120;
-  const r = (size - 16) / 2;
+  const r = (size - 20) / 2;
   const c = 2 * Math.PI * r;
   const pct = Math.max(0, Math.min(100, score));
   const dash = (pct / 100) * c;
   const color = level === 'high' ? '#ef4444' : level === 'moderate' ? '#eab308' : '#22c55e';
-  const label = level === 'high' ? 'HIGH SPAM RISK' : level === 'moderate' ? 'MODERATE RISK' : 'CLEAN';
   return (
-    <div className="flex flex-col items-center gap-1">
+    <div className="relative flex flex-col items-center">
       <svg width={size} height={size}>
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#1e293b" strokeWidth="8" />
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth="8"
           strokeDasharray={`${dash} ${c}`} strokeLinecap="round"
-          transform={`rotate(-90 ${size / 2} ${size / 2})`} className="transition-all duration-700" />
-        <text x="50%" y="48%" textAnchor="middle" dominantBaseline="middle" className="fill-white text-3xl font-bold">{pct}</text>
-        <text x="50%" y="65%" textAnchor="middle" dominantBaseline="middle" className="fill-gray-500 text-[9px] uppercase">spam score</text>
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          className="transition-all duration-500" />
       </svg>
-      <span className="text-xs font-bold" style={{ color }}>{label}</span>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-3xl font-bold" style={{ color }}>{score}</span>
+        <span className="text-[10px] text-gray-500 uppercase">{level}</span>
+      </div>
     </div>
   );
 }
 
 // ================================================================
-// STEP INDICATOR — shows 4 wizard steps with progress
+// STEP INDICATOR
 // ================================================================
 function StepIndicator({ current, steps }) {
   return (
-    <div className="flex items-center justify-between mb-6 px-2">
+    <div className="flex items-center justify-between mb-6">
       {steps.map((s, i) => (
         <div key={i} className="flex items-center flex-1 last:flex-none">
-          <div className="flex items-center gap-2">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition ${
-              i < current ? 'bg-green-600 text-white' : i === current ? 'bg-purple-600 text-white ring-4 ring-purple-500/20' : 'bg-gray-800 text-gray-500'
+          <div className="flex flex-col items-center">
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
+              i < current ? 'bg-green-500 text-white' :
+              i === current ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/30 ring-4 ring-purple-500/20' :
+              'bg-slate-800 text-gray-500 border border-slate-700'
             }`}>
               {i < current ? <Icon.Check className="w-4 h-4" /> : i + 1}
             </div>
-            <span className={`text-xs font-medium hidden sm:inline ${i <= current ? 'text-gray-200' : 'text-gray-600'}`}>{s}</span>
+            <span className={`text-[10px] mt-1.5 ${i <= current ? 'text-white' : 'text-gray-600'}`}>{s}</span>
           </div>
-          {i < steps.length - 1 && <div className={`flex-1 h-0.5 mx-2 transition ${i < current ? 'bg-green-600' : 'bg-gray-800'}`} />}
+          {i < steps.length - 1 && (
+            <div className={`flex-1 h-0.5 mx-2 rounded-full transition-all ${i < current ? 'bg-green-500' : 'bg-slate-800'}`} />
+          )}
         </div>
       ))}
     </div>
@@ -683,14 +719,10 @@ function StepIndicator({ current, steps }) {
 }
 
 // ================================================================
-// SEND TAB — Enterprise 4-Step Wizard
-//   Step 1: Compose (message + AI + templates + live spam preview)
-//   Step 2: Recipients (numbers + CSV import + routing)
-//   Step 3: Review (spam meter + batch/delay controls + summary)
-//   Step 4: Send (live progress polling)
+// SEND TAB — ENTERPRISE anti-spam sending configuration
 // ================================================================
 function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, language }) {
-  const [step, setStep] = useState(0); // 0=compose, 1=recipients, 2=review, 3=send
+  const [step, setStep] = useState(0);
   const [message, setMessage] = useState('');
   const [numbersText, setNumbersText] = useState('');
   const [sendType, setSendType] = useState('manual');
@@ -699,12 +731,17 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
   const [loading, setLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState('');
-  const [spamPreview, setSpamPreview] = useState(null); // {score, level, reasons}
+  const [spamPreview, setSpamPreview] = useState(null);
   const [spamChecking, setSpamChecking] = useState(false);
   const [batchSize, setBatchSize] = useState(5);
   const [delayMs, setDelayMs] = useState(1200);
+  // ENTERPRISE anti-spam config
+  const [jitterPct, setJitterPct] = useState(30);       // randomized ±% delay variation
+  const [humanize, setHumanize] = useState(true);        // human-like timing patterns
+  const [polymorph, setPolymorph] = useState(true);      // AI rewrite each message uniquely
+  const [dripMode, setDripMode] = useState(false);       // spread sends over time
   const [result, setResult] = useState(null);
-  const [progress, setProgress] = useState(null); // live campaign progress
+  const [progress, setProgress] = useState(null);
   const [progressTimer, setProgressTimer] = useState(null);
 
   const remaining = stats ? Math.max((stats.limit || 0) - (stats.sent || 0), 0) : 0;
@@ -718,7 +755,6 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
     setTemplateUsed(tmpl.name);
   };
 
-  // Live spam check (calls spamCheck action — no send)
   const handleSpamCheck = async () => {
     if (!message.trim()) return;
     setSpamChecking(true);
@@ -731,11 +767,10 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
       if (data.success) {
         setSpamPreview({ score: data.spamScore, level: data.spamLevel, reasons: data.spamReasons, aiReview: data.aiReview });
       }
-    } catch { /* ignore */ }
+    } catch {}
     setSpamChecking(false);
   };
 
-  // Auto-check spam when message changes (debounced)
   useEffect(() => {
     if (!message.trim() || message.length < 10) { setSpamPreview(null); return; }
     const t = setTimeout(handleSpamCheck, 800);
@@ -779,7 +814,6 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
     e.target.value = '';
   };
 
-  // Live progress polling
   const pollProgress = (campaignId) => {
     if (progressTimer) clearInterval(progressTimer);
     const timer = setInterval(async () => {
@@ -791,12 +825,12 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
         const data = await res.json();
         if (data.success) {
           setProgress(data.campaign);
-          if (data.campaign.status === 'sent' || data.campaign.status === 'partial' || data.campaign.status === 'failed' || data.campaign.status === 'blocked_spam') {
+          if (['sent', 'partial', 'failed', 'blocked_spam'].includes(data.campaign.status)) {
             clearInterval(timer);
             setProgressTimer(null);
           }
         }
-      } catch { /* ignore */ }
+      } catch {}
     }, 2000);
     setProgressTimer(timer);
   };
@@ -813,7 +847,7 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
         body: JSON.stringify({
           action: 'sendCampaign', message, numbers: nums, sendType, templateUsed,
-          options: { batchSize, delayMs },
+          options: { batchSize, delayMs, jitterPct, humanize, polymorph, dripMode },
         }),
       });
       const data = await res.json();
@@ -821,7 +855,6 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
         const invalidInfo = data.totalInvalid > 0 ? ` | ${data.totalInvalid} invalid` : '';
         onSent(`Sent ${data.totalSent} via ${data.senderApiUsed} — ${data.totalDelivered} delivered, ${data.totalUndelivered} undelivered${invalidInfo}`, 'success');
         setResult(data);
-        // Start live polling
         if (data.campaignId) pollProgress(data.campaignId);
       } else if (data.blocked) {
         onSent('⚠ Message blocked by spam protection. Rewrite your content.', 'error');
@@ -850,29 +883,30 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
   return (
     <div className="space-y-6">
       {/* Quota reminder */}
-      <div className="bg-purple-600/10 border border-purple-500/20 rounded-lg p-3 text-sm text-purple-300 flex items-center gap-2">
-        <Icon.Bolt className="w-4 h-4" />
-        You have <span className="font-bold text-white">{remaining}</span> sends remaining
+      <div className="bg-gradient-to-r from-purple-600/15 to-indigo-600/10 border border-purple-500/20 rounded-2xl p-4 text-sm text-purple-200 flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+          <Icon.Bolt className="w-5 h-5 text-purple-300" />
+        </div>
+        <span>You have <span className="font-bold text-white text-base">{remaining}</span> sends remaining · Enterprise anti-spam mode active</span>
       </div>
 
       {/* Wizard card */}
-      <div className="bg-gray-900/60 rounded-xl p-5 border border-gray-800">
-        <h3 className="text-sm font-semibold text-gray-200 mb-4 flex items-center gap-2">
+      <div className="bg-slate-900/50 backdrop-blur border border-white/5 rounded-2xl p-6">
+        <h3 className="text-sm font-bold text-white mb-5 flex items-center gap-2">
           <Icon.Send className="w-4 h-4 text-purple-400" /> Bulk Send Wizard
         </h3>
         <StepIndicator current={step} steps={steps} />
 
-        {/* STEP 1: COMPOSE */}
+        {/* STEP 0: COMPOSE */}
         {step === 0 && (
           <div className="space-y-4">
-            {/* Templates */}
             {templates.length > 0 && (
               <div>
                 <p className="text-xs text-gray-500 mb-2 flex items-center gap-1"><Icon.Sparkle className="w-3 h-3 text-purple-400" /> Templates</p>
                 <div className="flex flex-wrap gap-2">
                   {templateTypes.map(tt => templates.filter(t => t.type === tt.key).map(t => (
                     <button key={t._id} onClick={() => handleTemplateSelect(t)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${selectedTemplate?._id === t._id ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'}`}>
+                      className={`px-3 py-1.5 rounded-xl text-xs font-medium transition ${selectedTemplate?._id === t._id ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20' : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 border border-white/5'}`}>
                       {tt.label}: {t.name}
                     </button>
                   )))}
@@ -880,45 +914,42 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
               </div>
             )}
 
-            {/* AI buttons */}
             <div className="flex flex-wrap gap-2">
               <button onClick={handleAiSuggest} disabled={aiLoading}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition">
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition shadow-lg shadow-indigo-600/20">
                 {aiLoading ? <Spinner /> : <Icon.Sparkle className="w-4 h-4" />} AI Suggestion
               </button>
             </div>
             {aiSuggestion && (
-              <div className="p-3 bg-indigo-900/20 border border-indigo-500/20 rounded-lg">
-                <p className="text-sm text-gray-300 mb-2">{aiSuggestion}</p>
-                <button onClick={handleApplyAi} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium">Use this message</button>
+              <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+                <p className="text-sm text-gray-200 mb-2">{aiSuggestion}</p>
+                <button onClick={handleApplyAi} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium">Use this message</button>
               </div>
             )}
 
-            {/* Message textarea */}
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Message Content</label>
+              <label className="block text-sm text-gray-300 mb-1.5">Message Content</label>
               <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={4}
-                placeholder="Type your MMS message, or use a template / AI suggestion..."
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none text-sm"
+                placeholder="Type your MMS message, or use a template / AI suggestion…"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none text-sm"
                 maxLength={500} />
-              <div className="flex justify-between items-center mt-1">
+              <div className="flex justify-between items-center mt-2">
                 <p className="text-xs text-gray-500">{message.length}/500</p>
-                {spamChecking && <p className="text-xs text-gray-500 animate-pulse">Checking spam...</p>}
+                {spamChecking && <p className="text-xs text-gray-500 animate-pulse flex items-center gap-1"><Spinner size={12} /> AI analyzing spam risk…</p>}
                 {spamPreview && !spamChecking && (
-                  <p className={`text-xs font-medium ${spamPreview.level === 'high' ? 'text-red-400' : spamPreview.level === 'moderate' ? 'text-yellow-400' : 'text-green-400'}`}>
+                  <p className={`text-xs font-semibold flex items-center gap-1 ${spamPreview.level === 'high' ? 'text-red-400' : spamPreview.level === 'moderate' ? 'text-amber-400' : 'text-green-400'}`}>
                     Spam: {spamPreview.score}/100 — {spamPreview.level}
                   </p>
                 )}
               </div>
             </div>
 
-            {/* Spam reasons preview */}
             {spamPreview && spamPreview.reasons && spamPreview.reasons.length > 0 && (
-              <div className="p-3 bg-yellow-900/20 border border-yellow-700/30 rounded-lg">
-                <p className="text-xs text-yellow-400 font-medium mb-1">Spam risk factors:</p>
+              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                <p className="text-xs text-amber-300 font-medium mb-1.5">Spam risk factors:</p>
                 <div className="flex flex-wrap gap-1.5">
                   {spamPreview.reasons.map((r, i) => (
-                    <span key={i} className="text-xs bg-yellow-900/30 px-2 py-0.5 rounded text-yellow-300">{r}</span>
+                    <span key={i} className="text-xs bg-amber-500/10 px-2 py-0.5 rounded-lg text-amber-300">{r}</span>
                   ))}
                 </div>
               </div>
@@ -926,206 +957,199 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
 
             <div className="flex justify-end">
               <button onClick={() => setStep(1)} disabled={!canProceed()}
-                className="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white rounded-lg text-sm font-medium transition">
+                className="px-6 py-2.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition">
                 Next: Recipients →
               </button>
             </div>
           </div>
         )}
 
-        {/* STEP 2: RECIPIENTS */}
+        {/* STEP 1: RECIPIENTS */}
         {step === 1 && (
           <div className="space-y-4">
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-sm text-gray-400">Recipient Numbers <span className="text-gray-600">(comma, newline, or space separated)</span></label>
-                <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer hover:text-gray-300">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-sm text-gray-300">Recipient Numbers <span className="text-gray-600">(comma, newline, or space separated)</span></label>
+                <label className="flex items-center gap-1.5 text-xs text-purple-300 cursor-pointer hover:text-purple-200 bg-purple-500/10 px-3 py-1.5 rounded-lg transition">
                   <Icon.Upload className="w-4 h-4" /> CSV Import
                   <input type="file" accept=".csv,.txt" onChange={handleBulkImport} className="hidden" />
                 </label>
               </div>
               <textarea value={numbersText} onChange={(e) => setNumbersText(e.target.value)} rows={5}
-                placeholder="+1234567890\n+9876543210\n..."
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none text-sm font-mono" />
-              <p className="text-xs text-gray-500 mt-1">
+                placeholder="+1234567890&#10;+9876543210&#10;…"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none text-sm font-mono" />
+              <p className="text-xs text-gray-500 mt-1.5">
                 {parsedNumbers.length} numbers detected · {Math.min(parsedNumbers.length, remaining)} will be sent (quota: {remaining})
               </p>
             </div>
             <div className="flex justify-between">
-              <button onClick={() => setStep(0)} className="px-5 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition">← Back</button>
+              <button onClick={() => setStep(0)} className="px-5 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-medium transition">← Back</button>
               <button onClick={() => setStep(2)} disabled={!canProceed()}
-                className="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white rounded-lg text-sm font-medium transition">
+                className="px-6 py-2.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white rounded-xl text-sm font-medium transition">
                 Next: Review →
               </button>
             </div>
           </div>
         )}
 
-        {/* STEP 3: REVIEW */}
+        {/* STEP 2: REVIEW — with ENTERPRISE anti-spam config */}
         {step === 2 && (
-          <div className="space-y-4">
+          <div className="space-y-5">
             <div className="grid md:grid-cols-2 gap-4">
               {/* Spam meter */}
-              <div className="bg-gray-800/40 rounded-xl p-4 flex flex-col items-center justify-center">
-                <p className="text-xs text-gray-500 mb-2 uppercase tracking-wider">Spam Analysis</p>
-                {spamPreview ? (
-                  <SpamMeter score={spamPreview.score} level={spamPreview.level} />
-                ) : (
+              <div className="bg-white/5 rounded-xl p-5 flex flex-col items-center justify-center border border-white/5">
+                <p className="text-xs text-gray-500 mb-3 uppercase tracking-wider">Spam Analysis</p>
+                {spamPreview ? <SpamMeter score={spamPreview.score} level={spamPreview.level} /> : (
                   <button onClick={handleSpamCheck} disabled={spamChecking}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-sm">
-                    {spamChecking ? 'Checking...' : 'Check Spam Score'}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-sm">
+                    {spamChecking ? 'Checking…' : 'Check Spam Score'}
                   </button>
                 )}
                 {spamPreview && spamPreview.level === 'high' && (
-                  <p className="text-xs text-red-400 mt-2 text-center">⚠ This message will be blocked by spam protection. Rewrite it.</p>
+                  <p className="text-xs text-red-400 mt-3 text-center">⚠ This message will be blocked by spam protection. Rewrite it.</p>
                 )}
               </div>
 
-              {/* Send configuration */}
-              <div className="bg-gray-800/40 rounded-xl p-4 space-y-3">
-                <p className="text-xs text-gray-500 uppercase tracking-wider">Send Configuration</p>
+              {/* Enterprise anti-spam config */}
+              <div className="bg-white/5 rounded-xl p-5 space-y-4 border border-white/5">
+                <p className="text-xs text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <Icon.Shield className="w-3.5 h-3.5 text-green-400" /> Enterprise Anti-Spam Config
+                </p>
                 <div>
-                  <label className="text-xs text-gray-400 flex justify-between"><span>Batch Size</span><span className="text-gray-500">{batchSize} per batch</span></label>
-                  <input type="range" min="1" max="20" value={batchSize} onChange={(e) => setBatchSize(Number(e.target.value))} className="w-full accent-purple-500" />
+                  <label className="text-xs text-gray-300 flex justify-between"><span>Batch Size</span><span className="text-purple-300 font-medium">{batchSize} per batch</span></label>
+                  <input type="range" min="1" max="20" value={batchSize} onChange={(e) => setBatchSize(Number(e.target.value))} className="w-full accent-purple-500 mt-1" />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-400 flex justify-between"><span>Delay Between Batches</span><span className="text-gray-500">{(delayMs / 1000).toFixed(1)}s</span></label>
-                  <input type="range" min="500" max="5000" step="100" value={delayMs} onChange={(e) => setDelayMs(Number(e.target.value))} className="w-full accent-purple-500" />
+                  <label className="text-xs text-gray-300 flex justify-between"><span>Delay Between Batches</span><span className="text-purple-300 font-medium">{(delayMs / 1000).toFixed(1)}s</span></label>
+                  <input type="range" min="500" max="5000" step="100" value={delayMs} onChange={(e) => setDelayMs(Number(e.target.value))} className="w-full accent-purple-500 mt-1" />
                 </div>
-                <p className="text-[10px] text-gray-600">Smaller batches + longer delays = better inbox delivery & spam-free sending.</p>
+                <div>
+                  <label className="text-xs text-gray-300 flex justify-between"><span>Jitter (randomized delay ±)</span><span className="text-purple-300 font-medium">{jitterPct}%</span></label>
+                  <input type="range" min="0" max="100" value={jitterPct} onChange={(e) => setJitterPct(Number(e.target.value))} className="w-full accent-purple-500 mt-1" />
+                  <p className="text-[10px] text-gray-500 mt-0.5">Randomizes each delay so the gateway can't detect a fixed sending pattern.</p>
+                </div>
+
+                {/* Toggle switches */}
+                <div className="space-y-2.5 pt-1">
+                  <ToggleRow label="Humanize Timing" desc="Mimics human sending behavior" value={humanize} onChange={setHumanize} />
+                  <ToggleRow label="AI Polymorph" desc="Rewrites each message uniquely with AI" value={polymorph} onChange={setPolymorph} />
+                  <ToggleRow label="Drip Mode" desc="Spread sends over time (slow & safe)" value={dripMode} onChange={setDripMode} />
+                </div>
               </div>
             </div>
 
             {/* Summary */}
-            <div className="bg-gray-800/40 rounded-xl p-4">
-              <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Campaign Summary</p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div><p className="text-xs text-gray-500">Recipients</p><p className="text-lg font-bold text-white">{Math.min(parsedNumbers.length, remaining)}</p></div>
-                <div><p className="text-xs text-gray-500">Batch Size</p><p className="text-lg font-bold text-cyan-400">{batchSize}</p></div>
-                <div><p className="text-xs text-gray-500">Delay</p><p className="text-lg font-bold text-cyan-400">{(delayMs / 1000).toFixed(1)}s</p></div>
-                <div><p className="text-xs text-gray-500">Est. Batches</p><p className="text-lg font-bold text-purple-400">{Math.ceil(Math.min(parsedNumbers.length, remaining) / batchSize)}</p></div>
+            <div className="bg-white/5 rounded-xl p-5 border border-white/5">
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">Campaign Summary</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div><p className="text-xs text-gray-500">Recipients</p><p className="text-xl font-bold text-white">{Math.min(parsedNumbers.length, remaining)}</p></div>
+                <div><p className="text-xs text-gray-500">Batch Size</p><p className="text-xl font-bold text-cyan-400">{batchSize}</p></div>
+                <div><p className="text-xs text-gray-500">Delay</p><p className="text-xl font-bold text-cyan-400">{(delayMs / 1000).toFixed(1)}s ±{jitterPct}%</p></div>
+                <div><p className="text-xs text-gray-500">Est. Time</p><p className="text-xl font-bold text-purple-400">{Math.ceil(Math.min(parsedNumbers.length, remaining) / batchSize) * (delayMs / 1000 / 60)}m</p></div>
               </div>
-              <div className="mt-3 p-2 bg-gray-900/50 rounded text-xs text-gray-400">
+              <div className="mt-3 p-3 bg-slate-900/50 rounded-lg text-xs text-gray-400">
                 <p className="text-gray-500 mb-1">Message preview:</p>
-                {message.substring(0, 120)}{message.length > 120 ? '...' : ''}
+                {message.substring(0, 120)}{message.length > 120 ? '…' : ''}
+              </div>
+              {/* Anti-spam badges */}
+              <div className="mt-3 flex flex-wrap gap-2">
+                {humanize && <span className="text-[10px] px-2 py-1 rounded-lg bg-green-500/10 text-green-300 border border-green-500/20 flex items-center gap-1"><Icon.Shield className="w-3 h-3" /> Humanized</span>}
+                {polymorph && <span className="text-[10px] px-2 py-1 rounded-lg bg-purple-500/10 text-purple-300 border border-purple-500/20 flex items-center gap-1"><Icon.Sparkle className="w-3 h-3" /> AI Polymorph</span>}
+                {dripMode && <span className="text-[10px] px-2 py-1 rounded-lg bg-blue-500/10 text-blue-300 border border-blue-500/20 flex items-center gap-1"><Icon.Clock className="w-3 h-3" /> Drip Mode</span>}
+                <span className="text-[10px] px-2 py-1 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/20 flex items-center gap-1"><Icon.Activity className="w-3 h-3" /> {jitterPct}% Jitter</span>
               </div>
             </div>
 
             <div className="flex justify-between">
-              <button onClick={() => setStep(1)} className="px-5 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition">← Back</button>
+              <button onClick={() => setStep(1)} className="px-5 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-medium transition">← Back</button>
               <button onClick={() => { setStep(3); handleSend(); }}
                 disabled={loading || remaining <= 0 || (spamPreview && spamPreview.level === 'high')}
-                className="px-6 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-40 text-white rounded-lg text-sm font-bold transition flex items-center gap-2">
+                className="px-8 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-lg shadow-purple-600/30">
                 {loading ? <Spinner /> : <Icon.Send className="w-4 h-4" />} Launch Campaign
               </button>
             </div>
           </div>
         )}
 
-        {/* STEP 4: SEND / LIVE PROGRESS */}
+        {/* STEP 3: SEND / LIVE PROGRESS */}
         {step === 3 && (
           <div className="space-y-4">
             {loading && (
-              <div className="text-center py-8">
-                <Spinner />
-                <p className="text-sm text-gray-400 mt-3">Launching campaign...</p>
+              <div className="text-center py-12">
+                <Spinner size={32} />
+                <p className="text-sm text-gray-400 mt-4">Launching campaign with enterprise anti-spam config…</p>
               </div>
             )}
 
-            {/* Live progress */}
             {progress && !loading && (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold text-gray-200 flex items-center gap-2">
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
                     <Icon.Activity className="w-4 h-4 text-purple-400" /> Live Progress
                   </h4>
-                  <span className={`text-xs px-2 py-1 rounded font-medium ${
-                    progress.status === 'sent' ? 'bg-green-900/40 text-green-400' :
-                    progress.status === 'partial' ? 'bg-yellow-900/40 text-yellow-400' :
-                    progress.status === 'failed' ? 'bg-red-900/40 text-red-400' :
-                    progress.status === 'blocked_spam' ? 'bg-red-900/40 text-red-400' :
-                    'bg-blue-900/40 text-blue-400 animate-pulse'
+                  <span className={`text-xs px-3 py-1 rounded-full font-medium ${
+                    progress.status === 'sent' ? 'bg-green-500/20 text-green-300' :
+                    progress.status === 'partial' ? 'bg-amber-500/20 text-amber-300' :
+                    progress.status === 'failed' ? 'bg-red-500/20 text-red-300' :
+                    progress.status === 'blocked_spam' ? 'bg-red-500/20 text-red-300' :
+                    'bg-blue-500/20 text-blue-300 animate-pulse'
                   }`}>{progress.status}</span>
                 </div>
 
-                {/* Progress bar */}
                 <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden">
                   <div className="bg-gradient-to-r from-purple-500 to-indigo-500 h-full rounded-full transition-all duration-500"
                     style={{ width: `${progress.totalSent > 0 ? Math.round((progress.totalSent / Math.max(progress.totalSent + progress.totalUndelivered, 1)) * 100) : 0}%` }} />
                 </div>
 
-                {/* Stats grid */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="bg-gray-800/50 rounded-lg p-3 text-center">
-                    <div className="text-xl font-bold text-white">{progress.totalSent}</div>
-                    <div className="text-xs text-gray-500">Sent</div>
-                  </div>
-                  <div className="bg-gray-800/50 rounded-lg p-3 text-center">
-                    <div className="text-xl font-bold text-green-400">{progress.totalDelivered}</div>
-                    <div className="text-xs text-gray-500">Delivered</div>
-                  </div>
-                  <div className="bg-gray-800/50 rounded-lg p-3 text-center">
-                    <div className="text-xl font-bold text-red-400">{progress.totalUndelivered}</div>
-                    <div className="text-xs text-gray-500">Undelivered</div>
-                  </div>
-                  <div className="bg-gray-800/50 rounded-lg p-3 text-center">
-                    <div className="text-xl font-bold text-yellow-400">{progress.totalInvalid || 0}</div>
-                    <div className="text-xs text-gray-500">Invalid</div>
-                  </div>
+                  <div className="bg-white/5 rounded-xl p-4 text-center"><div className="text-2xl font-bold text-white">{progress.totalSent}</div><div className="text-xs text-gray-500 mt-0.5">Sent</div></div>
+                  <div className="bg-white/5 rounded-xl p-4 text-center"><div className="text-2xl font-bold text-green-400">{progress.totalDelivered}</div><div className="text-xs text-gray-500 mt-0.5">Delivered</div></div>
+                  <div className="bg-white/5 rounded-xl p-4 text-center"><div className="text-2xl font-bold text-red-400">{progress.totalUndelivered}</div><div className="text-xs text-gray-500 mt-0.5">Undelivered</div></div>
+                  <div className="bg-white/5 rounded-xl p-4 text-center"><div className="text-2xl font-bold text-amber-400">{progress.totalInvalid || 0}</div><div className="text-xs text-gray-500 mt-0.5">Invalid</div></div>
                 </div>
 
                 {progress.senderApiName && (
                   <p className="text-xs text-gray-500">Sender API: <span className="text-cyan-400">{progress.senderApiName}</span> · Batch: {progress.batchSize} · Delay: {(progress.delayMs / 1000).toFixed(1)}s</p>
                 )}
 
-                {/* Blocked spam */}
                 {progress.status === 'blocked_spam' && (
-                  <div className="p-3 bg-red-900/30 border border-red-700/30 rounded-lg text-sm text-red-300">
-                    ⚠ Campaign blocked by spam protection (score: {progress.spamScore}). Rewrite your message.
-                  </div>
+                  <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-sm text-red-300">⚠ Campaign blocked by spam protection (score: {progress.spamScore}). Rewrite your message.</div>
                 )}
 
-                {/* Done actions */}
-                {(progress.status === 'sent' || progress.status === 'partial' || progress.status === 'failed') && (
+                {['sent', 'partial', 'failed'].includes(progress.status) && (
                   <div className="flex gap-2">
                     {result && result.campaignId && (
-                      <button onClick={() => onCampaignClick(result.campaignId)} className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition">
-                        View Delivery Details
-                      </button>
+                      <button onClick={() => onCampaignClick(result.campaignId)} className="flex-1 px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-sm font-medium transition">View Delivery Details</button>
                     )}
                     <button onClick={() => { setStep(0); setMessage(''); setNumbersText(''); setResult(null); setProgress(null); setSpamPreview(null); }}
-                      className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition">
-                      New Campaign
-                    </button>
+                      className="flex-1 px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-medium transition">New Campaign</button>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Error / blocked result */}
             {result && result.blocked && !progress && !loading && (
-              <div className="p-4 bg-red-900/30 border border-red-700/30 rounded-lg">
+              <div className="p-5 bg-red-500/10 border border-red-500/20 rounded-xl">
                 <p className="text-sm font-bold text-red-300 mb-2">⚠ Message Blocked — Spam Protection</p>
                 <p className="text-xs text-red-400 mb-2">Spam score: {result.spamScore}/100</p>
                 {result.spamReasons && (
                   <div className="flex flex-wrap gap-1.5 mb-3">
-                    {result.spamReasons.map((r, i) => <span key={i} className="text-xs bg-red-900/40 px-2 py-0.5 rounded text-red-300">{r}</span>)}
+                    {result.spamReasons.map((r, i) => <span key={i} className="text-xs bg-red-500/10 px-2 py-0.5 rounded text-red-300">{r}</span>)}
                   </div>
                 )}
-                <button onClick={() => setStep(0)} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm">← Rewrite Message</button>
+                <button onClick={() => setStep(0)} className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-sm">← Rewrite Message</button>
               </div>
             )}
           </div>
         )}
       </div>
 
-      {/* Invalid numbers (from failed send) */}
       {result && result.invalidNumbers && result.invalidNumbers.length > 0 && step !== 3 && (
-        <div className="bg-gray-900/60 rounded-xl p-5 border border-gray-800">
-          <p className="text-xs text-red-400 font-medium mb-1">Invalid numbers rejected:</p>
+        <div className="bg-slate-900/50 rounded-2xl p-5 border border-white/5">
+          <p className="text-xs text-red-400 font-medium mb-1.5">Invalid numbers rejected:</p>
           <div className="flex flex-wrap gap-1.5">
             {result.invalidNumbers.map((inv, i) => (
-              <span key={i} className="text-xs bg-red-900/30 border border-red-700/30 px-2 py-1 rounded text-red-300">
+              <span key={i} className="text-xs bg-red-500/10 border border-red-500/20 px-2 py-1 rounded-lg text-red-300">
                 {inv.number || inv} {inv.reason ? `(${inv.reason})` : ''}
               </span>
             ))}
@@ -1137,64 +1161,226 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
 }
 
 // ================================================================
-// REPORTS TAB — campaign list + delivery reports
+// Toggle Row — for enterprise anti-spam switches
 // ================================================================
-function ReportsTab({ campaigns, deliveryReports, onCampaignClick }) {
-  const [selectedCampaign, setSelectedCampaign] = useState(null);
+function ToggleRow({ label, desc, value, onChange }) {
+  return (
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-xs text-gray-200 font-medium">{label}</p>
+        <p className="text-[10px] text-gray-500">{desc}</p>
+      </div>
+      <button
+        type="button"
+        onClick={() => onChange(!value)}
+        className={`relative w-11 h-6 rounded-full transition flex-shrink-0 ${value ? 'bg-green-500' : 'bg-slate-700'}`}
+      >
+        <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-all ${value ? 'left-[22px]' : 'left-0.5'}`} />
+      </button>
+    </div>
+  );
+}
 
-  const handleSelect = (c) => {
-    setSelectedCampaign(c._id);
-    onCampaignClick(c._id);
-  };
+// ================================================================
+// COUNTRY SUPPORT TAB — visual showcase of supported countries
+// ================================================================
+function CountrySupportTab() {
+  const [search, setSearch] = useState('');
+  const [expandedRegion, setExpandedRegion] = useState(null);
+  const stats = getCountryStats();
+
+  const filtered = COUNTRY_SUPPORT.map(region => ({
+    ...region,
+    countries: region.countries.filter(c =>
+      c.name.toLowerCase().includes(search.toLowerCase()) ||
+      c.code.includes(search) ||
+      c.carriers.some(car => car.name.toLowerCase().includes(search.toLowerCase()))
+    ),
+  })).filter(r => r.countries.length > 0);
 
   return (
     <div className="space-y-6">
+      {/* Hero stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <StatCard icon={Icon.Globe} label="Total Countries" value={stats.totalCountries} color="blue" />
+        <StatCard icon={Icon.Phone} label="Total Carriers" value={stats.totalCarriers} color="purple" />
+        <StatCard icon={Icon.Layers} label="Regions" value={stats.regions} color="cyan" />
+        <StatCard icon={Icon.Shield} label="Coverage" value="Global" sub="Worldwide" color="green" />
+      </div>
+
+      {/* Info banner */}
+      <div className="bg-gradient-to-r from-blue-600/10 to-indigo-600/10 border border-blue-500/20 rounded-2xl p-5 flex items-start gap-4">
+        <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+          <Icon.Globe className="w-6 h-6 text-blue-400" />
+        </div>
+        <div>
+          <h3 className="text-sm font-bold text-white">Email-to-MMS Gateway — Supported Countries</h3>
+          <p className="text-xs text-gray-400 mt-1 leading-relaxed">
+            Our gateway converts emails into MMS/SMS messages delivered directly to mobile carriers worldwide.
+            The United States &amp; Canada have direct carrier MMS gateway domains (highest deliverability).
+            All other countries route through SMS gateway providers. Numbers must be in E.164 format (e.g. +1XXXXXXXXXX).
+          </p>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div className="relative">
+        <Icon.Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by country, code, or carrier name…"
+          className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+        />
+      </div>
+
+      {/* Region cards */}
+      <div className="space-y-4">
+        {filtered.map((region, ri) => (
+          <div key={ri} className="bg-slate-900/40 border border-white/5 rounded-2xl overflow-hidden">
+            <button
+              onClick={() => setExpandedRegion(expandedRegion === ri ? null : ri)}
+              className="w-full flex items-center justify-between p-5 hover:bg-white/5 transition"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">{region.flag}</span>
+                <div className="text-left">
+                  <h3 className="text-sm font-bold text-white">{region.region}</h3>
+                  <p className="text-xs text-gray-500">{region.countries.length} countries · {region.countries.reduce((sum, c) => sum + c.carriers.length, 0)} carriers</p>
+                </div>
+              </div>
+              <Icon.Plus className={`w-5 h-5 text-gray-500 transition-transform ${expandedRegion === ri ? 'rotate-45' : ''}`} />
+            </button>
+
+            {expandedRegion === ri && (
+              <div className="px-5 pb-5 space-y-3 animate-[fadeIn_0.2s_ease-out]">
+                {region.countries.map((country, ci) => (
+                  <div key={ci} className="bg-white/5 rounded-xl p-4 border border-white/5">
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="text-2xl">{country.flag}</span>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-bold text-white">{country.name}</h4>
+                          <span className="text-xs px-2 py-0.5 rounded-lg bg-blue-500/20 text-blue-300 font-mono font-bold">{country.code}</span>
+                        </div>
+                      </div>
+                      <span className="text-xs text-gray-500">{country.carriers.length} carrier{country.carriers.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {country.carriers.map((carrier, ki) => (
+                        <div key={ki} className="flex items-center gap-2 px-3 py-2 bg-slate-900/50 rounded-lg">
+                          <Icon.Phone className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-xs text-gray-200 truncate">{carrier.name}</p>
+                            <p className="text-[10px] text-gray-500 font-mono truncate">@{carrier.domain}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+        {filtered.length === 0 && (
+          <div className="text-center py-12 text-gray-500">
+            <Icon.Globe className="w-12 h-12 mx-auto mb-3 opacity-20" />
+            <p className="text-sm">No countries match "{search}".</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ================================================================
+// REPORTS TAB — campaigns + delivery reports
+// ================================================================
+function ReportsTab({ campaigns, deliveryReports, onCampaignClick }) {
+  const [selected, setSelected] = useState(null);
+
+  const handleSelect = (c) => {
+    setSelected(c);
+    onCampaignClick(c._id);
+  };
+
+  // Aggregate stats
+  const totalSent = campaigns.reduce((s, c) => s + (c.totalSent || 0), 0);
+  const totalDelivered = campaigns.reduce((s, c) => s + (c.totalDelivered || 0), 0);
+  const totalUndelivered = campaigns.reduce((s, c) => s + (c.totalUndelivered || 0), 0);
+  const deliveryRate = totalSent > 0 ? Math.round((totalDelivered / totalSent) * 100) : 0;
+
+  return (
+    <div className="space-y-6">
+      {/* Summary stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <StatCard icon={Icon.Send} label="Total Campaigns" value={campaigns.length} color="purple" />
+        <StatCard icon={Icon.CheckCircle} label="Total Sent" value={totalSent} color="blue" />
+        <StatCard icon={Icon.Target} label="Delivery Rate" value={`${deliveryRate}%`} color="green" />
+        <StatCard icon={Icon.XCircle} label="Undelivered" value={totalUndelivered} color="red" />
+      </div>
+
+      {/* Delivery donut */}
+      {totalSent > 0 && (
+        <div className="bg-slate-900/40 border border-white/5 rounded-2xl p-6">
+          <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+            <Icon.Target className="w-4 h-4 text-green-400" /> Delivery Breakdown
+          </h3>
+          <div className="flex items-center gap-6 flex-wrap">
+            <div className="relative" style={{ width: 140, height: 140 }}>
+              <svg width="140" height="140">
+                <circle cx="70" cy="70" r="55" fill="none" stroke="#1e293b" strokeWidth="14" />
+                <circle cx="70" cy="70" r="55" fill="none" stroke="#22c55e" strokeWidth="14"
+                  strokeDasharray={`${(deliveryRate / 100) * 2 * Math.PI * 55} ${2 * Math.PI * 55}`}
+                  strokeLinecap="round" transform="rotate(-90 70 70)" className="transition-all duration-700" />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-2xl font-bold text-green-400">{deliveryRate}%</span>
+                <span className="text-[10px] text-gray-500">delivered</span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-green-500" /><span className="text-sm text-gray-300">Delivered: <span className="font-bold text-white">{totalDelivered}</span></span></div>
+              <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-red-500" /><span className="text-sm text-gray-300">Undelivered: <span className="font-bold text-white">{totalUndelivered}</span></span></div>
+              <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-slate-700" /><span className="text-sm text-gray-300">Total attempts: <span className="font-bold text-white">{totalSent}</span></span></div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Campaign list */}
-      <div className="bg-gray-900/60 rounded-xl p-5 border border-gray-800">
-        <h3 className="text-sm font-semibold text-gray-200 mb-4 flex items-center gap-2">
-          <Icon.Report className="w-4 h-4 text-indigo-400" /> Campaign History
+      <div className="bg-slate-900/40 border border-white/5 rounded-2xl p-6">
+        <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+          <Icon.Layers className="w-4 h-4 text-purple-400" /> Campaign History
         </h3>
         {campaigns.length === 0 ? (
-          <p className="text-gray-500 text-sm text-center py-8">No campaigns sent yet</p>
+          <div className="text-center py-10 text-gray-500">
+            <Icon.Report className="w-12 h-12 mx-auto mb-3 opacity-20" />
+            <p className="text-sm">No campaigns yet. Send your first campaign from the Send MMS tab.</p>
+          </div>
         ) : (
           <div className="space-y-2">
             {campaigns.map((c) => (
-              <div
-                key={c._id}
-                onClick={() => handleSelect(c)}
-                className={`cursor-pointer bg-gray-800/50 rounded-lg p-3 border transition ${
-                  selectedCampaign === c._id ? 'border-purple-500' : 'border-gray-700/50 hover:border-gray-600'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      c.status === 'sent' ? 'bg-green-900/50 text-green-300' :
-                      c.status === 'blocked' || c.status === 'failed' ? 'bg-red-900/50 text-red-300' :
-                      c.status === 'running' ? 'bg-blue-900/50 text-blue-300' :
-                      'bg-yellow-900/50 text-yellow-300'
-                    }`}>
-                      {(c.status || 'pending').toUpperCase()}
-                    </span>
-                    {c.senderApiName && (
-                      <span className="text-xs text-gray-500">via {c.senderApiName}</span>
-                    )}
-                    {c.templateUsed && (
-                      <span className="text-xs bg-gray-700/50 px-2 py-0.5 rounded text-gray-400">{c.templateUsed}</span>
-                    )}
+              <div key={c._id} className={`rounded-xl p-4 cursor-pointer transition border ${selected?._id === c._id ? 'bg-purple-500/10 border-purple-500/30' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}
+                onClick={() => handleSelect(c)}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                      c.status === 'sent' ? 'bg-green-500/20 text-green-300' :
+                      c.status === 'partial' ? 'bg-amber-500/20 text-amber-300' :
+                      c.status === 'blocked_spam' ? 'bg-red-500/20 text-red-300' :
+                      c.status === 'running' ? 'bg-blue-500/20 text-blue-300 animate-pulse' :
+                      'bg-gray-500/20 text-gray-300'
+                    }`}>{c.status}</span>
+                    <span className="text-xs text-gray-500">{new Date(c.createdAt).toLocaleString()}</span>
                   </div>
-                  <span className="text-xs text-gray-500">
-                    {new Date(c.createdAt).toLocaleString()}
-                  </span>
+                  <div className="text-xs text-gray-400">
+                    {c.totalSent || 0} sent · {c.totalDelivered || 0} delivered
+                  </div>
                 </div>
-                <p className="text-sm text-gray-300 mb-2 line-clamp-2">{c.message}</p>
-                <div className="flex flex-wrap gap-3 text-xs text-gray-500">
-                  <span>{c.totalSent || c.numbers?.length || 0} sent</span>
-                  {c.totalDelivered !== undefined && <span className="text-green-400">{c.totalDelivered} delivered</span>}
-                  {c.totalUndelivered !== undefined && <span className="text-red-400">{c.totalUndelivered} undelivered</span>}
-                  {c.totalInvalid > 0 && <span className="text-yellow-400">{c.totalInvalid} invalid</span>}
-                  {c.country && <span className="flex items-center gap-1"><Icon.Globe className="w-3 h-3" />{c.country}</span>}
-                </div>
+                <p className="text-sm text-gray-300 truncate">{c.message?.substring(0, 80) || 'No message'}…</p>
               </div>
             ))}
           </div>
@@ -1202,50 +1388,26 @@ function ReportsTab({ campaigns, deliveryReports, onCampaignClick }) {
       </div>
 
       {/* Delivery reports for selected campaign */}
-      {selectedCampaign && (
-        <div className="bg-gray-900/60 rounded-xl p-5 border border-gray-800">
-          <h3 className="text-sm font-semibold text-gray-200 mb-4 flex items-center gap-2">
-            <Icon.Inbox className="w-4 h-4 text-purple-400" /> Delivery Details
+      {selected && deliveryReports.length > 0 && (
+        <div className="bg-slate-900/40 border border-white/5 rounded-2xl p-6">
+          <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+            <Icon.Report className="w-4 h-4 text-cyan-400" /> Delivery Details — {selected.message?.substring(0, 30) || 'Campaign'}…
           </h3>
-          {deliveryReports.length === 0 ? (
-            <p className="text-gray-500 text-sm text-center py-6">No delivery reports for this campaign</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-gray-400 border-b border-gray-800">
-                    <th className="text-left py-2 px-2 font-medium">Number</th>
-                    <th className="text-left py-2 px-2 font-medium">Status</th>
-                    <th className="text-left py-2 px-2 font-medium">Country</th>
-                    <th className="text-left py-2 px-2 font-medium">API</th>
-                    <th className="text-left py-2 px-2 font-medium">Error</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {deliveryReports.map((r, i) => (
-                    <tr key={i} className="border-b border-gray-800/50">
-                      <td className="py-2 px-2 text-gray-300 font-mono">{r.number}</td>
-                      <td className="py-2 px-2">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                          r.status === 'delivered' ? 'bg-green-900/50 text-green-300' :
-                          r.status === 'undelivered' ? 'bg-red-900/50 text-red-300' :
-                          r.status === 'invalid' ? 'bg-yellow-900/50 text-yellow-300' :
-                          'bg-gray-800 text-gray-400'
-                        }`}>
-                          {(r.status || 'pending').toUpperCase()}
-                        </span>
-                      </td>
-                      <td className="py-2 px-2 text-gray-400">
-                        {r.country ? `${r.country} ${r.countryCode || ''}` : '—'}
-                      </td>
-                      <td className="py-2 px-2 text-gray-400">{r.senderApiName || '—'}</td>
-                      <td className="py-2 px-2 text-red-300">{r.errorMessage || '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <div className="max-h-96 overflow-y-auto space-y-1.5">
+            {deliveryReports.map((dr, i) => (
+              <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-white/5 text-xs">
+                <span className="text-gray-300 font-mono">{dr.number}</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-gray-500">{dr.senderApiName}</span>
+                  <span className={`px-2 py-0.5 rounded-full font-medium ${
+                    dr.status === 'sent' || dr.status === 'delivered' ? 'bg-green-500/20 text-green-300' :
+                    dr.status === 'invalid' ? 'bg-red-500/20 text-red-300' :
+                    'bg-amber-500/20 text-amber-300'
+                  }`}>{dr.status}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -1253,7 +1415,7 @@ function ReportsTab({ campaigns, deliveryReports, onCampaignClick }) {
 }
 
 // ================================================================
-// INFO TAB — admin-set app info (number, email, whatsapp, description)
+// INFO TAB — app info + features
 // ================================================================
 function InfoTab({ settings }) {
   const info = [
@@ -1262,26 +1424,37 @@ function InfoTab({ settings }) {
     { icon: Icon.Phone, label: 'Phone', value: settings?.phone || settings?.whatsapp || 'Not set', color: 'text-blue-400' },
   ];
 
+  const features = [
+    { icon: Icon.Sparkle, label: 'AI-powered message suggestions', desc: 'Gemini AI helps you write spam-free messages' },
+    { icon: Icon.Shield, label: 'Enterprise spam protection', desc: 'Multi-layer anti-spam: heuristic + AI + country rules' },
+    { icon: Icon.Globe, label: 'Global country support', desc: `${getCountryStats().totalCountries} countries with carrier routing` },
+    { icon: Icon.Bolt, label: 'Auto-routing sender APIs', desc: 'Intelligent load-balancing across multiple providers' },
+    { icon: Icon.Inbox, label: 'Inbox & auto-reply', desc: 'Multi-language automatic SMS reply system' },
+    { icon: Icon.Clock, label: 'Scheduled sends', desc: 'Plan campaigns for optimal delivery times' },
+    { icon: Icon.Activity, label: 'Live progress tracking', desc: 'Real-time campaign delivery monitoring' },
+    { icon: Icon.Target, label: 'Delivery reports', desc: 'Per-recipient delivery status tracking' },
+  ];
+
   return (
     <div className="space-y-6">
-      <div className="bg-gray-900/60 rounded-xl p-6 border border-gray-800">
-        <div className="flex items-center gap-3 mb-5">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center overflow-hidden">
-            {settings?.logoUrl ? <img src={settings.logoUrl} alt="logo" className="w-full h-full object-cover" /> : <Icon.Send className="w-6 h-6 text-white" />}
+      <div className="bg-gradient-to-br from-slate-900/60 to-slate-900/30 border border-white/5 rounded-2xl p-6">
+        <div className="flex items-center gap-4 mb-5">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center overflow-hidden shadow-lg shadow-purple-500/20">
+            {settings?.logoUrl ? <img src={settings.logoUrl} alt="logo" className="w-full h-full object-cover" /> : <Icon.Send className="w-8 h-8 text-white" />}
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white">{settings?.platformName || 'MMS Sender'}</h2>
-            <p className="text-xs text-gray-500">{settings?.language === 'bn' ? 'ভাষা: বাংলা' : 'Language: English'}</p>
+            <h2 className="text-xl font-bold text-white">{settings?.platformName || 'MMS Sender'}</h2>
+            <p className="text-xs text-purple-400/70 mt-0.5">{settings?.language === 'bn' ? 'Language: Bangla' : 'Language: English'}</p>
           </div>
         </div>
 
-        <p className="text-sm text-gray-400 mb-5">
-          {settings?.description || 'Enterprise MMS Sending Platform — send campaigns with AI-powered spam protection and auto-routing.'}
+        <p className="text-sm text-gray-400 mb-5 leading-relaxed">
+          {settings?.description || 'Enterprise Email-to-MMS Gateway Platform — send campaigns with AI-powered spam protection and auto-routing.'}
         </p>
 
         <div className="space-y-3">
           {info.map((item, i) => (
-            <div key={i} className="flex items-center gap-3 p-3 bg-gray-800/50 rounded-lg">
+            <div key={i} className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/5">
               <item.icon className={`w-5 h-5 ${item.color}`} />
               <div>
                 <div className="text-xs text-gray-500">{item.label}</div>
@@ -1292,23 +1465,18 @@ function InfoTab({ settings }) {
         </div>
       </div>
 
-      {/* Platform features */}
-      <div className="bg-gray-900/60 rounded-xl p-5 border border-gray-800">
-        <h3 className="text-sm font-semibold text-gray-200 mb-4 flex items-center gap-2">
+      <div className="bg-slate-900/40 border border-white/5 rounded-2xl p-6">
+        <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
           <Icon.Shield className="w-4 h-4 text-green-400" /> Platform Features
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {[
-            { icon: Icon.Sparkle, label: 'AI-powered message suggestions' },
-            { icon: Icon.Shield, label: 'Spam-free enterprise system' },
-            { icon: Icon.Globe, label: 'Country rule validation' },
-            { icon: Icon.Bolt, label: 'Auto-routing sender APIs' },
-            { icon: Icon.Inbox, label: 'Inbox rate tracking' },
-            { icon: Icon.Clock, label: 'Live account expiry countdown' },
-          ].map((f, i) => (
-            <div key={i} className="flex items-center gap-2 text-xs text-gray-400">
-              <f.icon className="w-4 h-4 text-purple-400 flex-shrink-0" />
-              {f.label}
+          {features.map((f, i) => (
+            <div key={i} className="flex items-start gap-3 p-3 bg-white/5 rounded-xl border border-white/5">
+              <f.icon className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <div className="text-sm text-gray-200 font-medium">{f.label}</div>
+                <div className="text-xs text-gray-500 mt-0.5">{f.desc}</div>
+              </div>
             </div>
           ))}
         </div>
@@ -1318,7 +1486,7 @@ function InfoTab({ settings }) {
 }
 
 // ================================================================
-// INBOX & AUTO-REPLY TAB — language selection (Bangla/English/Sylheti) then reply
+// INBOX & AUTO-REPLY TAB — preserved functionality, upgraded styling
 // ================================================================
 function InboxAutoReplyTab({ language, onToast, loginId }) {
   const [config, setConfig] = useState(null);
@@ -1362,53 +1530,44 @@ function InboxAutoReplyTab({ language, onToast, loginId }) {
 
   return (
     <div className="space-y-6">
-      {/* How it works banner */}
-      <div className="bg-gradient-to-r from-purple-900/30 to-indigo-900/20 border border-purple-700/30 rounded-xl p-4">
-        <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-lg bg-purple-600/30 flex items-center justify-center flex-shrink-0">
-            <Icon.Inbox className="w-5 h-5 text-purple-300" />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-white">How SMS Auto-Reply Works</h3>
-            <p className="text-xs text-gray-400 mt-1 leading-relaxed">
-              When someone sends an SMS to your number, the system automatically replies with a language selection prompt.
-              The sender chooses <span className="text-purple-300">1 (Bangla)</span>, <span className="text-purple-300">2 (English)</span>, or <span className="text-purple-300">3 (Sylheti)</span>,
-              and then receives your pre-written reply in their chosen language. Configure your messages below.
-            </p>
-          </div>
+      <div className="bg-gradient-to-r from-purple-600/15 to-indigo-600/10 border border-purple-500/20 rounded-2xl p-5 flex items-start gap-4">
+        <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+          <Icon.Inbox className="w-6 h-6 text-purple-300" />
+        </div>
+        <div>
+          <h3 className="text-sm font-bold text-white">How SMS Auto-Reply Works</h3>
+          <p className="text-xs text-gray-400 mt-1 leading-relaxed">
+            When someone sends an SMS to your number, the system automatically replies with a language selection prompt.
+            The sender chooses <span className="text-purple-300">1 (Bangla)</span>, <span className="text-purple-300">2 (English)</span>, or <span className="text-purple-300">3 (Sylheti)</span>,
+            and then receives your pre-written reply in their chosen language.
+          </p>
         </div>
       </div>
 
-      {/* Enable toggle */}
-      <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-5">
+      <div className="bg-slate-900/50 border border-white/5 rounded-2xl p-6">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-white">Auto-Reply Status</h3>
+            <h3 className="text-sm font-bold text-white">Auto-Reply Status</h3>
             <p className="text-xs text-gray-500 mt-0.5">Enable to automatically respond to incoming SMS with language selection</p>
           </div>
-          <button
-            onClick={() => setConfig({ ...config, enabled: !config.enabled })}
-            className={`relative w-14 h-7 rounded-full transition ${config.enabled ? 'bg-green-500' : 'bg-gray-700'}`}
-          >
+          <button onClick={() => setConfig({ ...config, enabled: !config.enabled })}
+            className={`relative w-14 h-7 rounded-full transition ${config.enabled ? 'bg-green-500' : 'bg-slate-700'}`}>
             <span className={`absolute top-0.5 w-6 h-6 bg-white rounded-full transition ${config.enabled ? 'left-7' : 'left-0.5'}`} />
           </button>
         </div>
-        <div className="mt-4 p-3 bg-gray-800/50 rounded-lg">
-          <p className="text-xs text-gray-500 mb-1">Webhook URL (configure this in your SMS provider's inbound webhook setting):</p>
+        <div className="mt-4 p-4 bg-white/5 rounded-xl border border-white/5">
+          <p className="text-xs text-gray-500 mb-2">Webhook URL (configure this in your SMS provider's inbound webhook setting):</p>
           <div className="flex items-center gap-2">
-            <code className="flex-1 text-xs text-purple-300 bg-gray-900 px-3 py-2 rounded font-mono break-all">{webhookUrl}</code>
-            <button
-              onClick={() => { navigator.clipboard?.writeText(webhookUrl); onToast('Webhook URL copied', 'success'); }}
-              className="px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded-lg flex-shrink-0"
-            >Copy</button>
+            <code className="flex-1 text-xs text-purple-300 bg-slate-900 px-3 py-2 rounded-lg font-mono break-all">{webhookUrl}</code>
+            <button onClick={() => { navigator.clipboard?.writeText(webhookUrl); onToast('Webhook URL copied', 'success'); }}
+              className="px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded-lg flex-shrink-0 transition">Copy</button>
           </div>
           <p className="text-[10px] text-gray-600 mt-2">POST inbound SMS to this URL with fields: {`{ action: 'smsInbound', From, Body, userEmail: '${loginId || 'YOUR_ID'}' }`}</p>
         </div>
       </div>
 
-      {/* Language prompt editors */}
-      <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-5">
-        <h3 className="text-sm font-semibold text-white mb-1">Step 1: Language Selection Prompt</h3>
+      <div className="bg-slate-900/50 border border-white/5 rounded-2xl p-6">
+        <h3 className="text-sm font-bold text-white mb-1">Step 1: Language Selection Prompt</h3>
         <p className="text-xs text-gray-500 mb-4">This message is sent first when an SMS is received. It asks the sender to choose a language.</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {[
@@ -1417,21 +1576,20 @@ function InboxAutoReplyTab({ language, onToast, loginId }) {
             { key: 'syl', label: 'Sylheti Prompt', flag: ' Sylheti' },
           ].map(({ key, label, flag }) => (
             <div key={key}>
-              <label className="text-xs text-gray-400 mb-1 block">{flag} {label}</label>
+              <label className="text-xs text-gray-400 mb-1.5 block">{flag} {label}</label>
               <textarea
                 value={config.languagePrompt?.[key] || ''}
                 onChange={(e) => setConfig({ ...config, languagePrompt: { ...config.languagePrompt, [key]: e.target.value } })}
                 rows={5}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-gray-100 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
               />
             </div>
           ))}
         </div>
       </div>
 
-      {/* Reply message editors */}
-      <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-5">
-        <h3 className="text-sm font-semibold text-white mb-1">Step 2: Auto-Reply Messages</h3>
+      <div className="bg-slate-900/50 border border-white/5 rounded-2xl p-6">
+        <h3 className="text-sm font-bold text-white mb-1">Step 2: Auto-Reply Messages</h3>
         <p className="text-xs text-gray-500 mb-4">After the sender picks a language (1/2/3), this is the reply they receive in that language.</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {[
@@ -1440,61 +1598,56 @@ function InboxAutoReplyTab({ language, onToast, loginId }) {
             { key: 'syl', label: 'Sylheti Reply (Option 3)', flag: ' Sylheti' },
           ].map(({ key, label, flag }) => (
             <div key={key}>
-              <label className="text-xs text-gray-400 mb-1 block">{flag} {label}</label>
+              <label className="text-xs text-gray-400 mb-1.5 block">{flag} {label}</label>
               <textarea
                 value={config.replyMessage?.[key] || ''}
                 onChange={(e) => setConfig({ ...config, replyMessage: { ...config.replyMessage, [key]: e.target.value } })}
                 rows={4}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-gray-100 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
               />
             </div>
           ))}
         </div>
       </div>
 
-      {/* Save button */}
       <div className="flex justify-end">
-        <button
-          onClick={save}
-          disabled={saving}
-          className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 text-white text-sm rounded-lg font-medium transition flex items-center gap-2"
-        >
+        <button onClick={save} disabled={saving}
+          className="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white text-sm rounded-xl font-medium transition flex items-center gap-2 shadow-lg shadow-purple-600/30">
           {saving ? <Spinner size={14} /> : <Icon.Check className="w-4 h-4" />}
-          {saving ? 'Saving...' : 'Save Auto-Reply Settings'}
+          {saving ? 'Saving…' : 'Save Auto-Reply Settings'}
         </button>
       </div>
 
-      {/* Recent inbound messages */}
-      <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-5">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-white">Recent Inbound Messages</h3>
-          <button onClick={load} className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1"><Icon.Refresh className="w-3.5 h-3.5" />Refresh</button>
+      <div className="bg-slate-900/50 border border-white/5 rounded-2xl p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-bold text-white">Recent Inbound Messages</h3>
+          <button onClick={load} className="text-xs text-purple-300 hover:text-purple-200 flex items-center gap-1"><Icon.Refresh className="w-3.5 h-3.5" />Refresh</button>
         </div>
         {messages.length === 0 ? (
-          <div className="text-center py-8 text-gray-500 text-sm">
-            <Icon.Inbox className="w-10 h-10 mx-auto mb-2 opacity-30" />
-            No inbound messages yet. Once your SMS provider webhook is configured, received messages will appear here.
+          <div className="text-center py-10 text-gray-500">
+            <Icon.Inbox className="w-12 h-12 mx-auto mb-3 opacity-20" />
+            <p className="text-sm">No inbound messages yet. Once your SMS provider webhook is configured, received messages will appear here.</p>
           </div>
         ) : (
           <div className="space-y-2 max-h-80 overflow-y-auto">
             {messages.map((m, i) => (
-              <div key={i} className="flex items-start gap-3 p-3 bg-gray-800/40 rounded-lg">
-                <div className="w-8 h-8 rounded-full bg-purple-600/20 flex items-center justify-center flex-shrink-0">
+              <div key={i} className="flex items-start gap-3 p-3 bg-white/5 rounded-xl border border-white/5">
+                <div className="w-9 h-9 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0">
                   <Icon.Phone className="w-4 h-4 text-purple-300" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-medium text-white">{m.fromNumber}</span>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full ${
-                      m.state === 'replied' ? 'bg-green-900/40 text-green-400' :
-                      m.state === 'awaiting_language' ? 'bg-yellow-900/40 text-yellow-400' :
-                      'bg-gray-700 text-gray-400'
+                      m.state === 'replied' ? 'bg-green-500/20 text-green-300' :
+                      m.state === 'awaiting_language' ? 'bg-amber-500/20 text-amber-300' :
+                      'bg-slate-700 text-gray-400'
                     }`}>
                       {m.state === 'replied' ? `Replied (${m.selectedLanguage || '?'})` : m.state === 'awaiting_language' ? 'Awaiting language' : 'Direct'}
                     </span>
                   </div>
                   <p className="text-xs text-gray-300 mt-1">Incoming: {m.incomingMessage || '(empty)'}</p>
-                  {m.replySent && <p className="text-xs text-gray-500 mt-0.5">Reply: {m.replySent.slice(0, 80)}...</p>}
+                  {m.replySent && <p className="text-xs text-gray-500 mt-0.5">Reply: {m.replySent.slice(0, 80)}…</p>}
                   <p className="text-[10px] text-gray-600 mt-1">{new Date(m.receivedAt).toLocaleString()}</p>
                 </div>
               </div>
@@ -1520,9 +1673,7 @@ function ScheduledSection({ language, onToast }) {
   const fetchScheduled = useCallback(async () => {
     try {
       const res = await fetch('/api/system', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
         body: JSON.stringify({ action: 'getScheduledSends' }),
       });
       const data = await res.json();
@@ -1539,9 +1690,7 @@ function ScheduledSection({ language, onToast }) {
     try {
       const nums = sNumbers.split(/[\n,]/).map(n => n.trim()).filter(Boolean);
       const res = await fetch('/api/system', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
         body: JSON.stringify({ action: 'scheduleSend', message: sMessage, numbers: nums, scheduledAt: sTime }),
       });
       const data = await res.json();
@@ -1552,70 +1701,49 @@ function ScheduledSection({ language, onToast }) {
       } else {
         onToast(data.error || 'Failed', 'error');
       }
-    } catch {
-      onToast('Network error', 'error');
-    }
+    } catch { onToast('Network error', 'error'); }
     setLoading(false);
   };
 
   return (
-    <div className="mt-6 bg-gray-900/60 rounded-xl p-5 border border-gray-800">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2">
-          <Icon.Clock className="w-4 h-4 text-blue-400" /> Scheduled Sends
+    <div className="mt-6 bg-slate-900/50 border border-white/5 rounded-2xl p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-bold text-white flex items-center gap-2">
+          <Icon.Calendar className="w-4 h-4 text-blue-400" /> Scheduled Sends
         </h3>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="text-xs text-purple-400 hover:text-purple-300"
-        >
-          {showForm ? 'Cancel' : '+ Schedule new'}
+        <button onClick={() => setShowForm(!showForm)} className="text-xs text-purple-300 hover:text-purple-200 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-purple-500/10 transition">
+          <Icon.Plus className="w-3.5 h-3.5" /> {showForm ? 'Cancel' : 'Schedule new'}
         </button>
       </div>
 
       {showForm && (
-        <form onSubmit={handleSchedule} className="space-y-3 mb-4 p-3 bg-gray-800/30 rounded-lg">
-          <input
-            type="text"
-            value={sMessage}
-            onChange={(e) => setSMessage(e.target.value)}
+        <form onSubmit={handleSchedule} className="space-y-3 mb-4 p-4 bg-white/5 rounded-xl border border-white/5">
+          <input type="text" value={sMessage} onChange={(e) => setSMessage(e.target.value)}
             placeholder="Message content"
-            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-          />
-          <input
-            type="text"
-            value={sNumbers}
-            onChange={(e) => setSNumbers(e.target.value)}
+            className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm" />
+          <input type="text" value={sNumbers} onChange={(e) => setSNumbers(e.target.value)}
             placeholder="Numbers (comma separated)"
-            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-          />
-          <input
-            type="datetime-local"
-            value={sTime}
-            onChange={(e) => setSTime(e.target.value)}
-            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium flex items-center gap-2"
-          >
-            {loading ? <Spinner /> : <Icon.Clock className="w-4 h-4" />}
-            Schedule
+            className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm" />
+          <input type="datetime-local" value={sTime} onChange={(e) => setSTime(e.target.value)}
+            className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm" />
+          <button type="submit" disabled={loading}
+            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl text-sm font-medium flex items-center gap-2 transition">
+            {loading ? <Spinner /> : <Icon.Clock className="w-4 h-4" />} Schedule
           </button>
         </form>
       )}
 
       {scheduled.length === 0 ? (
-        <p className="text-gray-500 text-xs text-center py-4">No scheduled sends</p>
+        <p className="text-gray-500 text-xs text-center py-6">No scheduled sends yet.</p>
       ) : (
         <div className="space-y-2">
           {scheduled.map((s) => (
-            <div key={s._id} className="bg-gray-800/50 rounded-lg p-3 text-xs">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-blue-300 font-medium">Scheduled: {new Date(s.scheduledAt).toLocaleString()}</span>
-                <span className="text-gray-500">{s.numbers?.length || 0} numbers</span>
+            <div key={s._id} className="bg-white/5 rounded-xl p-4 border border-white/5">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-blue-300 font-medium text-xs flex items-center gap-1.5"><Icon.Calendar className="w-3.5 h-3.5" /> {new Date(s.scheduledAt).toLocaleString()}</span>
+                <span className="text-gray-500 text-xs">{s.numbers?.length || 0} numbers</span>
               </div>
-              <p className="text-gray-400">{s.message}</p>
+              <p className="text-xs text-gray-300">{s.message}</p>
             </div>
           ))}
         </div>
@@ -1625,7 +1753,7 @@ function ScheduledSection({ language, onToast }) {
 }
 
 // ================================================================
-// AI CHAT POPUP — floating right side, Gemini-powered, language-aware
+// AI CHAT POPUP — floating, Gemini-powered, language-aware
 // ================================================================
 function AIChatPopup({ language }) {
   const [open, setOpen] = useState(false);
@@ -1641,9 +1769,7 @@ function AIChatPopup({ language }) {
     setLoading(true);
     try {
       const res = await fetch('/api/system', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
         body: JSON.stringify({ action: 'aiChat', message: userMsg, language }),
       });
       const data = await res.json();
@@ -1660,89 +1786,65 @@ function AIChatPopup({ language }) {
 
   return (
     <>
-      {/* Floating button */}
       {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          className="fixed bottom-5 right-5 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-purple-600 to-indigo-600 shadow-lg shadow-purple-500/40 flex items-center justify-center text-white hover:scale-105 transition"
-          aria-label="AI Support"
-        >
+        <button onClick={() => setOpen(true)}
+          className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-600 shadow-2xl shadow-purple-600/40 flex items-center justify-center text-white hover:scale-110 transition"
+          aria-label="AI Support">
           <Icon.Chat className="w-6 h-6" />
-          <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-gray-900 animate-pulse" />
+          <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-950 animate-pulse" />
         </button>
       )}
 
-      {/* Chat window */}
       {open && (
-        <div className="fixed bottom-5 right-5 z-50 w-80 max-w-[calc(100vw-2rem)] bg-gray-900 rounded-2xl border border-gray-800 shadow-2xl flex flex-col" style={{ maxHeight: '70vh' }}>
-          {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-800">
+        <div className="fixed bottom-6 right-6 z-50 w-80 max-w-[calc(100vw-2rem)] bg-slate-900/95 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl flex flex-col" style={{ maxHeight: '70vh' }}>
+          <div className="flex items-center justify-between p-4 border-b border-white/10">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
                 <Icon.Sparkle className="w-4 h-4 text-white" />
               </div>
               <div>
                 <div className="text-sm font-semibold text-white">AI Support</div>
-                <div className="text-[10px] text-green-400 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full" /> Online
-                </div>
+                <div className="text-[10px] text-green-400 flex items-center gap-1"><span className="w-1.5 h-1.5 bg-green-500 rounded-full" /> Online</div>
               </div>
             </div>
-            <button onClick={() => setOpen(false)} className="text-gray-500 hover:text-gray-300">
-              <Icon.Close className="w-5 h-5" />
-            </button>
+            <button onClick={() => setOpen(false)} className="text-gray-500 hover:text-gray-300"><Icon.Close className="w-5 h-5" /></button>
           </div>
 
-          {/* Messages */}
           <div className="flex-1 overflow-y-auto p-3 space-y-3" style={{ maxHeight: '50vh' }}>
             {messages.length === 0 && (
               <div className="text-center py-6">
                 <Icon.Sparkle className="w-10 h-10 text-purple-500/50 mx-auto mb-2" />
                 <p className="text-xs text-gray-500">
-                  {language === 'bn'
-                    ? 'হাই! আমি আপনাকে সাহায্য করতে পারি। কী জানতে চান?'
-                    : "Hi! I'm your AI assistant. How can I help you today?"}
+                  {language === 'bn' ? 'হাই! আমি আপনাকে সাহায্য করতে পারি। কী জানতে চান?' : "Hi! I'm your AI assistant. How can I help you today?"}
                 </p>
               </div>
             )}
             {messages.map((m, i) => (
               <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[80%] px-3 py-2 rounded-lg text-xs ${
-                  m.role === 'user'
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-gray-800 text-gray-200'
-                }`}>
+                <div className={`max-w-[80%] px-3.5 py-2.5 rounded-2xl text-xs ${m.role === 'user' ? 'bg-purple-600 text-white rounded-br-sm' : 'bg-white/10 text-gray-200 rounded-bl-sm'}`}>
                   {m.text}
                 </div>
               </div>
             ))}
             {loading && (
               <div className="flex justify-start">
-                <div className="bg-gray-800 px-4 py-3 rounded-lg flex items-center gap-1.5">
+                <div className="bg-white/10 px-4 py-3 rounded-2xl rounded-bl-sm flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '0ms' }} />
                   <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '150ms' }} />
                   <span className="w-2 h-2 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '300ms' }} />
-                  <span className="text-xs text-gray-400 ml-1">Typing...</span>
+                  <span className="text-xs text-gray-400 ml-1">Typing…</span>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Input */}
-          <div className="p-3 border-t border-gray-800 flex gap-2">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
+          <div className="p-3 border-t border-white/10 flex gap-2">
+            <input type="text" value={input} onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !loading) handleSend(); }}
-              placeholder={language === 'bn' ? 'মেসেজ লিখুন...' : 'Type a message...'}
-              className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 text-xs"
-            />
-            <button
-              onClick={handleSend}
-              disabled={loading || !input.trim()}
-              className="px-3 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white rounded-lg transition flex items-center justify-center"
-            >
+              placeholder={language === 'bn' ? 'মেসেজ লিখুন…' : 'Type a message…'}
+              className="flex-1 px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 text-xs" />
+            <button onClick={handleSend} disabled={loading || !input.trim()}
+              className="px-3 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white rounded-xl transition flex items-center justify-center">
               {loading ? <Spinner size={14} /> : <Icon.Send2 className="w-4 h-4" />}
             </button>
           </div>
