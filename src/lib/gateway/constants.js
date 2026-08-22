@@ -1,0 +1,286 @@
+// ============================================================================
+// Gateway Constants — Email-to-MMS Gateway Engine
+// ============================================================================
+// Centralized configuration for all gateway modules:
+//   • Carrier MMS gateway domain map (US carriers + international fallback)
+//   • Fast-Fail regex pre-filters (HLR Validator Module 1)
+//   • Circuit Breaker thresholds (Auto-Healing Module 5)
+//   • Token Bucket defaults (Round-Robin Module 3)
+//   • Queue / BullMQ naming conventions
+//   • Gemini AI polymorphism prompt template (Module 4)
+//
+// NON-DESTRUCTIVE: brand-new constants module. Pure data + config — no side
+// effects, no DB calls. Imported by every gateway service.
+// ============================================================================
+
+// ---------------------------------------------------------------------------
+// MODULE 1 — Carrier MMS Gateway Domain Map
+// ---------------------------------------------------------------------------
+// Maps carrier names (from HLR lookup) to their Email-to-MMS gateway domain.
+// To send an MMS via email, you address it as: <number>@<carrierDomain>
+//   e.g. 12125551234@mms.att.net
+//
+// This is the L2 fallback when the HLR API does not return a direct gateway
+// domain. The validator checks the lookup carrier name against these keys
+// (case-insensitive substring match) and picks the matching domain.
+// ---------------------------------------------------------------------------
+export const CARRIER_MMS_DOMAINS = {
+  // AT&T
+  'att': 'mms.att.net',
+  'at&t': 'mms.att.net',
+  'cingular': 'mms.att.net',
+  // Verizon
+  'verizon': 'vzwpix.com',
+  'vzw': 'vzwpix.com',
+  // T-Mobile / Sprint (merged)
+  't-mobile': 'tmomail.net',
+  'tmobile': 'tmomail.net',
+  'sprint': 'pm.sprint.com',
+  'boost': 'myboostmobile.com',
+  // US Cellular
+  'us cellular': 'mms.uscc.net',
+  'uscellular': 'mms.uscc.net',
+  // Cricket (AT&T subsidiary)
+  'cricket': 'mms.cricketwireless.net',
+  // MetroPCS / Metro by T-Mobile
+  'metro pcs': 'mymetropcs.com',
+  'metropcs': 'mymetropcs.com',
+  // Google Fi
+  'google fi': 'msg.fi.google.com',
+  'fi': 'msg.fi.google.com',
+  // Mint Mobile
+  'mint': 'tmomail.net',
+  // Xfinity Mobile
+  'xfinity': 'vzwpix.com',
+  // Consumer Cellular
+  'consumer cellular': 'mailmymobile.net',
+  // Ting
+  'ting': 'message.ting.com',
+  // Republic Wireless
+  'republic': 'text.republicwireless.com',
+  // Virgin Mobile
+  'virgin': 'vmpix.com',
+  // Tracfone / Straight Talk
+  'tracfone': 'mmst5.tracfone.com',
+  'straight talk': 'mms.straighttalk.com',
+  // Page Plus
+  'page plus': 'vtext.com',
+
+  // ── International (common) ──
+  'rogers': 'pcs.rogers.com',
+  'bell': 'txt.bell.ca',
+  'telus': 'msg.telus.com',
+  'fido': 'fido.ca',
+  'koodo': 'msg.koodomobile.com',
+  'virgin canada': 'vmobile.ca',
+  'wind': 'mms.windmobile.ca',
+};
+
+// Default fallback domain when carrier is unknown but the number is confirmed
+// MOBILE. We attempt the most common US domain; if it bounces, the circuit
+// breaker catches it and purges the number.
+export const DEFAULT_CARRIER_DOMAIN = 'mms.att.net';
+
+// ---------------------------------------------------------------------------
+// MODULE 1 — Fast-Fail Regex Pre-Filter
+// ---------------------------------------------------------------------------
+// Instantly drops malformed numbers BEFORE any cache lookup or API call.
+// These are intentionally strict to save API budget and queue time.
+// ---------------------------------------------------------------------------
+
+// Must be 7-15 digits, optional leading +. Strips spaces, dashes, dots, parens.
+export const FAST_FAIL_REGEX = /^\+?[0-9]{7,15}$/;
+
+// Reject obviously fake / test patterns.
+export const FAST_FAIL_REJECT_PATTERNS = [
+  /^0+$/,           // all zeros
+  /^1+$/,           // all ones
+  /^0{4,}/,         // four+ leading zeros
+  /^1234/,          // sequential test
+  /^9999/,          // test prefix
+  /^5555/,          // Hollywood fake numbers
+];
+
+// E.164 normalization: strip everything except digits and a leading +.
+export function normalizeE164(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  let cleaned = raw.replace(/[^\d+]/g, '');
+  // If there's a + not at the start, remove all + signs.
+  if (cleaned.indexOf('+') > 0) {
+    cleaned = cleaned.replace(/\+/g, '');
+  }
+  // Ensure leading + for E.164 if the number starts with a country code digit.
+  if (cleaned.length > 0 && cleaned[0] !== '+') {
+    // US/Canada numbers without country code → prepend +1
+    if (cleaned.length === 10) {
+      cleaned = '+1' + cleaned;
+    } else if (cleaned.length === 11 && cleaned[0] === '1') {
+      cleaned = '+' + cleaned;
+    } else {
+      cleaned = '+' + cleaned;
+    }
+  }
+  return cleaned;
+}
+
+// ---------------------------------------------------------------------------
+// MODULE 5 — Circuit Breaker Configuration
+// ---------------------------------------------------------------------------
+export const CIRCUIT_BREAKER_CONFIG = {
+  // Number of consecutive failures before the circuit opens (suspends account).
+  failureThreshold: 3,
+  // How long the circuit stays OPEN (cooldown) before trying HALF_OPEN.
+  cooldownMs: 2 * 60 * 60 * 1000, // 2 hours (per spec)
+  // How many successful calls in HALF_OPEN to close the circuit again.
+  successThreshold: 2,
+  // Max timeout for a single send attempt before it's counted as a failure.
+  requestTimeoutMs: 30000,
+  // Reset consecutive bounce counter after this many successful sends.
+  bounceResetAfterSuccess: 1,
+};
+
+// Circuit breaker states.
+export const CIRCUIT_STATES = {
+  CLOSED: 'CLOSED',     // normal operation — account is usable
+  OPEN: 'OPEN',         // tripped — account suspended for cooldown
+  HALF_OPEN: 'HALF_OPEN', // testing — limited requests allowed
+};
+
+// ---------------------------------------------------------------------------
+// MODULE 3 — Token Bucket & Round-Robin Configuration
+// ---------------------------------------------------------------------------
+export const TOKEN_BUCKET_CONFIG = {
+  // Default daily sending cap per account (overridden by admin dynamic config).
+  defaultDailyLimit: 400,
+  // Token refill rate: how many tokens are added per second (capacity/day).
+  // This is a soft limiter — the hard limit is the daily counter.
+  refillPerSecond: 0.0046, // ~400/day
+  // Bucket capacity (burst size) — max tokens held at once.
+  capacity: 10,
+};
+
+export const ROUND_ROBIN_CONFIG = {
+  // Queue name for BullMQ.
+  queueName: 'mms-dispatch',
+  // Default micro-delay between dispatches (ms) — overridden by admin dynamic config.
+  defaultDelayMs: 3000,
+  // Max concurrent jobs per worker.
+  maxConcurrency: 1,
+  // How long a job can run before it's considered stalled.
+  stalledIntervalMs: 30000,
+  // Max retries for a job before it's moved to the dead-letter queue.
+  maxRetries: 3,
+  // Dead-letter queue name for permanently failed jobs.
+  dlqName: 'mms-dispatch-dlq',
+};
+
+// Provider type weights for weighted round-robin. Higher weight = more traffic.
+// Gmail OAuth2 tends to have the best deliverability, so it gets the most weight.
+export const PROVIDER_WEIGHTS = {
+  GMAIL_OAUTH: 5,
+  OUTLOOK_GRAPH: 4,
+  CUSTOM_SMTP: 3,
+  YAHOO: 2,
+  AOL: 2,
+};
+
+// ---------------------------------------------------------------------------
+// MODULE 4 — AI Polymorphism (Gemini) Configuration
+// ---------------------------------------------------------------------------
+// The prompt instructs the model to rewrite the message body for structural
+// uniqueness while keeping the core intent intact. This evades carrier spam
+// filters that fingerprint identical payloads.
+// ---------------------------------------------------------------------------
+export const AI_POLYMORPH_PROMPT = `You are an MMS message rewriter. Rewrite the following message so that it is structurally unique (different word choice, sentence structure, phrasing) while keeping the EXACT same core intent, meaning, and any URLs, phone numbers, or codes unchanged. Do not add or remove information. Do not add greetings or sign-offs unless they exist in the original. Output ONLY the rewritten message, nothing else.
+
+Original message:
+"""
+{MESSAGE}
+"""
+
+Rewritten message:`;
+
+// If the Gemini call fails or times out, this local synonym spinner runs.
+// Maps common words to synonyms so the message gets minor variation without
+// an API call. This is the FALLBACK that ensures the queue NEVER halts.
+export const LOCAL_SYNONYMS = {
+  'hello': ['hi', 'hey', 'greetings'],
+  'hi': ['hello', 'hey', 'greetings'],
+  'please': ['kindly', 'please'],
+  'thank you': ['thanks', 'appreciate it', 'thank you'],
+  'thanks': ['thank you', 'appreciate it'],
+  'now': ['right now', 'currently', 'now'],
+  'today': ['this day', 'today'],
+  'free': ['complimentary', 'no-cost', 'free'],
+  'offer': ['deal', 'promotion', 'offer'],
+  'deal': ['offer', 'promotion', 'deal'],
+  'click': ['tap', 'select', 'click'],
+  'buy': ['purchase', 'get', 'buy'],
+  'new': ['latest', 'fresh', 'new'],
+  'best': ['top', 'premium', 'best'],
+  'quick': ['fast', 'swift', 'quick'],
+  'easy': ['simple', 'effortless', 'easy'],
+  'guaranteed': ['assured', 'certain', 'guaranteed'],
+  'limited': ['restricted', 'scarce', 'limited'],
+  'exclusive': ['private', 'select', 'exclusive'],
+};
+
+// Gemini call timeout for the pre-flight rewrite (ms).
+export const AI_REWRITE_TIMEOUT_MS = 8000;
+
+// ---------------------------------------------------------------------------
+// MODULE 2 — SSE Live Stream Configuration
+// ---------------------------------------------------------------------------
+export const SSE_CONFIG = {
+  // How often the SSE endpoint pushes a heartbeat (ms) to keep the connection
+  // alive through proxies / load balancers.
+  heartbeatMs: 15000,
+  // Max number of events buffered in Redis list per channel.
+  maxBufferedEvents: 200,
+  // SSE event channel names.
+  channels: {
+    logs: 'gateway:logs',
+    metrics: 'gateway:metrics',
+    accounts: 'gateway:accounts',
+    queue: 'gateway:queue',
+  },
+};
+
+// ---------------------------------------------------------------------------
+// MODULE 2 — Dynamic Config Keys (Redis)
+// ---------------------------------------------------------------------------
+// These keys store runtime-configurable values in Redis so admins can change
+// them WITHOUT restarting the process. Each falls back to SystemConfig (Mongo)
+// or a hardcoded default if not set in Redis.
+// ---------------------------------------------------------------------------
+export const DYNAMIC_CONFIG_KEYS = {
+  routingDelayMs: 'routingDelayMs',
+  batchSizePerAccount: 'batchSizePerAccount',
+  maxConcurrency: 'maxConcurrency',
+  queuePaused: 'queuePaused',
+  aiPolymorphEnabled: 'aiPolymorphEnabled',
+  safetyFilterEnabled: 'safetyFilterEnabled',
+};
+
+// ---------------------------------------------------------------------------
+// Queue / job status enums
+// ---------------------------------------------------------------------------
+export const JOB_STATUS = {
+  PENDING: 'pending',
+  ACTIVE: 'active',
+  COMPLETED: 'completed',
+  FAILED: 'failed',
+  DELAYED: 'delayed',
+  RETRY: 'retry',
+};
+
+export const SEND_RESULT = {
+  SENT: 'sent',
+  FAILED: 'failed',
+  BLOCKED_SAFETY: 'blocked_safety',
+  BLOCKED_LANDLINE: 'blocked_landline',
+  BLOCKED_VOIP: 'blocked_voip',
+  BLOCKED_INVALID: 'blocked_invalid',
+  CIRCUIT_OPEN: 'circuit_open',
+  QUEUED: 'queued',
+};

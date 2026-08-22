@@ -17,8 +17,7 @@
 // the Phase 1 gateway config/accounts endpoints. No existing route is touched.
 // ============================================================================
 
-import { connectDB, verifyToken, jsonResponse } from '@/lib/core';
-import { prepareMMSPayload } from '@/services/prepareMms.js';
+import { connectDB, verifyToken, jsonResponse, prepareMMSPayload } from '@/lib/core';
 
 // ---------------------------------------------------------------------------
 // Auth helpers (mirrors /api/admin/gateway/route.js)

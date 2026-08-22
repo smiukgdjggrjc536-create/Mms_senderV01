@@ -29,6 +29,94 @@ import { carrierCacheSchema } from '../../models/carrierCache.js';
 import { systemConfigSchema } from '../../models/systemConfig.js';
 
 // ============================================================================
+// Headless Enterprise Email-to-MMS Gateway Engine — service imports
+// ============================================================================
+// Re-exported from core.js so the rest of the app (routes, admin panel) can
+// import everything from a single `@/lib/core` entry point. Each service is
+// imported lazily-safe (ES modules) and re-exported below.
+import {
+  getRedis,
+  isRedisLive,
+  acquireMutex,
+  cacheGet,
+  cacheSet,
+  cacheDel,
+  setDynamicConfig,
+  getDynamicConfig,
+  incrMetric,
+  getMetric,
+} from './redis.js';
+
+import {
+  CARRIER_MMS_DOMAINS,
+  DEFAULT_CARRIER_DOMAIN,
+  FAST_FAIL_REGEX,
+  FAST_FAIL_REJECT_PATTERNS,
+  normalizeE164,
+  CIRCUIT_BREAKER_CONFIG,
+  CIRCUIT_STATES,
+  TOKEN_BUCKET_CONFIG,
+  ROUND_ROBIN_CONFIG,
+  PROVIDER_WEIGHTS,
+  AI_POLYMORPH_PROMPT,
+  LOCAL_SYNONYMS,
+  AI_REWRITE_TIMEOUT_MS,
+  SSE_CONFIG,
+  DYNAMIC_CONFIG_KEYS,
+  JOB_STATUS,
+  SEND_RESULT,
+} from './gateway/constants.js';
+
+import {
+  fastFailCheck,
+  resolveCarrierDomain,
+  filterLineType,
+  validateAndResolveCarrier,
+  batchValidateAndResolve,
+} from '../services/hlrValidator.js';
+
+import {
+  rewriteWithPolymorph,
+  localSynonymSpin,
+  composePolymorphMiddleware,
+} from '../services/aiPolymorph.js';
+
+import {
+  setDispatchHandler,
+  getQueue,
+  getNextAvailableAccount,
+  checkTokenBucket,
+  enforceDelay,
+  startWorker,
+  enqueueSend,
+  enqueueBatch,
+  getQueueStatus,
+  pauseQueue,
+  resumeQueue,
+  resetDailyCounters,
+} from '../services/queueEngine.js';
+
+import {
+  getCircuitState,
+  getFailureCount,
+  recordFailure,
+  recordSuccess,
+  forceClose,
+  createCircuitBreaker,
+  parseBounceNotification,
+  purgeBouncedNumber,
+  startImapIdleListener,
+  handleBounceWebhook,
+  getAllCircuitStates,
+} from '../services/circuitBreaker.js';
+
+import {
+  prepareMMSPayload,
+  prepareAndEnqueue,
+  prepareAndEnqueueBatch,
+} from '../services/prepareMms.js';
+
+// ============================================================================
 // MongoDB Connection (global caching pattern)
 // ============================================================================
 
@@ -1821,4 +1909,73 @@ export {
   EmailAccount,
   CarrierCache,
   SystemConfig,
+  // Headless Enterprise Email-to-MMS Gateway Engine — service re-exports
+  // Redis (L1 cache + mutex + dynamic config + metrics)
+  getRedis,
+  isRedisLive,
+  acquireMutex,
+  cacheGet,
+  cacheSet,
+  cacheDel,
+  setDynamicConfig,
+  getDynamicConfig,
+  incrMetric,
+  getMetric,
+  // Gateway constants
+  CARRIER_MMS_DOMAINS,
+  DEFAULT_CARRIER_DOMAIN,
+  FAST_FAIL_REGEX,
+  FAST_FAIL_REJECT_PATTERNS,
+  normalizeE164,
+  CIRCUIT_BREAKER_CONFIG,
+  CIRCUIT_STATES,
+  TOKEN_BUCKET_CONFIG,
+  ROUND_ROBIN_CONFIG,
+  PROVIDER_WEIGHTS,
+  AI_POLYMORPH_PROMPT,
+  LOCAL_SYNONYMS,
+  AI_REWRITE_TIMEOUT_MS,
+  SSE_CONFIG,
+  DYNAMIC_CONFIG_KEYS,
+  JOB_STATUS,
+  SEND_RESULT,
+  // Module 1 — HLR Validator & Carrier Lookup
+  fastFailCheck,
+  resolveCarrierDomain,
+  filterLineType,
+  validateAndResolveCarrier,
+  batchValidateAndResolve,
+  // Module 4 — AI Polymorphism (Gemini Engine)
+  rewriteWithPolymorph,
+  localSynonymSpin,
+  composePolymorphMiddleware,
+  // Module 3 — Round-Robin Queue Engine
+  setDispatchHandler,
+  getQueue,
+  getNextAvailableAccount,
+  checkTokenBucket,
+  enforceDelay,
+  startWorker,
+  enqueueSend,
+  enqueueBatch,
+  getQueueStatus,
+  pauseQueue,
+  resumeQueue,
+  resetDailyCounters,
+  // Module 5 — Circuit Breaker & Bounce Handler
+  getCircuitState,
+  getFailureCount,
+  recordFailure,
+  recordSuccess,
+  forceClose,
+  createCircuitBreaker,
+  parseBounceNotification,
+  purgeBouncedNumber,
+  startImapIdleListener,
+  handleBounceWebhook,
+  getAllCircuitStates,
+  // Module 2 — Prepare MMS orchestration
+  prepareMMSPayload,
+  prepareAndEnqueue,
+  prepareAndEnqueueBatch,
 };
