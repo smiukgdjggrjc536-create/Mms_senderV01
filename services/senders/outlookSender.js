@@ -18,7 +18,15 @@
 // bounceHandler.
 //
 // NON-DESTRUCTIVE: brand-new module.
+//
+// [MODULE 6 WIRING]: Both outbound HTTP calls (token refresh + sendMail) now
+// route through routedFetch() which respects the IP-masking toggle. When IP
+// masking is ON, requests go through Cloudflare Workers / rotating proxies
+// with strict origin-header stripping. When OFF, it falls back to direct
+// fetch. See services/senders/proxyFetch.js.
 // ============================================================================
+
+import { routedFetch } from './proxyFetch.js';
 
 const MS_TOKEN_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/token';
 const MS_SEND_URL = 'https://graph.microsoft.com/v1.0/me/sendMail';
@@ -40,7 +48,7 @@ async function refreshAccessToken(creds) {
     scope: 'https://graph.microsoft.com/Mail.Send offline_access',
   });
 
-  const resp = await fetch(tokenUrl, {
+  const resp = await routedFetch(tokenUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
@@ -149,7 +157,7 @@ export async function sendViaOutlook({ account, to, subject, body, attachment })
     attachment,
   });
 
-  const resp = await fetch(MS_SEND_URL, {
+  const resp = await routedFetch(MS_SEND_URL, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${tokenJson.access_token}`,

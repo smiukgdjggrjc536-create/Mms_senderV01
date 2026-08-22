@@ -284,3 +284,66 @@ export const SEND_RESULT = {
   CIRCUIT_OPEN: 'circuit_open',
   QUEUED: 'queued',
 };
+
+// ============================================================================
+// MODULE 6: Origin IP Masking & Proxy Routing — Constants
+// ============================================================================
+
+// Proxy types supported by the ProxyConfig model.
+export const PROXY_TYPES = {
+  CLOUDFLARE_WORKER: 'cloudflare_worker',
+  ROTATING_PROXY: 'rotating_proxy',
+  STATIC_PROXY: 'static_proxy',
+};
+
+// Redis key for the global IP-masking toggle (on/off without restart).
+// Value is 'true' or 'false'. Default is 'true' (masking ON = route through
+// proxies). When 'false', the gateway dispatches directly from the origin.
+export const IP_MASKING_TOGGLE_KEY = 'ip_masking_enabled';
+
+// Redis key for the currently selected active proxy cache (5-minute TTL).
+// This avoids a Mongo round-trip on every dispatch.
+export const ACTIVE_PROXY_CACHE_KEY = 'active_proxy';
+export const ACTIVE_PROXY_CACHE_TTL = 300; // 5 minutes
+
+// Strict header-stripping list. These headers are REMOVED from every outbound
+// proxied request so the telecom A2P filter can NEVER trace the origin server.
+// X-Forwarded-For / Via / X-Real-IP etc. would reveal the Render/VPS IP.
+export const STRIP_HEADERS = [
+  'x-forwarded-for',
+  'x-forwarded-host',
+  'x-forwarded-proto',
+  'x-real-ip',
+  'via',
+  'forwarded',
+  'forwarded-for',
+  'x-originating-ip',
+  'x-remote-ip',
+  'x-remote-addr',
+  'x-client-ip',
+  'x-cluster-client-ip',
+  'cf-connecting-ip',
+  'cf-ipcountry',
+  'true-client-ip',
+  'x-original-forwarded-for',
+];
+
+// Headers to INJECT so the request looks like a genuine direct browser/client
+// request (no proxy signatures).
+export const INJECT_HEADERS = {
+  'X-Request-ID': '', // filled dynamically with a random UUID per request
+};
+
+// Default per-proxy timeout (ms) for the fetch through the proxy.
+export const PROXY_TIMEOUT_MS = 15000;
+
+// Per-proxy mini circuit-breaker: 5 consecutive failures → mark 'down'.
+export const PROXY_FAILURE_THRESHOLD = 5;
+
+// Dynamic config key for IP masking (also exposed via /api/admin/gateway/dynamic)
+export const PROXY_DYNAMIC_CONFIG_KEYS = [
+  IP_MASKING_TOGGLE_KEY, // global on/off
+  'proxyStrategy', // 'weighted' | 'round_robin' | 'least_latency' | 'random'
+  'proxyTimeoutMs', // per-request timeout
+  'proxyStripHeaders', // toggle header stripping on/off (default true)
+];

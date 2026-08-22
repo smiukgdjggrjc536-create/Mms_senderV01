@@ -27,6 +27,7 @@ import {
 import { emailAccountSchema } from '../../models/emailAccount.js';
 import { carrierCacheSchema } from '../../models/carrierCache.js';
 import { systemConfigSchema } from '../../models/systemConfig.js';
+import { proxyConfigSchema } from '../../models/proxyConfig.js';
 
 // ============================================================================
 // Headless Enterprise Email-to-MMS Gateway Engine — service imports
@@ -115,6 +116,18 @@ import {
   prepareAndEnqueue,
   prepareAndEnqueueBatch,
 } from '../services/prepareMms.js';
+
+// Module 6 — Origin IP Masking & Proxy Routing
+import {
+  isIpMaskingEnabled,
+  toggleIpMasking,
+  selectProxy,
+  stripOriginHeaders,
+  proxiedFetch,
+  recordProxyResult,
+  invalidateProxyCache,
+  getProxyStatus,
+} from '../services/proxyRouter.js';
 
 // ============================================================================
 // MongoDB Connection (global caching pattern)
@@ -586,6 +599,7 @@ const SmsInbound = mongoose.models.SmsInbound || mongoose.model('SmsInbound', sm
 const EmailAccount = mongoose.models.EmailAccount || mongoose.model('EmailAccount', emailAccountSchema);
 const CarrierCache = mongoose.models.CarrierCache || mongoose.model('CarrierCache', carrierCacheSchema);
 const SystemConfig = mongoose.models.SystemConfig || mongoose.model('SystemConfig', systemConfigSchema);
+const ProxyConfig = mongoose.models.ProxyConfig || mongoose.model('ProxyConfig', proxyConfigSchema);
 
 // ============================================================================
 // Admin Credential Management
@@ -1909,6 +1923,7 @@ export {
   EmailAccount,
   CarrierCache,
   SystemConfig,
+  ProxyConfig,
   // Headless Enterprise Email-to-MMS Gateway Engine — service re-exports
   // Redis (L1 cache + mutex + dynamic config + metrics)
   getRedis,
@@ -1978,4 +1993,13 @@ export {
   prepareMMSPayload,
   prepareAndEnqueue,
   prepareAndEnqueueBatch,
+  // Module 6 — Origin IP Masking & Proxy Routing
+  isIpMaskingEnabled,
+  toggleIpMasking,
+  selectProxy,
+  stripOriginHeaders,
+  proxiedFetch,
+  recordProxyResult,
+  invalidateProxyCache,
+  getProxyStatus,
 };

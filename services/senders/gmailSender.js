@@ -21,7 +21,15 @@
 // MMS gateway and avoids token-expiry mid-batch.
 //
 // NON-DESTRUCTIVE: brand-new module, does not modify any existing file.
+//
+// [MODULE 6 WIRING]: Both outbound HTTP calls (token refresh + messages.send)
+// now route through routedFetch() which respects the IP-masking toggle. When
+// IP masking is ON, requests go through Cloudflare Workers / rotating proxies
+// with strict origin-header stripping. When OFF, falls back to direct fetch.
+// See services/senders/proxyFetch.js.
 // ============================================================================
+
+import { routedFetch } from './proxyFetch.js';
 
 const GMAIL_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GMAIL_SEND_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
@@ -38,7 +46,7 @@ async function refreshAccessToken(creds) {
     grant_type: 'refresh_token',
   });
 
-  const resp = await fetch(GMAIL_TOKEN_URL, {
+  const resp = await routedFetch(GMAIL_TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,

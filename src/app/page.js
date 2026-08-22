@@ -7,9 +7,30 @@ import UserPanel from '@/components/UserPanel';
 // NEXT_PUBLIC_PANEL_MODE is set at build time:
 //   "admin" → Netlify shows Admin Panel only
 //   "user"  → Vercel shows User Panel only
+//   "api"   → Render shows NO UI (headless backend API only)
+//             This is the [CRITICAL RED ALERT] from the system directive:
+//             Render.com must NEVER serve an Admin/User panel or any HTML/React UI.
+//             Render is a HEADLESS backend — only REST API endpoints.
 const PANEL_MODE = process.env.NEXT_PUBLIC_PANEL_MODE || 'user';
 
 export default function Home() {
+  // ────────────────────────────────────────────────────────────────────────
+  // HEADLESS MODE (Render) — NO UI, NO Panel, NO login form.
+  // Returns a minimal status block that confirms the API engine is alive.
+  // All real functionality is served via /api/* REST endpoints.
+  // ────────────────────────────────────────────────────────────────────────
+  if (PANEL_MODE === 'api') {
+    return (
+      <main style={{ minHeight: '100vh', background: '#0a0a0a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace' }}>
+        <div style={{ textAlign: 'center', color: '#555' }}>
+          <h1 style={{ fontSize: '1.5rem', margin: 0, fontWeight: 400 }}>Headless MMS Gateway Engine</h1>
+          <p style={{ fontSize: '0.8rem', marginTop: '8px', color: '#444' }}>Backend API only — no UI served on this host.</p>
+          <p style={{ fontSize: '0.7rem', marginTop: '4px', color: '#333' }}>Endpoints: /api/admin/gateway/* · /api/system</p>
+        </div>
+      </main>
+    );
+  }
+
   const [view, setView] = useState('loading'); // loading | login | panel
   const [user, setUser] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);

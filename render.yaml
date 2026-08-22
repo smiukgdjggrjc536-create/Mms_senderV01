@@ -1,0 +1,45 @@
+# ============================================================================
+# render.yaml — Headless MMS Gateway Engine (Render.com)
+# ============================================================================
+# [CRITICAL RED ALERT: NO UI / NO ADMIN PANEL ON RENDER]
+#
+# This Render service is a HEADLESS backend API ONLY. It must NEVER serve a
+# user panel, admin panel, or any HTML/React UI. The Frontend (User Panel +
+# Admin Panel) is already fully developed and deployed on:
+#   - Vercel  → User Panel  (NEXT_PUBLIC_PANEL_MODE=user)
+#   - Netlify → Admin Panel (NEXT_PUBLIC_PANEL_MODE=admin)
+#
+# On Render, NEXT_PUBLIC_PANEL_MODE=api → page.js renders a minimal status
+# block (no AdminPanel/UserPanel components). Only the /api/* endpoints are
+# served here.
+# ============================================================================
+
+services:
+  - type: web
+    name: mms-gateway-engine
+    runtime: node
+    plan: starter
+    region: oregon
+    branch: main
+    rootDir: .
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/system
+    autoDeploy: true
+    envVars:
+      - key: NEXT_PUBLIC_PANEL_MODE
+        value: api
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_API_KEY
+        sync: false
