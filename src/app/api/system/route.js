@@ -57,6 +57,7 @@ import {
   enforceCountryRules,
   computeExpiryDate,
 } from '@/lib/core';
+import mongoose from 'mongoose';
 
 // Helper: extract token from request cookies
 function getTokenFromReq(req) {

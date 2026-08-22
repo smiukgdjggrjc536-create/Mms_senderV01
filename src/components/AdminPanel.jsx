@@ -175,7 +175,12 @@ async function api(action, data = {}) {
 
 // Gateway API helper — calls /api/admin/gateway/* with credentials.
 async function gatewayApi(path = '', options = {}) {
-  const res = await fetch(`/api/admin/gateway${path}`, {
+  // Normalize: callers pass either '/admin/gateway/health' (full) or '/health' (relative).
+  // Base is /api/admin/gateway — strip any duplicate prefix so we never get /api/admin/gateway/admin/gateway/...
+  let suffix = path || '';
+  if (suffix.startsWith('/admin/gateway')) suffix = suffix.slice('/admin/gateway'.length);
+  const url = `/api/admin/gateway${suffix}`;
+  const res = await fetch(url, {
     method: options.method || 'GET',
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     credentials: 'include',
@@ -3125,8 +3130,11 @@ function GatewayPreview() {
 // ── Deploy (trigger Render webhook + status) ──────────────────────────────
 function GatewayDeploy() {
   const [deploying, setDeploying] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [status, setStatus] = useState('');
   const [renderUrl, setRenderUrl] = useState('');
+  const [deploys, setDeploys] = useState([]);
+  const [loadingDeploys, setLoadingDeploys] = useState(false);
 
   const loadConfig = async () => {
     try {
@@ -3134,39 +3142,92 @@ function GatewayDeploy() {
       if (d.success && d.config) setRenderUrl(d.config.renderDeployUrl || '');
     } catch {}
   };
-  useEffect(() => { loadConfig(); }, []);
 
-  const trigger = async () => {
-    if (!renderUrl) { setStatus('⚠ No Render deploy URL configured. Add it in Gateway Settings.'); return; }
-    setDeploying(true); setStatus('Triggering deploy webhook...');
+  const loadDeploys = async () => {
+    setLoadingDeploys(true);
     try {
-      const d = await deployHookApi({ url: renderUrl });
-      setStatus(d.success ? '✓ Deploy webhook triggered — Render will rebuild in ~30s' : `✗ ${d.error || 'Deploy failed'}`);
-    } catch (e) { setStatus(`✗ ${e.message}`); }
-    setDeploying(false);
+      const d = await deployHookApi({});
+      if (d.success && d.deploys) setDeploys(d.deploys);
+    } catch {}
+    setLoadingDeploys(false);
   };
+
+  useEffect(() => { loadConfig(); loadDeploys(); }, []);
+
+  const trigger = async (clearCache = false) => {
+    if (clearCache) { setClearing(true); } else { setDeploying(true); }
+    setStatus(clearCache ? 'Triggering deploy with cache clear...' : 'Triggering Render deploy...');
+    try {
+      const d = await deployHookApi({ mode: 'direct', clearCache });
+      if (d.success) {
+        setStatus(`✓ Deploy triggered! ${d.deployId ? 'Deploy ID: ' + d.deployId.slice(0, 12) : ''} — Render rebuilding in ~30-60s`);
+        setTimeout(() => loadDeploys(), 5000);
+      } else {
+        if (renderUrl) {
+          setStatus('Direct mode failed, trying webhook...');
+          const d2 = await deployHookApi({ url: renderUrl, clearCache });
+          setStatus(d2.success ? `✓ Deploy webhook triggered — Render will rebuild in ~30s` : `✗ ${d2.error || d.error || 'Deploy failed'}`);
+        } else {
+          setStatus(`✗ ${d.error || d.message || 'Deploy failed — set RENDER_API_KEY or a Render Deploy Webhook URL in Gateway Settings'}`);
+        }
+      }
+    } catch (e) { setStatus(`✗ ${e.message}`); }
+    setDeploying(false); setClearing(false);
+  };
+
+  const statusColor = status.startsWith('✓') ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' : status.startsWith('⚠') ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' : status.startsWith('✗') ? 'bg-rose-500/10 text-rose-300 border-rose-500/30' : 'bg-sky-500/10 text-sky-300 border-sky-500/30';
 
   return (
     <div className="space-y-4">
-      <DetailBox title="Render Headless Deploy" subtitle="Trigger rebuild of the backend gateway engine on Render" icon="rocket" accent="amber">
+      <DetailBox title="Render Headless Deploy" subtitle="One-click rebuild of the backend gateway engine — auto-configured, no manual URL needed" icon="rocket" accent="amber" live>
         <div className="mt-3 space-y-4">
-          <div className="bg-white/5 rounded-xl p-4">
-            <p className="text-xs text-slate-400 font-semibold mb-1">Configured Deploy URL</p>
-            <p className="text-white text-sm font-mono break-all">{renderUrl ? renderUrl.replace(/\/deploy\/[a-z0-9-]+/i, '/deploy/***') : '— not configured —'}</p>
+          <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3">
+            <IconByName name="check" size={16} className="text-emerald-400" />
+            <span className="text-emerald-300 text-xs font-semibold">Auto-configured via Render API — just click to deploy</span>
           </div>
-          <button onClick={trigger} disabled={deploying} className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-bold disabled:opacity-50 flex items-center justify-center gap-2">
-            {deploying ? <><BtnSpinner /> Deploying...</> : <><IconByName name="rocket" size={18} /> Trigger Render Deploy</>}
-          </button>
-          {status && <div className={`rounded-xl p-3 text-sm ${status.startsWith('✓') ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30' : status.startsWith('⚠') ? 'bg-amber-500/10 text-amber-300 border border-amber-500/30' : 'bg-rose-500/10 text-rose-300 border border-rose-500/30'}`}>{status}</div>}
+
+          {renderUrl && (
+            <div className="bg-white/5 rounded-xl p-4">
+              <p className="text-xs text-slate-400 font-semibold mb-1">Webhook URL (fallback, configured in Gateway Settings)</p>
+              <p className="text-white text-sm font-mono break-all">{renderUrl.replace(/\/deploy\/[a-z0-9-]+/i, '/deploy/***')}</p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button onClick={() => trigger(false)} disabled={deploying || clearing} className="py-3 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-bold disabled:opacity-50 flex items-center justify-center gap-2">
+              {deploying ? <><BtnSpinner /> Deploying...</> : <><IconByName name="rocket" size={18} /> Trigger Deploy</>}
+            </button>
+            <button onClick={() => trigger(true)} disabled={deploying || clearing} className="py-3 rounded-xl bg-gradient-to-r from-rose-700 to-rose-600 hover:from-rose-800 hover:to-rose-700 text-white font-bold disabled:opacity-50 flex items-center justify-center gap-2">
+              {clearing ? <><BtnSpinner /> Clearing...</> : <><IconByName name="refresh" size={18} /> Deploy + Clear Cache</>}
+            </button>
+          </div>
+
+          {status && <div className={`rounded-xl p-3 text-sm border ${statusColor}`}>{status}</div>}
         </div>
       </DetailBox>
 
-      <DetailBox title="Deployment Architecture" subtitle="3-platform single-codebase map" icon="server" accent="indigo">
+      <DetailBox title="Recent Deployments" subtitle="Live status from Render API" icon="activity" accent="sky" action={<button onClick={loadDeploys} disabled={loadingDeploys} className="text-xs text-sky-400 hover:text-sky-300 font-semibold flex items-center gap-1">{loadingDeploys ? <BtnSpinner /> : <><IconByName name="refresh" size={14} /> Refresh</>}</button>}>
+        <div className="mt-3 space-y-2">
+          {deploys.length === 0 && <p className="text-slate-500 text-sm text-center py-4">No recent deployments — trigger one above</p>}
+          {deploys.map((d, i) => (
+            <div key={d.id || i} className="bg-white/5 rounded-xl p-3 flex items-center gap-3">
+              <div className={`w-2.5 h-2.5 rounded-full ${d.status === 'live' ? 'bg-emerald-400' : d.status === 'build_in_progress' || d.status === 'created' ? 'bg-amber-400 animate-pulse' : d.status === 'build_failed' || d.status === 'update_failed' ? 'bg-rose-400' : 'bg-slate-400'}`} />
+              <div className="flex-1 min-w-0">
+                <p className="text-white text-sm font-mono truncate">{d.id ? d.id.slice(0, 16) : '—'}</p>
+                <p className="text-slate-400 text-xs">{d.status} {d.createdAt ? ' · ' + new Date(d.createdAt).toLocaleString() : ''}</p>
+              </div>
+              {d.commit && <div className="text-right"><p className="text-sky-400 text-xs font-mono">{d.commit.id}</p><p className="text-slate-500 text-xs truncate max-w-[200px]">{d.commit.message}</p></div>}
+            </div>
+          ))}
+        </div>
+      </DetailBox>
+
+      <DetailBox title="Deployment Architecture" subtitle="3-platform single-codebase map — same repo, 3 modes" icon="server" accent="indigo">
         <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
-            { name: 'Vercel', mode: 'user', desc: 'User Panel (NEXT_PUBLIC_PANEL_MODE=user)', card: 'bg-sky-500/10 border-sky-500/20', iconBg: 'bg-sky-500/20', iconText: 'text-sky-400' },
-            { name: 'Netlify', mode: 'admin', desc: 'Admin Panel (NEXT_PUBLIC_PANEL_MODE=admin)', card: 'bg-violet-500/10 border-violet-500/20', iconBg: 'bg-violet-500/20', iconText: 'text-violet-400' },
-            { name: 'Render', mode: 'api', desc: 'Headless Engine (NEXT_PUBLIC_PANEL_MODE=api)', card: 'bg-amber-500/10 border-amber-500/20', iconBg: 'bg-amber-500/20', iconText: 'text-amber-400' },
+            { name: 'Vercel', mode: 'user', desc: 'User Panel (NEXT_PUBLIC_PANEL_MODE=user)', url: 'mms-sender-v01.vercel.app', card: 'bg-sky-500/10 border-sky-500/20', iconBg: 'bg-sky-500/20', iconText: 'text-sky-400' },
+            { name: 'Netlify', mode: 'admin', desc: 'Admin Panel (NEXT_PUBLIC_PANEL_MODE=admin)', url: 'mms-sender-v01.netlify.app', card: 'bg-violet-500/10 border-violet-500/20', iconBg: 'bg-violet-500/20', iconText: 'text-violet-400' },
+            { name: 'Render', mode: 'api', desc: 'Headless Engine (NEXT_PUBLIC_PANEL_MODE=api)', url: 'mms-gateway-engine.onrender.com', card: 'bg-amber-500/10 border-amber-500/20', iconBg: 'bg-amber-500/20', iconText: 'text-amber-400' },
           ].map(p => (
             <div key={p.name} className={`${p.card} border rounded-xl p-4 text-center`}>
               <div className={`w-12 h-12 mx-auto rounded-xl ${p.iconBg} flex items-center justify-center mb-2`}>
@@ -3174,6 +3235,7 @@ function GatewayDeploy() {
               </div>
               <p className="text-white font-bold text-sm">{p.name}</p>
               <p className="text-slate-400 text-xs mt-1">{p.desc}</p>
+              <p className="text-slate-500 text-xs font-mono mt-2 break-all">{p.url}</p>
             </div>
           ))}
         </div>
