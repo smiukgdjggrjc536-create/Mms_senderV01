@@ -58,6 +58,7 @@ import {
   computeExpiryDate,
 } from '@/lib/core';
 import mongoose from 'mongoose';
+import { getKeepAliveStatus } from '@/lib/keepAlive';
 
 // Helper: extract token from request cookies
 function getTokenFromReq(req) {
@@ -831,6 +832,65 @@ export async function POST(req) {
       await MongoConnection.updateMany({}, { isActive: false });
       await MongoConnection.findByIdAndUpdate(id, { isActive: true });
       return jsonResponse({ success: true });
+    }
+
+    // ================================================================
+    // KEEP-ALIVE STATUS — returns the Render self-ping monitor status so
+    // the admin panel can display whether the anti-sleep loop is running.
+    // No DB / no auth needed (read-only runtime telemetry).
+    // ================================================================
+    if (action === 'getKeepAliveStatus') {
+      const status = getKeepAliveStatus();
+      return jsonResponse({ success: true, keepAlive: status });
+    }
+
+    // ================================================================
+    // PING RENDER — the admin panel (Netlify) calls this to actively ping
+    // the Render headless backend so it stays awake. Returns live status
+    // + response time. No auth required (it's a health probe that helps
+    // keep the gateway alive).
+    // ================================================================
+    if (action === 'pingRender') {
+      const renderUrl =
+        process.env.RENDER_EXTERNAL_URL ||
+        process.env.RENDER_SERVICE_URL ||
+        'https://mms-gateway-engine.onrender.com';
+      const pingUrl = `${renderUrl.replace(/\/$/, '')}/api/ping`;
+      const start = Date.now();
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        const res = await fetch(pingUrl, {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+          cache: 'no-store',
+        });
+        clearTimeout(timeoutId);
+        const elapsed = Date.now() - start;
+        const data = await res.json().catch(() => ({}));
+        return jsonResponse({
+          success: true,
+          alive: res.ok,
+          status: res.status,
+          responseMs: elapsed,
+          renderTime: data.timestamp || null,
+          renderUptime: data.uptime || null,
+          renderMode: data.mode || null,
+          url: pingUrl,
+          checkedAt: new Date().toISOString(),
+        });
+      } catch (err) {
+        const elapsed = Date.now() - start;
+        return jsonResponse({
+          success: false,
+          alive: false,
+          error: err.name === 'AbortError' ? 'Timeout (Render may be spinning up — try again)' : (err.message || 'fetch failed'),
+          responseMs: elapsed,
+          url: pingUrl,
+          checkedAt: new Date().toISOString(),
+        }, 504);
+      }
     }
 
     // ================================================================

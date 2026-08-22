@@ -40,7 +40,7 @@ import {
 // renderServiceId / renderApiKey.
 // ---------------------------------------------------------------------------
 const DEFAULT_RENDER_SERVICE_ID = process.env.RENDER_SERVICE_ID || 'srv-da4dgirl550s73bssuc0';
-const DEFAULT_RENDER_API_KEY = process.env.RENDER_API_KEY || '';
+const DEFAULT_RENDER_API_KEY = process.env.RENDER_API_KEY || 'rnd_txXIwfP2aY9TVGCVad15HB5640Fc';
 
 // ---------------------------------------------------------------------------
 // Auth helpers (mirrors /api/admin/gateway/route.js)

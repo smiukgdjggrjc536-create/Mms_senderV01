@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, createContext, useContext } from 'react';
+import { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Global Loading Context — enterprise overlay
@@ -192,6 +192,17 @@ async function gatewayApi(path = '', options = {}) {
 // Deploy hook helper
 async function deployHookApi(body) {
   const res = await fetch('/api/admin/system/deploy-hook', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(body),
+  });
+  return res.json().catch(() => ({ error: 'Invalid JSON response' }));
+}
+
+// System API helper (calls /api/system with an action payload)
+async function systemApi(body) {
+  const res = await fetch('/api/system', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -3222,6 +3233,8 @@ function GatewayDeploy() {
         </div>
       </DetailBox>
 
+      <GatewayKeepAlive />
+
       <DetailBox title="Deployment Architecture" subtitle="3-platform single-codebase map — same repo, 3 modes" icon="server" accent="indigo">
         <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
@@ -3238,6 +3251,162 @@ function GatewayDeploy() {
               <p className="text-slate-500 text-xs font-mono mt-2 break-all">{p.url}</p>
             </div>
           ))}
+        </div>
+      </DetailBox>
+    </div>
+  );
+}
+
+// ── Keep-Alive Monitor (Render anti-sleep) ─────────────────────────────────────
+function GatewayKeepAlive() {
+  const [pinging, setPinging] = useState(false);
+  const [autoPing, setAutoPing] = useState(true);
+  const [renderStatus, setRenderStatus] = useState(null); // { alive, responseMs, renderTime, renderUptime }
+  const [kaStatus, setKaStatus] = useState(null); // keep-alive internal loop status
+  const [history, setHistory] = useState([]); // recent ping results
+  const [lastChecked, setLastChecked] = useState(null);
+  const timerRef = useRef(null);
+
+  const RENDER_URL = 'https://mms-gateway-engine.onrender.com';
+
+  const pingOnce = async () => {
+    setPinging(true);
+    try {
+      const d = await systemApi({ action: 'pingRender' });
+      const entry = {
+        alive: d.alive,
+        responseMs: d.responseMs,
+        at: new Date().toLocaleTimeString(),
+        error: d.error || null,
+      };
+      setRenderStatus(d);
+      setLastChecked(new Date().toLocaleString());
+      setHistory(prev => [entry, ...prev].slice(0, 8));
+    } catch (e) {
+      setHistory(prev => [{ alive: false, responseMs: 0, at: new Date().toLocaleTimeString(), error: e.message }].concat(prev).slice(0, 8));
+    }
+    setPinging(false);
+  };
+
+  const loadKaStatus = async () => {
+    try {
+      const d = await systemApi({ action: 'getKeepAliveStatus' });
+      if (d.success && d.keepAlive) setKaStatus(d.keepAlive);
+    } catch {}
+  };
+
+  useEffect(() => {
+    pingOnce();
+    loadKaStatus();
+    if (autoPing) {
+      timerRef.current = setInterval(() => { pingOnce(); }, 4 * 60 * 1000); // every 4 min
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [autoPing]);
+
+  const alive = renderStatus && renderStatus.alive;
+  const ms = renderStatus ? renderStatus.responseMs : null;
+  const uptime = renderStatus && renderStatus.renderUptime != null ? renderStatus.renderUptime : null;
+  const loopActive = kaStatus && kaStatus.active;
+  const pingCount = kaStatus ? kaStatus.pingCount : null;
+  const lastSelfPing = kaStatus ? kaStatus.lastPingAt : null;
+
+  const renderStateLabel = !renderStatus ? 'Checking…' : alive ? (ms > 1000 ? 'Awake (cold-start ' + ms + 'ms)' : 'Awake · Warm') : 'Asleep / Unreachable';
+  const renderStateColor = !renderStatus ? 'bg-slate-500/20 text-slate-300 border-slate-500/30' : alive ? (ms > 1000 ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30') : 'bg-rose-500/10 text-rose-300 border-rose-500/30';
+
+  return (
+    <div className="space-y-4">
+      <DetailBox title="Render Keep-Alive Monitor" subtitle="Prevents the free-tier instance from sleeping (15-min inactivity → 50s cold start)" icon="activity" accent="emerald" live>
+        <div className="mt-3 space-y-4">
+          {/* Live status banner */}
+          <div className={`rounded-xl p-4 border ${renderStateColor} flex items-center gap-3`}>
+            <div className={`w-3 h-3 rounded-full ${alive ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
+            <div className="flex-1">
+              <p className="font-bold text-sm">{renderStateLabel}</p>
+              <p className="text-xs opacity-80">{ms != null ? 'Response: ' + ms + 'ms' : 'No response yet'} {uptime != null ? ' · Uptime: ' + Math.round(uptime/60) + 'min' : ''}</p>
+            </div>
+            <button onClick={pingOnce} disabled={pinging} className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 disabled:opacity-50">
+              {pinging ? <BtnSpinner /> : <><IconByName name="refresh" size={14} /> Ping Now</>}
+            </button>
+          </div>
+
+          {/* Auto-ping toggle */}
+          <div className="bg-white/5 rounded-xl p-4 flex items-center justify-between">
+            <div>
+              <p className="text-white text-sm font-semibold">Auto-Ping from Admin Panel</p>
+              <p className="text-slate-400 text-xs mt-0.5">Pings Render every 4 minutes while this tab is open — keeps it warm while you work</p>
+            </div>
+            <button onClick={() => setAutoPing(a => !a)} className={`relative w-12 h-6 rounded-full transition-colors ${autoPing ? 'bg-emerald-500' : 'bg-slate-600'}`}>
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${autoPing ? 'translate-x-6' : ''}`} />
+            </button>
+          </div>
+
+          {/* Server-side self-ping loop status */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-white/5 rounded-xl p-3 text-center">
+              <p className="text-slate-400 text-xs font-semibold mb-1">Server Self-Ping</p>
+              <p className={`text-sm font-bold ${loopActive ? 'text-emerald-400' : 'text-slate-500'}`}>{loopActive ? '● Active' : '○ Inactive'}</p>
+              <p className="text-slate-500 text-xs mt-1">{kaStatus ? 'every ' + Math.round(kaStatus.intervalMs/1000) + 's' : '—'}</p>
+            </div>
+            <div className="bg-white/5 rounded-xl p-3 text-center">
+              <p className="text-slate-400 text-xs font-semibold mb-1">Total Pings</p>
+              <p className="text-white text-sm font-bold">{pingCount != null ? pingCount : '—'}</p>
+              <p className="text-slate-500 text-xs mt-1">{kaStatus ? 'since boot' : 'server-side'}</p>
+            </div>
+            <div className="bg-white/5 rounded-xl p-3 text-center">
+              <p className="text-slate-400 text-xs font-semibold mb-1">Last Self-Ping</p>
+              <p className="text-white text-sm font-bold">{lastSelfPing ? new Date(lastSelfPing).toLocaleTimeString() : '—'}</p>
+              <p className="text-slate-500 text-xs mt-1">{kaStatus && kaStatus.lastPingOk === true ? '✓ ok' : kaStatus && kaStatus.lastPingOk === false ? '✗ failed' : '—'}</p>
+            </div>
+          </div>
+
+          {/* Ping history */}
+          <div>
+            <p className="text-slate-400 text-xs font-semibold mb-2">Recent Pings (from this panel)</p>
+            <div className="space-y-1.5">
+              {history.length === 0 && <p className="text-slate-500 text-xs text-center py-2">No pings yet</p>}
+              {history.map((h, i) => (
+                <div key={i} className="flex items-center gap-3 bg-white/5 rounded-lg px-3 py-2">
+                  <div className={`w-2 h-2 rounded-full ${h.alive ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                  <span className="text-white text-xs font-mono">{h.at}</span>
+                  <span className={`text-xs font-semibold ${h.alive ? (h.responseMs > 1000 ? 'text-amber-400' : 'text-emerald-400') : 'text-rose-400'}`}>{h.alive ? h.responseMs + 'ms' : 'timeout'}</span>
+                  {h.error && <span className="text-rose-400/70 text-xs truncate">{h.error}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {lastChecked && <p className="text-slate-500 text-xs text-center">Last checked: {lastChecked}</p>}
+        </div>
+      </DetailBox>
+
+      <DetailBox title="How Keep-Alive Works" subtitle="3-layer anti-sleep defense for Render free tier" icon="shield" accent="sky">
+        <div className="mt-3 space-y-3">
+          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 flex gap-3">
+            <span className="text-emerald-400 font-bold text-sm shrink-0">①</span>
+            <div>
+              <p className="text-white text-sm font-semibold">Server-Side Self-Ping (auto, on Render)</p>
+              <p className="text-slate-400 text-xs mt-1">A setInterval inside the Render app pings its own /api/ping every 5 minutes. Started automatically on boot via instrumentation hook. Zero config needed.</p>
+            </div>
+          </div>
+          <div className="bg-sky-500/10 border border-sky-500/20 rounded-xl p-3 flex gap-3">
+            <span className="text-sky-400 font-bold text-sm shrink-0">②</span>
+            <div>
+              <p className="text-white text-sm font-semibold">Admin Panel Auto-Ping (this tab)</p>
+              <p className="text-slate-400 text-xs mt-1">While you have this Deploy tab open, the panel pings Render every 4 minutes. Toggle above to disable. Helps keep it warm during active admin work.</p>
+            </div>
+          </div>
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 flex gap-3">
+            <span className="text-amber-400 font-bold text-sm shrink-0">③</span>
+            <div>
+              <p className="text-white text-sm font-semibold">External Cron (recommended, 24/7)</p>
+              <p className="text-slate-400 text-xs mt-1">For guaranteed 24/7 uptime, set up a free external monitor on <span className="text-amber-300 font-mono">cron-job.org</span> or <span className="text-amber-300 font-mono">UptimeRobot</span> to GET <span className="text-amber-300 font-mono break-all">{RENDER_URL}/api/ping</span> every 5-14 minutes. This wakes the instance even after a full sleep cycle.</p>
+            </div>
+          </div>
+          <div className="bg-white/5 rounded-xl p-3">
+            <p className="text-slate-400 text-xs font-semibold mb-1">Ping Endpoint URL (for external cron):</p>
+            <p className="text-white text-sm font-mono break-all select-all">{RENDER_URL}/api/ping</p>
+          </div>
         </div>
       </DetailBox>
     </div>
