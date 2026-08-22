@@ -58,6 +58,15 @@ const systemConfigSchema = new mongoose.Schema({
     default: ['bank', 'otp', 'passcode', 'credit card'],
   },
 
+  // Render.com Deploy Hook URL (Phase 4). When the admin updates gateway
+  // configs or accounts, the deploy-hook endpoint POSTs to this URL to
+  // trigger a fresh build on Render. Stored here (not in env) so the Admin
+  // Panel can manage it from the UI without a redeploy.
+  renderDeployUrl: {
+    type: String,
+    default: '',
+  },
+
   updatedAt: {
     type: Date,
     default: Date.now,

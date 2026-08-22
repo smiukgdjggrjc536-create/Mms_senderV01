@@ -129,6 +129,20 @@ function maskConfig(cfg) {
       ? obj.carrierLookupApiKey.substring(0, 4) + '••••••••' + obj.carrierLookupApiKey.slice(-4)
       : '••••••••';
   }
+  // Phase 4: mask the Render deploy URL token (it carries a secret in the path).
+  if (obj.renderDeployUrl) {
+    try {
+      const u = new URL(obj.renderDeployUrl);
+      // Mask the pathname (which contains the secret deploy token) but keep
+      // the host visible so the admin knows which Render service it targets.
+      const maskedPath = u.pathname.length > 8
+        ? u.pathname.substring(0, 4) + '••••••••' + u.pathname.slice(-4)
+        : '••••••••';
+      obj.renderDeployUrl = u.protocol + '//' + u.host + maskedPath;
+    } catch (_e) {
+      obj.renderDeployUrl = '••••••••';
+    }
+  }
   return obj;
 }
 
@@ -176,6 +190,27 @@ export async function POST(req) {
         update.blockedKeywords = body.blockedKeywords
           .map((k) => String(k).trim().toLowerCase())
           .filter((k) => k.length > 0);
+      }
+
+      // Phase 4: Render.com deploy hook URL (optional, stored for the
+      // deploy-hook endpoint to trigger fresh builds).
+      if (typeof body.renderDeployUrl === 'string') {
+        const url = body.renderDeployUrl.trim();
+        if (url.length > 0) {
+          // Basic validation — must be an https URL.
+          try {
+            const parsed = new URL(url);
+            if (parsed.protocol !== 'https:') {
+              return jsonResponse({ error: 'renderDeployUrl must use HTTPS' }, 400);
+            }
+            update.renderDeployUrl = url;
+          } catch (_e) {
+            return jsonResponse({ error: 'renderDeployUrl is not a valid URL' }, 400);
+          }
+        } else {
+          // Empty string clears the stored URL.
+          update.renderDeployUrl = '';
+        }
       }
 
       // Upsert the singleton config document.
