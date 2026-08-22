@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback, createContext, useContext } from 'react';
 
-// ─── Global Loading Context ─────────────────────────────────────────────────
-// Provides withLoading(label, fn) to any component for enterprise overlay
+// ───────────────────────────────────────────────────────────────────────────
+// Global Loading Context — enterprise overlay
+// ───────────────────────────────────────────────────────────────────────────
 const LoadingCtx = createContext(null);
 function useLoading() { return useContext(LoadingCtx); }
 
@@ -33,10 +34,134 @@ const Icon = {
   Activity: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>),
   Zap: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>),
   Beaker: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.171.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.878 3.298-.6 4.036a16.875 16.875 0 01-8.187 2.012 16.875 16.875 0 01-8.187-2.012c-1.478-.738-1.832-2.804-.6-4.036L5 14.5"/></svg>),
+  Globe: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9 9 0 100-18 9 9 0 000 18zm0 0c2.485 0 4.5-4.03 4.5-9s-2.015-9-4.5-9m0 18c-2.485 0-4.5-4.03-4.5-9s2.015-9 4.5-9m-9 9h18"/></svg>),
+  Phone: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>),
+  Server: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M5 12H3l9-9 9 9h-2M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7M9 21v-6a2 2 0 012-2h2a2 2 0 012 2v6"/></svg>),
+  Bolt: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/></svg>),
+  Mail: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>),
+  Key: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H3.75v-2.25H6v-2.25H8.25V15l1.5-1.5c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg>),
+  Rocket: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.07v-4.76m5.84-2.31a7.12 7.12 0 00.74-.84 6 6 0 01.7-.86 35.16 35.16 0 018.5-6.18c.97 2.184 1.47 4.537 1.47 6.918a14.5 14.5 0 01-2.65 8.4m-6.6-2.4a6 6 0 01-5.7-6.7m6.6 2.4l-4.5-2.7m6.6 2.4v-4.5"/></svg>),
+  List: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 17.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/></svg>),
+  X: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>),
+  Edit: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/></svg>),
+  Save: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 3.75V7.5a.75.75 0 01-.75.75h-7.5a.75.75 0 01-.75-.75V3.75m0 0A2.25 2.25 0 006 6v12a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 18V6a2.25 2.25 0 00-1.5-2.25H8.25z"/></svg>),
+  Alert: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>),
+  Info: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.852l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"/></svg>),
+  Chart: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"/></svg>),
+  Message: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"/></svg>),
 };
 
+// Wrapper component: <IconByName name="bolt" size={18} className="..." />
+const ICON_MAP = {
+  dashboard: Icon.Dashboard, api: Icon.Api, users: Icon.Users, campaign: Icon.Campaign,
+  content: Icon.Content, shield: Icon.Shield, settings: Icon.Settings, bell: Icon.Bell,
+  log: Icon.Log, database: Icon.Database, lock: Icon.Lock, refresh: Icon.Refresh,
+  eye: Icon.Eye, eyeoff: Icon.EyeOff, plus: Icon.Plus, trash: Icon.Trash, check: Icon.Check,
+  logout: Icon.Logout, send: Icon.Send, activity: Icon.Activity, zap: Icon.Zap, beaker: Icon.Beaker,
+  globe: Icon.Globe, phone: Icon.Phone, server: Icon.Server, bolt: Icon.Bolt, mail: Icon.Mail,
+  key: Icon.Key, rocket: Icon.Rocket, list: Icon.List, x: Icon.X, edit: Icon.Edit, save: Icon.Save,
+  alert: Icon.Alert, info: Icon.Info, chart: Icon.Chart, message: Icon.Message,
+};
+function IconByName({ name, size, className }) {
+  const C = ICON_MAP[name] || Icon.Info;
+  return <C />;
+}
+
 // ============================================================================
-// API HELPER
+// COUNTRY + CARRIER REFERENCE DATA (used across gateway + validator panels)
+// ============================================================================
+const COUNTRY_CODES = [
+  { code: '+1', dial: '1', name: 'USA / Canada', flag: '🇺🇸', mms: true, note: 'AT&T, Verizon, T-Mobile, Sprint, US Cellular, Cricket, MetroPCS, Google Fi, Mint, Xfinity, Tracfone, Straight Talk' },
+  { code: '+44', dial: '44', name: 'United Kingdom', flag: '🇬🇧', mms: true, note: 'EE, O2, Vodafone, Three, Tesco Mobile, Giffgaff' },
+  { code: '+880', dial: '880', name: 'Bangladesh', flag: '🇧🇩', mms: true, note: 'Grameenphone, Robi, Banglalink, Teletalk, Biccyl' },
+  { code: '+91', dial: '91', name: 'India', flag: '🇮🇳', mms: true, note: 'Jio, Airtel, Vi, BSNL' },
+  { code: '+93', dial: '93', name: 'Afghanistan', flag: '🇦🇫', mms: false, note: 'AWCC, Roshan, MTN, Etisalat' },
+  { code: '+94', dial: '94', name: 'Sri Lanka', flag: '🇱🇰', mms: true, note: 'Dialog, Mobitel, Hutch, Airtel' },
+  { code: '+977', dial: '977', name: 'Nepal', flag: '🇳🇵', mms: true, note: 'Ncell, NTC, Smart Cell' },
+  { code: '+960', dial: '960', name: 'Maldives', flag: '🇲🇻', mms: false, note: 'Dhiraagu, Ooredoo' },
+  { code: '+92', dial: '92', name: 'Pakistan', flag: '🇵🇰', mms: true, note: 'Jazz, Telenor, Zong, Ufone' },
+  { code: '+60', dial: '60', name: 'Malaysia', flag: '🇲🇾', mms: true, note: 'Maxis, Celcom, Digi, U Mobile' },
+  { code: '+65', dial: '65', name: 'Singapore', flag: '🇸🇬', mms: true, note: 'SingTel, StarHub, M1' },
+  { code: '+66', dial: '66', name: 'Thailand', flag: '🇹🇭', mms: true, note: 'AIS, DTAC, TrueMove' },
+  { code: '+62', dial: '62', name: 'Indonesia', flag: '🇮🇩', mms: true, note: 'Telkomsel, Indosat, XL, Tri' },
+  { code: '+63', dial: '63', name: 'Philippines', flag: '🇵🇭', mms: true, note: 'Globe, Smart, Sun, DITO' },
+  { code: '+84', dial: '84', name: 'Vietnam', flag: '🇻🇳', mms: true, note: 'Viettel, Vinaphone, Mobifone' },
+  { code: '+86', dial: '86', name: 'China', flag: '🇨🇳', mms: true, note: 'China Mobile, China Unicom, China Telecom' },
+  { code: '+81', dial: '81', name: 'Japan', flag: '🇯🇵', mms: true, note: 'NTT Docomo, au, SoftBank, Rakuten' },
+  { code: '+82', dial: '82', name: 'South Korea', flag: '🇰🇷', mms: true, note: 'SK Telecom, KT, LG U+' },
+  { code: '+971', dial: '971', name: 'UAE', flag: '🇦🇪', mms: true, note: 'Etisalat, du' },
+  { code: '+966', dial: '966', name: 'Saudi Arabia', flag: '🇸🇦', mms: true, note: 'STC, Mobily, Zain' },
+  { code: '+20', dial: '20', name: 'Egypt', flag: '🇪🇬', mms: true, note: 'Vodafone, Orange, Etisalat, WE' },
+  { code: '+234', dial: '234', name: 'Nigeria', flag: '🇳🇬', mms: true, note: 'MTN, Glo, Airtel, 9mobile' },
+  { code: '+27', dial: '27', name: 'South Africa', flag: '🇿🇦', mms: true, note: 'Vodacom, MTN, Cell C, Telkom' },
+  { code: '+49', dial: '49', name: 'Germany', flag: '🇩🇪', mms: true, note: 'Deutsche Telekom, Vodafone, O2' },
+  { code: '+33', dial: '33', name: 'France', flag: '🇫🇷', mms: true, note: 'Orange, SFR, Bouygues, Free' },
+  { code: '+34', dial: '34', name: 'Spain', flag: '🇪🇸', mms: true, note: 'Movistar, Orange, Vodafone, Yoigo' },
+  { code: '+39', dial: '39', name: 'Italy', flag: '🇮🇹', mms: true, note: 'TIM, Vodafone, WindTre, Iliad' },
+  { code: '+31', dial: '31', name: 'Netherlands', flag: '🇳🇱', mms: true, note: 'KPN, Vodafone, T-Mobile' },
+  { code: '+7', dial: '7', name: 'Russia', flag: '🇷🇺', mms: true, note: 'MTS, MegaFon, Beeline, Tele2' },
+  { code: '+55', dial: '55', name: 'Brazil', flag: '🇧🇷', mms: true, note: 'Vivo, Claro, TIM, Oi' },
+  { code: '+52', dial: '52', name: 'Mexico', flag: '🇲🇽', mms: true, note: 'Telcel, AT&T, Movistar' },
+  { code: '+54', dial: '54', name: 'Argentina', flag: '🇦🇷', mms: true, note: 'Movistar, Claro, Personal' },
+  { code: '+61', dial: '61', name: 'Australia', flag: '🇦🇺', mms: true, note: 'Telstra, Optus, Vodafone, TPG' },
+  { code: '+64', dial: '64', name: 'New Zealand', flag: '🇳🇿', mms: true, note: 'Spark, Vodafone, 2degrees, Skinny' },
+];
+
+// Carrier MMS gateway domain map (mirrors src/lib/gateway/constants.js CARRIER_MMS_DOMAINS)
+const CARRIER_DOMAINS = [
+  { carrier: 'AT&T', domain: 'mms.att.net', country: 'USA', aliases: 'att, at&t, cingular' },
+  { carrier: 'Verizon', domain: 'vzwpix.com', country: 'USA', aliases: 'verizon, vzw, xfinity' },
+  { carrier: 'T-Mobile', domain: 'tmomail.net', country: 'USA', aliases: 't-mobile, tmobile, mint' },
+  { carrier: 'Sprint', domain: 'pm.sprint.com', country: 'USA', aliases: 'sprint' },
+  { carrier: 'Boost Mobile', domain: 'myboostmobile.com', country: 'USA', aliases: 'boost' },
+  { carrier: 'US Cellular', domain: 'mms.uscc.net', country: 'USA', aliases: 'us cellular, uscellular' },
+  { carrier: 'Cricket', domain: 'mms.cricketwireless.net', country: 'USA', aliases: 'cricket' },
+  { carrier: 'MetroPCS', domain: 'mymetropcs.com', country: 'USA', aliases: 'metro pcs, metropcs' },
+  { carrier: 'Google Fi', domain: 'msg.fi.google.com', country: 'USA', aliases: 'google fi, fi' },
+  { carrier: 'Consumer Cellular', domain: 'mailmymobile.net', country: 'USA', aliases: 'consumer cellular' },
+  { carrier: 'Ting', domain: 'message.ting.com', country: 'USA', aliases: 'ting' },
+  { carrier: 'Republic Wireless', domain: 'text.republicwireless.com', country: 'USA', aliases: 'republic' },
+  { carrier: 'Virgin Mobile', domain: 'vmpix.com', country: 'USA', aliases: 'virgin' },
+  { carrier: 'Tracfone', domain: 'mmst5.tracfone.com', country: 'USA', aliases: 'tracfone' },
+  { carrier: 'Straight Talk', domain: 'mms.straighttalk.com', country: 'USA', aliases: 'straight talk' },
+  { carrier: 'Page Plus', domain: 'vtext.com', country: 'USA', aliases: 'page plus' },
+  { carrier: 'Rogers', domain: 'pcs.rogers.com', country: 'Canada', aliases: 'rogers' },
+  { carrier: 'Bell', domain: 'txt.bell.ca', country: 'Canada', aliases: 'bell' },
+  { carrier: 'Telus', domain: 'msg.telus.com', country: 'Canada', aliases: 'telus' },
+  { carrier: 'Fido', domain: 'fido.ca', country: 'Canada', aliases: 'fido' },
+  { carrier: 'Koodo', domain: 'msg.koodomobile.com', country: 'Canada', aliases: 'koodo' },
+  { carrier: 'Virgin Canada', domain: 'vmobile.ca', country: 'Canada', aliases: 'virgin canada' },
+  { carrier: 'Wind', domain: 'mms.windmobile.ca', country: 'Canada', aliases: 'wind' },
+];
+
+// Email-to-MMS sender providers
+const PROVIDER_TYPES = [
+  { id: 'GMAIL_OAUTH', label: 'Gmail OAuth2', countries: 'Global', weight: 5, note: 'Best deliverability — OAuth2 refresh-token based, no password needed' },
+  { id: 'OUTLOOK_GRAPH', label: 'Outlook Graph API', countries: 'Global', weight: 4, note: 'Microsoft Graph API — Azure app registration + client secret' },
+  { id: 'CUSTOM_SMTP', label: 'Custom SMTP', countries: 'Global', weight: 3, note: 'Any SMTP server — host, port, user, pass (e.g. Amazon SES, Postmark)' },
+  { id: 'YAHOO', label: 'Yahoo Mail', countries: 'Global', weight: 2, note: 'Yahoo account with app password' },
+  { id: 'AOL', label: 'AOL Mail', countries: 'Global', weight: 2, note: 'AOL account with app password' },
+];
+
+// Resolve a country from a raw phone number (mirrors core.js getCountryCode
+// but uses the full 3-digit prefix table above for richer output).
+function resolveCountryFromNumber(raw) {
+  if (!raw || typeof raw !== 'string') return { country: 'Unknown', code: '', flag: '🌐', mms: false };
+  const cleaned = raw.replace(/[^\d+]/g, '');
+  const digits = cleaned.startsWith('+') ? cleaned.slice(1) : cleaned;
+  // Try 3-digit, then 2-digit, then 1-digit prefixes.
+  for (const len of [3, 2, 1]) {
+    if (digits.length >= len) {
+      const prefix = digits.slice(0, len);
+      const match = COUNTRY_CODES.find(c => c.dial === prefix);
+      if (match) return { country: match.name, code: match.code, flag: match.flag, mms: match.mms, note: match.note };
+    }
+  }
+  return { country: 'Unknown', code: '', flag: '🌐', mms: false };
+}
+
+// ============================================================================
+// API HELPERS
 // ============================================================================
 async function api(action, data = {}) {
   const res = await fetch('/api/system', {
@@ -48,6 +173,28 @@ async function api(action, data = {}) {
   return res.json();
 }
 
+// Gateway API helper — calls /api/admin/gateway/* with credentials.
+async function gatewayApi(path = '', options = {}) {
+  const res = await fetch(`/api/admin/gateway${path}`, {
+    method: options.method || 'GET',
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    credentials: 'include',
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  return res.json().catch(() => ({ error: 'Invalid JSON response' }));
+}
+
+// Deploy hook helper
+async function deployHookApi(body) {
+  const res = await fetch('/api/admin/system/deploy-hook', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(body),
+  });
+  return res.json().catch(() => ({ error: 'Invalid JSON response' }));
+}
+
 // ============================================================================
 // MAIN ADMIN PANEL
 // ============================================================================
@@ -55,6 +202,7 @@ export default function AdminPanel({ mode, user, onLoginSuccess, onLogout, onRef
   if (mode === 'login') return <AdminLogin onLoginSuccess={onLoginSuccess} />;
   return <AdminDashboard user={user} onLogout={onLogout} onRefresh={onRefresh} />;
 }
+
 
 // ============================================================================
 // ADMIN LOGIN — 3-layer security (username + password + API key)
@@ -155,19 +303,24 @@ function AdminLogin({ onLoginSuccess }) {
 // ADMIN DASHBOARD
 // ============================================================================
 function AdminDashboard({ user, onLogout, onRefresh }) {
-  const [tab, setTab] = useState('dashboard');
+  const [tab, setTab] = useState('gateway');
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [globalLoading, setGlobalLoading] = useState(null); // { label } | null
+  const [globalLoading, setGlobalLoading] = useState(null);
 
-  // Enterprise loading helper — wrap any async action to show the overlay
+  useEffect(() => {
+    const handler = (e) => { if (e.detail) setTab(e.detail); };
+    window.addEventListener('admin-tab', handler);
+    return () => window.removeEventListener('admin-tab', handler);
+  }, []);
+
   const withLoading = async (label, fn) => {
     setGlobalLoading({ label });
     try { return await fn(); } finally { setGlobalLoading(null); }
   };
 
   const tabs = [
+    { id: 'gateway', label: 'Gateway Engine', icon: <Icon.Zap />, primary: true },
     { id: 'dashboard', label: 'Dashboard', icon: <Icon.Dashboard /> },
-    { id: 'gateway', label: 'Gateway Engine', icon: <Icon.Zap /> },
     { id: 'apis', label: 'API Management', icon: <Icon.Api /> },
     { id: 'users', label: 'User Management', icon: <Icon.Users /> },
     { id: 'campaigns', label: 'Campaigns', icon: <Icon.Campaign /> },
@@ -196,8 +349,9 @@ function AdminDashboard({ user, onLogout, onRefresh }) {
         <nav className="p-3 space-y-1 overflow-y-auto" style={{maxHeight: 'calc(100vh - 140px)'}}>
           {tabs.map(t => (
             <button key={t.id} onClick={() => { setTab(t.id); setSidebarOpen(false); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition ${tab === t.id ? 'bg-blue-600/20 text-blue-400 border border-blue-700/30' : 'text-gray-400 hover:bg-slate-800 hover:text-gray-200'}`}>
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition ${tab === t.id ? (t.primary ? 'bg-gradient-to-r from-sky-600/30 to-blue-600/20 text-sky-300 border border-sky-700/40' : 'bg-blue-600/20 text-blue-400 border border-blue-700/30') : 'text-gray-400 hover:bg-slate-800 hover:text-gray-200'}`}>
               {t.icon}<span>{t.label}</span>
+              {t.primary && <span className="ml-auto text-[8px] font-bold px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-400 uppercase tracking-wider">Primary</span>}
             </button>
           ))}
         </nav>
@@ -229,7 +383,6 @@ function AdminDashboard({ user, onLogout, onRefresh }) {
         {tab === 'security' && <SecurityTab user={user} />}
         {tab === 'settings' && <SettingsTab />}
       </div>
-      {/* Enterprise full-screen loading overlay */}
       <EnterpriseOverlay show={!!globalLoading} label={globalLoading?.label || 'Processing...'} />
     </div>
     </LoadingCtx.Provider>
@@ -237,10 +390,8 @@ function AdminDashboard({ user, onLogout, onRefresh }) {
 }
 
 // ============================================================================
-// LOADING SPINNER
+// LOADING SPINNER + ENTERPRISE PRIMITIVES (preserved, polished)
 // ============================================================================
-// ─── Enterprise Loading System ──────────────────────────────────────────────
-// Spinner — backward-compatible; renders an enterprise-grade gradient ring
 function Spinner({ size = 32, label }) {
   return (
     <div className="flex flex-col items-center justify-center py-12 gap-3">
@@ -254,7 +405,6 @@ function Spinner({ size = 32, label }) {
   );
 }
 
-// Inline button spinner — tiny, fits inside buttons
 function BtnSpinner({ size = 14, color = 'text-white' }) {
   return (
     <svg className={`animate-spin ${color}`} style={{ width: size, height: size }} viewBox="0 0 24 24" fill="none">
@@ -264,7 +414,6 @@ function BtnSpinner({ size = 14, color = 'text-white' }) {
   );
 }
 
-// LoadingButton — enterprise button with built-in loading state
 function LoadingButton({ loading = false, onClick, children, variant = 'primary', size = 'md', className = '', icon, disabled, full = false, type = 'button' }) {
   const variants = {
     primary:   'bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white shadow-lg shadow-sky-600/20',
@@ -276,19 +425,14 @@ function LoadingButton({ loading = false, onClick, children, variant = 'primary'
   };
   const sizes = { sm: 'px-2.5 py-1 text-xs rounded-lg gap-1', md: 'px-3.5 py-2 text-sm rounded-lg gap-1.5', lg: 'px-5 py-2.5 text-sm rounded-xl gap-2' };
   return (
-    <button
-      type={type}
-      onClick={onClick}
-      disabled={disabled || loading}
-      className={`relative inline-flex items-center justify-center font-medium transition-all duration-200 ${variants[variant] || variants.primary} ${sizes[size]} ${full ? 'w-full' : ''} ${disabled || loading ? 'opacity-60 cursor-not-allowed' : 'hover:scale-[1.02] active:scale-[0.98]'} ${className}`}
-    >
+    <button type={type} onClick={onClick} disabled={disabled || loading}
+      className={`relative inline-flex items-center justify-center font-medium transition-all duration-200 ${variants[variant] || variants.primary} ${sizes[size]} ${full ? 'w-full' : ''} ${disabled || loading ? 'opacity-60 cursor-not-allowed' : 'hover:scale-[1.02] active:scale-[0.98]'} ${className}`}>
       {loading ? <BtnSpinner /> : icon}
       <span className={loading ? 'opacity-70' : ''}>{children}</span>
     </button>
   );
 }
 
-// Full-screen enterprise loading overlay — triggered for any major action
 function EnterpriseOverlay({ show, label = 'Processing...' }) {
   if (!show) return null;
   return (
@@ -318,11 +462,11 @@ function EnterpriseOverlay({ show, label = 'Processing...' }) {
   );
 }
 
-// Section-level loading skeleton (for tab content)
-function SkeletonGrid({ rows = 3 }) {
+function SkeletonGrid({ rows, count }) {
+  const n = count || rows || 3;
   return (
     <div className="space-y-3 animate-pulse">
-      {Array.from({ length: rows }).map((_, i) => (
+      {Array.from({ length: n }).map((_, i) => (
         <div key={i} className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-lg bg-slate-800/60" />
           <div className="flex-1 space-y-2">
@@ -335,42 +479,95 @@ function SkeletonGrid({ rows = 3 }) {
   );
 }
 
-// ============================================================================
-// ENTERPRISE DASHBOARD — sleek, modern, data-dense, no ugly boxes
-// Reusable visual primitives
-// ============================================================================
-
-// Thin progress bar (used inside cards/rows)
-function ProgressBar({ percent, color }) {
-  const c = color || (percent > 80 ? 'from-red-500 to-rose-500' : percent > 50 ? 'from-amber-400 to-orange-500' : 'from-emerald-400 to-teal-500');
+const PROGRESS_COLORS = {
+  emerald: 'from-emerald-400 to-teal-500',
+  green: 'from-emerald-400 to-teal-500',
+  amber: 'from-amber-400 to-orange-500',
+  rose: 'from-rose-400 to-red-500',
+  red: 'from-red-500 to-rose-500',
+  sky: 'from-sky-400 to-blue-500',
+  blue: 'from-sky-400 to-blue-500',
+  violet: 'from-violet-400 to-purple-500',
+  cyan: 'from-cyan-400 to-teal-500',
+  indigo: 'from-indigo-400 to-blue-500',
+  slate: 'from-slate-500 to-slate-600',
+};
+function ProgressBar({ percent, value, max, color }) {
+  const pct = value != null && max != null ? (value / max) * 100 : percent || 0;
+  const grad = PROGRESS_COLORS[color] || (color && color.includes('from-') ? color : (pct > 80 ? 'from-rose-400 to-red-500' : pct > 50 ? 'from-amber-400 to-orange-500' : 'from-emerald-400 to-teal-500'));
   return (
     <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
-      <div className={`h-full rounded-full bg-gradient-to-r ${c} transition-all duration-700`} style={{ width: `${Math.min(100, percent)}%` }} />
+      <div className={`h-full rounded-full bg-gradient-to-r ${grad} transition-all duration-700`} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
     </div>
   );
 }
 
-// Compact KPI tile — flat, glassy, subtle left accent. NOT the old bulky box.
-function Kpi({ label, value, sub, tone = 'slate', live, trend }) {
-  const tones = {
-    slate:  { accent: 'from-slate-500 to-slate-600',     value: 'text-white',      glow: 'hover:shadow-slate-500/10',    ring: 'group-hover:border-slate-600/50' },
-    green:  { accent: 'from-emerald-400 to-green-500',   value: 'text-emerald-300', glow: 'hover:shadow-emerald-500/20',  ring: 'group-hover:border-emerald-600/40' },
-    red:    { accent: 'from-rose-400 to-red-500',        value: 'text-rose-300',    glow: 'hover:shadow-rose-500/20',     ring: 'group-hover:border-rose-600/40' },
-    amber:  { accent: 'from-amber-400 to-orange-500',    value: 'text-amber-300',   glow: 'hover:shadow-amber-500/20',    ring: 'group-hover:border-amber-600/40' },
-    blue:   { accent: 'from-sky-400 to-blue-500',        value: 'text-sky-300',     glow: 'hover:shadow-sky-500/20',      ring: 'group-hover:border-sky-600/40' },
-    violet: { accent: 'from-violet-400 to-purple-500',   value: 'text-violet-300',  glow: 'hover:shadow-violet-500/20',   ring: 'group-hover:border-violet-600/40' },
-    cyan:   { accent: 'from-cyan-400 to-teal-500',       value: 'text-cyan-300',    glow: 'hover:shadow-cyan-500/20',     ring: 'group-hover:border-cyan-600/40' },
+// ───────────────────────────────────────────────────────────────────────────
+// DETAILING BOX — the enterprise container the user requested.
+// Glassy panel with a gradient top accent, optional icon + title + subtitle,
+// live badge, and an action slot. This replaces all the old dummy boxes.
+// ───────────────────────────────────────────────────────────────────────────
+function DetailBox({ title, subtitle, icon, accent = 'sky', action, children, className = '', live, padded = true }) {
+  const accents = {
+    sky:      'from-sky-500 to-blue-500',
+    violet:   'from-violet-500 to-purple-500',
+    emerald:  'from-emerald-400 to-green-500',
+    amber:    'from-amber-400 to-orange-500',
+    rose:     'from-rose-400 to-red-500',
+    cyan:     'from-cyan-400 to-teal-500',
+    slate:    'from-slate-500 to-slate-600',
+    indigo:   'from-indigo-500 to-blue-500',
   };
-  const t = tones[tone] || tones.slate;
+  const ac = accents[accent] || accents.sky;
+  return (
+    <div className={`group relative bg-gradient-to-br from-slate-900/70 to-slate-900/30 border border-slate-800/80 rounded-xl overflow-hidden transition-all duration-300 hover:border-slate-700/90 hover:shadow-lg hover:shadow-slate-950/40 ${className}`}>
+      <div className={`absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r ${ac} opacity-70 group-hover:opacity-100 transition-opacity`} />
+      <div className={`absolute -inset-px bg-gradient-to-br ${ac} opacity-0 group-hover:opacity-[0.03] transition-opacity rounded-xl`} />
+      {(title || icon || action) && (
+        <div className="relative flex items-center justify-between gap-3 px-4 pt-3.5 pb-2 border-b border-slate-800/50">
+          <div className="flex items-center gap-2.5 min-w-0">
+            {icon && <span className="text-slate-400 flex-none">{icon}</span>}
+            <div className="min-w-0">
+              {title && <h3 className="text-sm font-semibold text-slate-100 truncate flex items-center gap-2">{title}
+                {live && <span className="flex items-center gap-1 text-[9px] text-emerald-400 font-semibold"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />LIVE</span>}
+              </h3>}
+              {subtitle && <p className="text-[11px] text-slate-600 mt-0.5 truncate">{subtitle}</p>}
+            </div>
+          </div>
+          {action && <div className="flex-none">{action}</div>}
+        </div>
+      )}
+      <div className={`relative ${padded ? 'p-4' : ''}`}>{children}</div>
+    </div>
+  );
+}
+
+// Compact KPI tile — accepts accent (maps to tone) + optional icon
+const KPI_TONES = {
+  slate:  { accent: 'from-slate-500 to-slate-600',     value: 'text-white',      glow: 'hover:shadow-slate-500/10',    ring: 'group-hover:border-slate-600/50' },
+  green:  { accent: 'from-emerald-400 to-green-500',   value: 'text-emerald-300', glow: 'hover:shadow-emerald-500/20',  ring: 'group-hover:border-emerald-600/40' },
+  red:    { accent: 'from-rose-400 to-red-500',        value: 'text-rose-300',    glow: 'hover:shadow-rose-500/20',     ring: 'group-hover:border-rose-600/40' },
+  amber:  { accent: 'from-amber-400 to-orange-500',    value: 'text-amber-300',   glow: 'hover:shadow-amber-500/20',    ring: 'group-hover:border-amber-600/40' },
+  blue:   { accent: 'from-sky-400 to-blue-500',        value: 'text-sky-300',     glow: 'hover:shadow-sky-500/20',      ring: 'group-hover:border-sky-600/40' },
+  violet: { accent: 'from-violet-400 to-purple-500',   value: 'text-violet-300',  glow: 'hover:shadow-violet-500/20',   ring: 'group-hover:border-violet-600/40' },
+  cyan:   { accent: 'from-cyan-400 to-teal-500',       value: 'text-cyan-300',    glow: 'hover:shadow-cyan-500/20',     ring: 'group-hover:border-cyan-600/40' },
+  indigo: { accent: 'from-indigo-400 to-blue-500',     value: 'text-indigo-300',  glow: 'hover:shadow-indigo-500/20',   ring: 'group-hover:border-indigo-600/40' },
+  emerald:{ accent: 'from-emerald-400 to-green-500',   value: 'text-emerald-300', glow: 'hover:shadow-emerald-500/20',  ring: 'group-hover:border-emerald-600/40' },
+  sky:    { accent: 'from-sky-400 to-blue-500',        value: 'text-sky-300',     glow: 'hover:shadow-sky-500/20',      ring: 'group-hover:border-sky-600/40' },
+  rose:   { accent: 'from-rose-400 to-red-500',        value: 'text-rose-300',    glow: 'hover:shadow-rose-500/20',     ring: 'group-hover:border-rose-600/40' },
+};
+function Kpi({ label, value, sub, tone, accent, icon, live, trend }) {
+  const t = KPI_TONES[accent || tone] || KPI_TONES.slate;
   return (
     <div className={`group relative bg-gradient-to-br from-slate-900/80 to-slate-900/40 border border-slate-800/80 rounded-xl px-4 py-3.5 overflow-hidden transition-all duration-300 ${t.ring} ${t.glow} hover:shadow-lg hover:-translate-y-0.5`}>
-      {/* Top gradient accent bar */}
       <div className={`absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r ${t.accent} opacity-60 group-hover:opacity-100 transition-opacity`} />
-      {/* Subtle glow on hover */}
       <div className={`absolute -inset-px bg-gradient-to-br ${t.accent} opacity-0 group-hover:opacity-[0.03] transition-opacity rounded-xl`} />
       <div className="relative flex items-center justify-between">
         <p className="text-[11px] text-slate-500 font-medium uppercase tracking-wide truncate">{label}</p>
-        {live && <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400/50" />LIVE</span>}
+        <div className="flex items-center gap-1.5">
+          {icon && <span className="text-slate-500"><IconByName name={icon} /></span>}
+          {live && <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400/50" />LIVE</span>}
+        </div>
       </div>
       <div className="relative flex items-baseline gap-2 mt-1.5">
         <p className={`text-2xl font-bold tabular-nums ${t.value} leading-none tracking-tight`}>{value}</p>
@@ -381,7 +578,6 @@ function Kpi({ label, value, sub, tone = 'slate', live, trend }) {
   );
 }
 
-// Radial gauge// Radial gauge (pure SVG) for percentage metrics like inbox rate / panel health
 function RadialGauge({ value, label, sub, color = '#34d399', size = 120 }) {
   const r = size / 2 - 8;
   const c = 2 * Math.PI * r;
@@ -403,7 +599,6 @@ function RadialGauge({ value, label, sub, color = '#34d399', size = 120 }) {
   );
 }
 
-// Horizontal bar row (for API usage list — clean, no boxes)
 function UsageRow({ name, type, used, limit, percent, status, extras, last }) {
   const statusMap = {
     active:  { dot: 'bg-emerald-400', txt: 'text-emerald-400' },
@@ -431,7 +626,6 @@ function UsageRow({ name, type, used, limit, percent, status, extras, last }) {
   );
 }
 
-// Live online-user pill list (uses users.withDetails)
 function UserPresenceList({ users, limit = 8 }) {
   const sorted = [...(users || [])].sort((a, b) => {
     if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1;
@@ -457,7 +651,6 @@ function UserPresenceList({ users, limit = 8 }) {
   );
 }
 
-// Mini bar chart (pure divs) for sending trend
 function MiniBars({ values, labels }) {
   const max = Math.max(1, ...values);
   return (
@@ -474,7 +667,6 @@ function MiniBars({ values, labels }) {
   );
 }
 
-// Section wrapper with header + optional action
 function Section({ title, subtitle, action, children, className = '' }) {
   return (
     <section className={`group bg-gradient-to-br from-slate-900/60 to-slate-900/30 border border-slate-800/70 rounded-xl p-4 transition-all duration-300 hover:border-slate-700/80 ${className}`}>
@@ -490,284 +682,6 @@ function Section({ title, subtitle, action, children, className = '' }) {
   );
 }
 
-// ============================================================================
-// ENTERPRISE DASHBOARD TAB — replaces old boxy dashboard
-// Same data shape (getDashboardStats), fully backward compatible.
-// ============================================================================
-function DashboardTab() {
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState(null);
-
-  const load = useCallback(async () => {
-    const data = await api('getDashboardStats');
-    if (data.success) { setStats(data.stats); setLastUpdated(new Date()); }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { load(); const interval = setInterval(load, 30000); return () => clearInterval(interval); }, [load]);
-
-  if (loading && !stats) return <Spinner size={40} label="Loading dashboard analytics..." />;
-  if (!stats) return <p className="text-slate-500">Failed to load stats.</p>;
-
-  const ph = stats.apiHealth.panelHealth;
-  const healthColor = ph > 70 ? '#34d399' : ph > 40 ? '#fbbf24' : '#fb7185';
-  const onlinePct = stats.users.total > 0 ? Math.round((stats.users.online / stats.users.total) * 100) : 0;
-  const intel = stats.intelligence || {};
-  const grade = intel.systemGrade || { grade: 'B', color: '#60a5fa', label: 'Good' };
-  const dailyTrend = intel.dailyTrendPct || 0;
-  const deliveryEff = intel.deliveryEfficiency != null ? intel.deliveryEfficiency : 100;
-  const capacityWarnings = intel.capacityWarnings || [];
-  const expiringUsers = intel.expiringUsers || 0;
-  const highRiskUsers = intel.highRiskUsers || 0;
-  const estRemaining = intel.estRemainingCapacity || 0;
-  const avgUsage = stats.apiHealth.avgUsagePercent || 0;
-
-  // Build actionable insights list
-  const insights = [];
-  if (stats.apiHealth.blocked.length > 0) insights.push({ level: 'critical', icon: '🔴', text: `${stats.apiHealth.blocked.length} API(s) blocked: ${stats.apiHealth.blocked.map(a => a.name).join(', ')}` });
-  if (capacityWarnings.length > 0) insights.push({ level: 'warning', icon: '🟡', text: `${capacityWarnings.length} API(s) near capacity limit: ${capacityWarnings.map(c => `${c.name} (${c.pct}%)`).join(', ')}` });
-  if (expiringUsers > 0) insights.push({ level: 'warning', icon: '⏰', text: `${expiringUsers} user(s) expiring within 7 days — review and renew` });
-  if (highRiskUsers > 0) insights.push({ level: 'warning', icon: '⚠️', text: `${highRiskUsers} user(s) with high spam rate (>10%) — consider review` });
-  if (stats.inboxSpam.spamRate > 5) insights.push({ level: 'warning', icon: '📬', text: `Global spam rate at ${stats.inboxSpam.spamRate}% — above safe threshold` });
-  if (stats.apiHealth.warning.length > 0) insights.push({ level: 'info', icon: '🔵', text: `${stats.apiHealth.warning.length} API(s) need attention: ${stats.apiHealth.warning.map(a => a.name).join(', ')}` });
-  if (insights.length === 0) insights.push({ level: 'ok', icon: '✅', text: 'All systems operating within normal parameters. No action required.' });
-
-  return (
-    <div className="space-y-5">
-      {/* ── Top bar: title + system grade + refresh ── */}
-      <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-slate-900/80 via-slate-900/40 to-slate-900/80 border border-slate-800/70 px-5 py-4">
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-sky-500/30 to-transparent" />
-        <div className="flex flex-wrap items-center justify-between gap-3 relative">
-          <div>
-            <h2 className="text-xl font-bold text-white flex items-center gap-2.5">
-              <span className="relative flex items-center justify-center w-6 h-6">
-                <span className="absolute inset-0 rounded-full bg-emerald-400/20 animate-ping" />
-                <span className="relative w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />
-              </span>
-              Operations Overview
-            </h2>
-            <p className="text-[11px] text-slate-500 mt-1">
-              {lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString()} · auto-refresh 30s` : 'Auto-refresh every 30s'}
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2.5 bg-slate-950/50 border border-slate-800 rounded-lg px-3.5 py-2">
-              <span className="text-[10px] text-slate-500 uppercase tracking-wide">System Grade</span>
-              <span className="text-xl font-bold tabular-nums leading-none" style={{ color: grade.color }}>{grade.grade}</span>
-              <span className="text-[10px] text-slate-400">{grade.label}</span>
-            </div>
-            <button onClick={load} className="flex items-center gap-2 text-xs text-slate-400 hover:text-sky-300 bg-slate-950/50 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-lg px-3.5 py-2 transition-all hover:scale-105">
-              <Icon.Refresh /> Refresh
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ── System Intelligence Banner ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="group relative bg-gradient-to-br from-slate-900/80 to-slate-900/30 border border-slate-800/80 rounded-xl p-3.5 overflow-hidden transition-all duration-300 hover:border-emerald-700/40 hover:shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-0.5">
-          <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-400 to-green-500 opacity-50 group-hover:opacity-100 transition-opacity" />
-          <p className="text-[10px] text-slate-500 uppercase tracking-wide">Daily Trend</p>
-          <div className="flex items-baseline gap-1.5 mt-1.5">
-            <p className={`text-2xl font-bold tabular-nums leading-none ${dailyTrend >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{dailyTrend >= 0 ? '▲' : '▼'} {Math.abs(dailyTrend)}%</p>
-          </div>
-          <p className="text-[10px] text-slate-600 mt-1">vs 7-day avg</p>
-        </div>
-        <div className="group relative bg-gradient-to-br from-slate-900/80 to-slate-900/30 border border-slate-800/80 rounded-xl p-3.5 overflow-hidden transition-all duration-300 hover:border-cyan-700/40 hover:shadow-lg hover:shadow-cyan-500/10 hover:-translate-y-0.5">
-          <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-400 to-teal-500 opacity-50 group-hover:opacity-100 transition-opacity" />
-          <p className="text-[10px] text-slate-500 uppercase tracking-wide">Delivery Efficiency</p>
-          <p className="text-2xl font-bold text-cyan-300 tabular-nums mt-1.5 leading-none">{deliveryEff}<span className="text-sm text-slate-500">/100</span></p>
-          <p className="text-[10px] text-slate-600 mt-1">weighted score</p>
-        </div>
-        <div className="group relative bg-gradient-to-br from-slate-900/80 to-slate-900/30 border border-slate-800/80 rounded-xl p-3.5 overflow-hidden transition-all duration-300 hover:border-violet-700/40 hover:shadow-lg hover:shadow-violet-500/10 hover:-translate-y-0.5">
-          <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-violet-400 to-purple-500 opacity-50 group-hover:opacity-100 transition-opacity" />
-          <p className="text-[10px] text-slate-500 uppercase tracking-wide">Remaining Capacity</p>
-          <p className="text-2xl font-bold text-violet-300 tabular-nums mt-1.5 leading-none">{estRemaining.toLocaleString()}</p>
-          <p className="text-[10px] text-slate-600 mt-1">SMS credits left</p>
-        </div>
-        <div className="group relative bg-gradient-to-br from-slate-900/80 to-slate-900/30 border border-slate-800/80 rounded-xl p-3.5 overflow-hidden transition-all duration-300 hover:border-amber-700/40 hover:shadow-lg hover:shadow-amber-500/10 hover:-translate-y-0.5">
-          <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-amber-400 to-orange-500 opacity-50 group-hover:opacity-100 transition-opacity" />
-          <p className="text-[10px] text-slate-500 uppercase tracking-wide">Avg API Usage</p>
-          <p className="text-2xl font-bold text-amber-300 tabular-nums mt-1.5 leading-none">{avgUsage}%</p>
-          <p className="text-[10px] text-slate-600 mt-1">across {stats.apiHealth.totalApiCount || 0} APIs</p>
-        </div>
-      </div>
-
-      {/* ── Row 1: Primary KPIs (6 compact tiles) ── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <Kpi label="Total Users" value={stats.users.total} sub={`${stats.users.suspended} suspended`} tone="blue" />
-        <Kpi label="Online Now" value={stats.users.online} sub={`${onlinePct}% of total`} tone="green" live />
-        <Kpi label="Sent Today" value={stats.sending.today} sub={`${stats.sending.running} running`} tone="cyan" trend={dailyTrend} />
-        <Kpi label="Delivered" value={stats.inboxSpam.totalDelivered} sub={`${stats.inboxSpam.deliveryRate || 0}% rate`} tone="violet" />
-        <Kpi label="Spam Blocked" value={stats.inboxSpam.totalSpam} sub={`${stats.inboxSpam.spamRate}% rate`} tone="red" />
-        <Kpi label="APIs Healthy" value={`${stats.apiHealth.good.length}/${stats.apiHealth.good.length + stats.apiHealth.warning.length + stats.apiHealth.blocked.length}`} sub={`${stats.apiHealth.blocked.length} blocked`} tone={stats.apiHealth.blocked.length > 0 ? 'amber' : 'green'} />
-      </div>
-
-      {/* ── Row 2: 3-column hero ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Inbox quality */}
-        <Section title="Delivery Quality" subtitle={`${stats.inboxSpam.totalSent} total messages sent`}>
-          <div className="flex items-center gap-4">
-            <RadialGauge value={stats.inboxSpam.inboxRate} label="Inbox Rate" sub={`${stats.inboxSpam.totalInbox} inbox`} color="#34d399" />
-            <div className="flex-1 space-y-2">
-              <div className="flex items-center justify-between text-xs"><span className="text-slate-500">Spam rate</span><span className="text-rose-400 font-semibold">{stats.inboxSpam.spamRate}%</span></div>
-              <ProgressBar percent={stats.inboxSpam.spamRate} color="from-rose-500 to-red-500" />
-              <div className="flex items-center justify-between text-xs pt-1"><span className="text-slate-500">Undelivered</span><span className="text-slate-300">{stats.inboxSpam.totalUndelivered} ({stats.inboxSpam.undeliveredRate || 0}%)</span></div>
-              <div className="flex items-center justify-between text-xs"><span className="text-slate-500">Invalid numbers</span><span className="text-slate-300">{stats.inboxSpam.totalInvalid}</span></div>
-              {stats.apiHealth.bestSenderForInbox && (
-                <div className="mt-2 pt-2 border-t border-slate-800/60">
-                  <p className="text-[10px] text-slate-600 uppercase tracking-wide">Best sender</p>
-                  <p className="text-sm text-emerald-300 font-medium">{stats.apiHealth.bestSenderForInbox.name} · {stats.apiHealth.bestSenderForInbox.inboxRate}%</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </Section>
-
-        {/* Panel health */}
-        <Section title="Platform Health" subtitle="Aggregated API health score">
-          <div className="flex items-center gap-4">
-            <RadialGauge value={ph} label="Panel Health" color={healthColor} />
-            <div className="flex-1 space-y-2">
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="bg-emerald-500/5 border border-emerald-700/20 rounded-md py-2"><p className="text-lg font-semibold text-emerald-300">{stats.apiHealth.good.length}</p><p className="text-[9px] text-slate-600 uppercase">Good</p></div>
-                <div className="bg-amber-500/5 border border-amber-700/20 rounded-md py-2"><p className="text-lg font-semibold text-amber-300">{stats.apiHealth.warning.length}</p><p className="text-[9px] text-slate-600 uppercase">Warn</p></div>
-                <div className="bg-rose-500/5 border border-rose-700/20 rounded-md py-2"><p className="text-lg font-semibold text-rose-300">{stats.apiHealth.blocked.length}</p><p className="text-[9px] text-slate-600 uppercase">Blocked</p></div>
-              </div>
-              {(stats.apiHealth.blocked.length > 0 || stats.apiHealth.warning.length > 0) ? (
-                <p className="text-[10px] text-slate-600 pt-1">
-                  {stats.apiHealth.blocked.length > 0 && <span className="text-rose-400/80">⚠ {stats.apiHealth.blocked.map(a => a.name).join(', ')} blocked. </span>}
-                  {stats.apiHealth.warning.length > 0 && <span className="text-amber-400/80">⚠ {stats.apiHealth.warning.map(a => a.name).join(', ')} need attention.</span>}
-                </p>
-              ) : (
-                <p className="text-[10px] text-emerald-400/70 pt-1">✓ All APIs operating normally.</p>
-              )}
-            </div>
-          </div>
-        </Section>
-
-        {/* Sending trend */}
-        <Section title="Sending Volume" subtitle="Messages sent by period">
-          <MiniBars values={[stats.sending.today, Math.round(stats.sending.week / 7), Math.round(stats.sending.month / 30), stats.sending.year]} labels={['Day', 'Avg/D', 'Avg/D', 'Year']} />
-          <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-800/60">
-            <div><p className="text-[10px] text-slate-600 uppercase">This week</p><p className="text-sm text-slate-200 font-semibold">{stats.sending.week}</p></div>
-            <div><p className="text-[10px] text-slate-600 uppercase">Running now</p><p className="text-sm text-emerald-300 font-semibold flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />{stats.sending.running} campaigns</p></div>
-          </div>
-        </Section>
-      </div>
-
-      {/* ── Row 3: System Intelligence + API Usage ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* System Intelligence — NEW logic-heavy panel */}
-        <Section
-          className="lg:col-span-1"
-          title="🧠 System Intelligence"
-          subtitle="Auto-computed risk & action items"
-          action={<span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${insights.filter(i => i.level === 'critical').length > 0 ? 'bg-rose-500/15 text-rose-400' : insights.filter(i => i.level === 'warning').length > 0 ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'}`}>{insights.filter(i => i.level === 'critical').length > 0 ? 'ACTION NEEDED' : insights.filter(i => i.level === 'warning').length > 0 ? 'MONITOR' : 'HEALTHY'}</span>}
-        >
-          <div className="space-y-2">
-            {insights.map((ins, i) => (
-              <div key={i} className={`flex items-start gap-2 p-2.5 rounded-lg text-xs ${ins.level === 'critical' ? 'bg-rose-950/30 border border-rose-800/40' : ins.level === 'warning' ? 'bg-amber-950/30 border border-amber-800/40' : ins.level === 'ok' ? 'bg-emerald-950/20 border border-emerald-800/30' : 'bg-slate-800/30 border border-slate-700/40'}`}>
-                <span className="flex-none text-sm">{ins.icon}</span>
-                <span className={`text-[11px] leading-relaxed ${ins.level === 'critical' ? 'text-rose-200' : ins.level === 'warning' ? 'text-amber-200' : ins.level === 'ok' ? 'text-emerald-200' : 'text-slate-300'}`}>{ins.text}</span>
-              </div>
-            ))}
-          </div>
-          {/* Mini stats grid */}
-          <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-800/60">
-            <div><p className="text-[10px] text-slate-600 uppercase">Active user rate</p><p className="text-sm text-sky-300 font-semibold">{intel.activeUserPct || 0}%</p></div>
-            <div><p className="text-[10px] text-slate-600 uppercase">High-risk users</p><p className={`text-sm font-semibold ${highRiskUsers > 0 ? 'text-rose-300' : 'text-emerald-300'}`}>{highRiskUsers}</p></div>
-          </div>
-        </Section>
-
-        {/* API usage — spans 2 cols */}
-        <Section
-          className="lg:col-span-2"
-          title="API Usage & Routing"
-          subtitle="Sender + Gemini AI — live consumption"
-          action={<span className="text-[10px] text-slate-600">{stats.apiHealth.senderApis.length + stats.apiHealth.geminiApis.length} APIs</span>}
-        >
-          {stats.apiHealth.senderApis.length === 0 && stats.apiHealth.geminiApis.length === 0 ? (
-            <p className="text-xs text-slate-600 py-6 text-center">No APIs configured. Add them in <span className="text-sky-400">API Management</span>.</p>
-          ) : (
-            <div>
-              {stats.apiHealth.senderApis.map((a, i) => (
-                <UsageRow
-                  key={a.id}
-                  name={a.name}
-                  type="Sender"
-                  used={a.used}
-                  limit={a.limit}
-                  percent={a.usagePercent}
-                  status={a.status}
-                  last={i === stats.apiHealth.senderApis.length - 1 && stats.apiHealth.geminiApis.length === 0}
-                  extras={[
-                    <span key="in">Inbox {a.inboxRate}%</span>,
-                    <span key="sp">Spam {a.spamRate}%</span>,
-                    <span key="hl">Health {a.healthScore}%</span>,
-                    a.autoRoute && <span key="ar" className="text-sky-400/70">Auto-route</span>,
-                  ]}
-                />
-              ))}
-              {stats.apiHealth.geminiApis.map((a, i) => (
-                <UsageRow
-                  key={a.id}
-                  name={a.name}
-                  type="Gemini AI"
-                  used={a.used}
-                  limit={a.limit}
-                  percent={a.usagePercent}
-                  status={a.status}
-                  last={i === stats.apiHealth.geminiApis.length - 1}
-                  extras={[<span key="hl">Health {a.healthScore}%</span>, a.autoRoute && <span key="ar" className="text-sky-400/70">Auto-route</span>]}
-                />
-              ))}
-            </div>
-          )}
-        </Section>
-      </div>
-
-      {/* ── Row 4: Live users + Database ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Live users */}
-        <Section
-          title="Live User Presence"
-          subtitle={`${stats.users.online} online of ${stats.users.total}`}
-          action={<span className="flex items-center gap-1 text-[10px] text-emerald-400"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />{onlinePct}%</span>}
-        >
-          <UserPresenceList users={stats.users.withDetails} />
-        </Section>
-
-        {/* Database usage */}
-        <Section title="Database Connections" subtitle="MongoDB storage utilization">
-          {stats.database.length === 0 ? (
-            <p className="text-xs text-slate-600 py-3 text-center">Using default MongoDB connection.</p>
-          ) : (
-            <div>
-              {stats.database.map((db, i) => (
-                <UsageRow
-                  key={db.id}
-                  name={`${db.label}${db.isActive ? ' · Active' : ''}`}
-                  type="MongoDB"
-                  used={`${db.storageUsed}MB`}
-                  limit={`${db.storageLimit}MB`}
-                  percent={db.usagePercent}
-                  status={db.isActive ? 'active' : 'paused'}
-                  last={i === stats.database.length - 1}
-                />
-              ))}
-            </div>
-          )}
-        </Section>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================================
-// API MANAGEMENT TAB
-// ============================================================================
 function ApiManagementTab() {
   const [senderApis, setSenderApis] = useState([]);
   const [geminiApis, setGeminiApis] = useState([]);
@@ -1450,66 +1364,7 @@ function SubAdminTab() {
 // ============================================================================
 // DATABASE TAB
 // ============================================================================
-function DatabaseTab() {
-  const [conns, setConns] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ label: '', uri: '', storageLimit: 512 });
 
-  const [creating, setCreating] = useState(false);
-  const withLoading = useLoading();
-
-  const load = async () => { setLoading(true); const data = await api('getMongoConnections'); if (data.success) setConns(data.connections); setLoading(false); };
-  useEffect(() => { load(); }, []);
-
-  const add = async (e) => {
-    e.preventDefault();
-    setCreating(true);
-    try {
-      const data = await api('addMongoConnection', form);
-      if (data.success) { setShowForm(false); setForm({ label: '', uri: '', storageLimit: 512 }); load(); }
-      else alert(data.error);
-    } finally { setCreating(false); }
-  };
-
-  if (loading) return <Spinner label="Loading databases..." />;
-
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-white">Database Management</h2>
-        <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm px-3 py-1.5 rounded-lg transition"><Icon.Plus />Add Database</button>
-      </div>
-      {showForm && (
-        <form onSubmit={add} className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 space-y-3">
-          <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Label (e.g., Primary DB)" value={form.label} onChange={e => setForm({...form, label: e.target.value})} required />
-          <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="MongoDB URI" value={form.uri} onChange={e => setForm({...form, uri: e.target.value})} required />
-          <input type="number" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Storage Limit (MB)" value={form.storageLimit} onChange={e => setForm({...form, storageLimit: parseInt(e.target.value)})} />
-          <button type="submit" disabled={creating} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white text-sm px-4 py-2 rounded-lg transition disabled:opacity-60">{creating ? <BtnSpinner /> : <Icon.Plus />}Add Database</button>
-        </form>
-      )}
-      <div className="space-y-2">
-        {conns.map(c => (
-          <div key={c._id} className="bg-slate-900/50 border border-slate-800 rounded-lg p-3 flex justify-between items-center">
-            <div>
-              <p className="text-sm text-white font-medium">{c.label} {c.isActive && <span className="text-xs text-green-400">(Active)</span>}</p>
-              <p className="text-xs text-gray-500">{c.storageUsed}MB / {c.storageLimit}MB</p>
-            </div>
-            <div className="flex gap-2">
-              {!c.isActive && <button onClick={async () => { await withLoading?.('Activating database...', async () => { await api('setActiveMongo', { id: c._id }); }); load(); }} className="text-green-400 text-xs px-2">Set Active</button>}
-              <button onClick={async () => { if (confirm('Delete database?')) { await withLoading?.('Deleting database...', async () => { await api('deleteMongoConnection', { id: c._id }); }); load(); } }} className="text-red-400"><Icon.Trash /></button>
-            </div>
-          </div>
-        ))}
-        {conns.length === 0 && <p className="text-gray-600 text-sm py-8 text-center">Using default ENV MongoDB connection.</p>}
-      </div>
-    </div>
-  );
-}
-
-// ============================================================================
-// BLACKLIST TAB
-// ============================================================================
 function BlacklistTab() {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -2170,63 +2025,408 @@ function SettingsTab() {
 // (the JWT cookie is sent automatically via credentials: 'include').
 // ============================================================================
 
-// Gateway REST API helper — calls /api/admin/gateway/* endpoints.
-async function gatewayApi(path, options = {}) {
-  const res = await fetch('/api/admin/gateway' + path, {
-    method: options.method || 'GET',
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-    credentials: 'include',
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
-  return res.json().catch(() => ({ error: 'Invalid JSON response' }));
-}
 
-// Deploy hook helper — calls /api/admin/system/deploy-hook
-async function deployHookApi(body = {}) {
-  const res = await fetch('/api/admin/system/deploy-hook', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify(body),
-  });
-  return res.json().catch(() => ({ error: 'Invalid JSON response' }));
-}
+// ============================================================================
+// NEW DASHBOARD TAB — Enterprise Overview (replaces old overview user hated)
+// ============================================================================
+function DashboardTab() {
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState('');
 
-function GatewayDashboardTab() {
-  const [sub, setSub] = useState('overview');
-  const subTabs = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'config', label: 'Configuration' },
-    { id: 'accounts', label: 'Email Accounts' },
-    { id: 'logs', label: 'Live Logs' },
-    { id: 'preview', label: 'MMS Preview' },
-    { id: 'deploy', label: 'Deploy & Cache' },
-  ];
+  const load = async () => {
+    setRefreshing(true);
+    try {
+      const data = await api('getDashboardStats');
+      if (data.success) { setStats(data); setError(''); }
+      else setError(data.error || 'Failed to load dashboard');
+    } catch (e) { setError(e.message); }
+    setLoading(false); setRefreshing(false);
+  };
+  useEffect(() => { load(); const t = setInterval(load, 30000); return () => clearInterval(t); }, []);
+
+  if (loading && !stats) return <SkeletonGrid count={6} />;
+
+  const s = stats || {};
+  const db = s.database || {};
+  const grade = s.grade || 'B';
+  const gradeColor = grade === 'A' ? 'emerald' : grade === 'B' ? 'sky' : grade === 'C' ? 'amber' : 'rose';
+  const liveUsers = s.activeUsers || 0;
+  const totalUsers = s.totalUsers || 0;
+  const totalSms = s.totalSms || 0;
+  const todaySms = s.todaySms || 0;
+  const successRate = s.successRate || 0;
+  const apiKeys = s.totalApiKeys || 0;
+  const activeCampaigns = s.activeCampaigns || 0;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Icon.Zap /> Email-to-MMS Gateway Engine
-          </h2>
-          <p className="text-sm text-gray-500 mt-1">Phase 1-4 gateway — account pool, carrier cache, AI rewriter, queue router & deployment sync</p>
+      {/* Hero grade banner */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 p-6 border border-white/10">
+        <div className="absolute inset-0 bg-grid-white/[0.03] pointer-events-none" />
+        <div className="relative flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-widest text-indigo-300/70 font-semibold">System Grade</p>
+            <div className="flex items-center gap-3 mt-1">
+              <span className={`text-5xl font-black ${grade === 'A' ? 'text-emerald-400' : grade === 'B' ? 'text-sky-400' : grade === 'C' ? 'text-amber-400' : 'text-rose-400'}`}>{grade}</span>
+              <div>
+                <p className="text-white text-lg font-bold">{grade === 'A' ? 'Excellent Health' : grade === 'B' ? 'Good — Stable' : grade === 'C' ? 'Needs Attention' : 'Critical'}</p>
+                <p className="text-xs text-slate-400">Auto-evaluated from DB load, latency & throughput</p>
+              </div>
+            </div>
+          </div>
+          <button onClick={load} disabled={refreshing} className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-semibold flex items-center gap-2 transition disabled:opacity-50">
+            <IconByName name="refresh" size={16} className={refreshing ? 'animate-spin' : ''} /> Refresh
+          </button>
         </div>
       </div>
 
-      {/* Sub-tab navigation */}
-      <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-3">
+      {/* Top KPI row */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Kpi label="Total Users" value={totalUsers} icon="users" accent="sky" sub={`${liveUsers} live now`} live={liveUsers > 0} />
+        <Kpi label="Messages Today" value={todaySms} icon="message" accent="emerald" sub={`${totalSms} all-time`} />
+        <Kpi label="Delivery Rate" value={`${successRate.toFixed(1)}%`} icon="check" accent="violet" sub={successRate > 95 ? 'Excellent' : successRate > 80 ? 'Good' : 'Check logs'} />
+        <Kpi label="Active API Keys" value={apiKeys} icon="key" accent="amber" sub={`${activeCampaigns} campaigns running`} />
+      </div>
+
+      {/* Detail boxes grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <DetailBox
+          title="Database Health"
+          subtitle="Real MongoDB metrics"
+          icon="server"
+          accent="cyan"
+          live
+          action={<button onClick={() => window.dispatchEvent(new CustomEvent('admin-tab', { detail: 'database' }))} className="text-xs text-cyan-300 hover:text-cyan-200 font-semibold">Open DB →</button>}
+        >
+          <div className="space-y-3 mt-3">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-400">Storage Used</span>
+              <span className="text-white font-bold">{db.usedMB ? db.usedMB.toFixed(1) : '0'} <span className="text-slate-500 text-xs">MB</span></span>
+            </div>
+            <ProgressBar value={db.usagePercent || 0} max={100} color={db.usagePercent > 80 ? 'rose' : db.usagePercent > 60 ? 'amber' : 'emerald'} />
+            <div className="flex items-center justify-between text-xs text-slate-500">
+              <span>{(db.usagePercent || 0).toFixed(1)}% used</span>
+              <span>{db.freeMB ? db.freeMB.toFixed(0) : '512'} MB free</span>
+            </div>
+            <div className="flex items-center justify-between text-sm pt-2 border-t border-white/5">
+              <span className="text-slate-400">Response Time</span>
+              <span className="text-emerald-400 font-bold">{db.responseMs ? db.responseMs.toFixed(0) : '--'}ms</span>
+            </div>
+          </div>
+        </DetailBox>
+
+        <DetailBox title="Throughput" subtitle="Message delivery pipeline" icon="bolt" accent="amber">
+          <div className="mt-3">
+            <RadialGauge value={successRate} max={100} label="Success %" size={120} />
+            <div className="grid grid-cols-2 gap-2 mt-3 text-center">
+              <div className="bg-white/5 rounded-lg py-2">
+                <p className="text-lg font-bold text-white">{todaySms}</p>
+                <p className="text-[10px] text-slate-500 uppercase">Today</p>
+              </div>
+              <div className="bg-white/5 rounded-lg py-2">
+                <p className="text-lg font-bold text-white">{totalSms}</p>
+                <p className="text-[10px] text-slate-500 uppercase">All-time</p>
+              </div>
+            </div>
+          </div>
+        </DetailBox>
+
+        <DetailBox title="Live Presence" subtitle="Users active in last 5 min" icon="users" accent="emerald" live={liveUsers > 0}>
+          <div className="mt-3">
+            <UserPresenceList users={s.recentUsers || []} />
+          </div>
+        </DetailBox>
+      </div>
+
+      {/* Mini bar chart + recent activity */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <DetailBox title="7-Day Activity" subtitle="Messages per day" icon="chart" accent="indigo">
+          <div className="mt-4">
+            <MiniBars
+              values={(s.weeklyActivity || []).map(d => typeof d === 'number' ? d : (d.count || d.value || 0))}
+              labels={(s.weeklyActivity || []).map((d, i) => typeof d === 'object' ? (d.day || d.label || d.date || '') : `D${i + 1}`)}
+            />
+            {(!s.weeklyActivity || s.weeklyActivity.length === 0) && <p className="text-slate-500 text-sm text-center py-4">No activity data yet</p>}
+          </div>
+        </DetailBox>
+        <DetailBox title="Recent Events" subtitle="Latest system activity" icon="list" accent="slate">
+          <div className="mt-3 space-y-2 max-h-64 overflow-auto">
+            {(s.recentActivity || []).map((a, i) => (
+              <div key={i} className="flex items-center gap-3 text-sm py-1.5 px-2 rounded-lg hover:bg-white/5">
+                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${a.type === 'send' ? 'bg-emerald-400' : a.type === 'error' ? 'bg-rose-400' : 'bg-sky-400'}`} />
+                <span className="text-slate-300 flex-1 truncate">{a.message || a.action || '—'}</span>
+                <span className="text-xs text-slate-600 flex-shrink-0">{a.time || a.createdAt || ''}</span>
+              </div>
+            ))}
+            {(!s.recentActivity || s.recentActivity.length === 0) && <p className="text-slate-500 text-sm text-center py-8">No recent activity</p>}
+          </div>
+        </DetailBox>
+      </div>
+
+      {error && (
+        <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4 text-rose-300 text-sm">
+          <IconByName name="alert" size={16} className="inline mr-2" />{error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// NEW DATABASE TAB — 100% Real MongoDB Stats (fixes user's #1 complaint)
+// ============================================================================
+function DatabaseTab() {
+  const [conns, setConns] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ label: '', uri: '', storageLimit: 512 });
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState('');
+
+  const loadConns = async () => {
+    const data = await api('getMongoConnections');
+    if (data.success) setConns(data.connections);
+  };
+  const loadStats = async () => {
+    setRefreshing(true); setError('');
+    try {
+      const data = await api('getDatabaseStats');
+      if (data.success) setStats(data);
+      else setError(data.error || 'Could not fetch real DB stats');
+    } catch (e) { setError(e.message); }
+    setRefreshing(false);
+  };
+  const loadAll = async () => {
+    setLoading(true);
+    await Promise.all([loadConns(), loadStats()]);
+    setLoading(false);
+  };
+  useEffect(() => { loadAll(); const t = setInterval(loadStats, 15000); return () => clearInterval(t); }, []);
+
+  const add = async (e) => {
+    e.preventDefault(); setCreating(true);
+    try {
+      const data = await api('addMongoConnection', form);
+      if (data.success) { setShowForm(false); setForm({ label: '', uri: '', storageLimit: 512 }); loadConns(); }
+      else alert(data.error || 'Failed');
+    } catch (e) { alert(e.message); }
+    setCreating(false);
+  };
+  const setActive = async (id) => {
+    const data = await api('setActiveMongo', { id });
+    if (data.success) { loadConns(); loadStats(); }
+    else alert(data.error || 'Failed');
+  };
+  const remove = async (id) => {
+    if (!confirm('Remove this connection?')) return;
+    const data = await api('removeMongoConnection', { id });
+    if (data.success) loadConns();
+  };
+
+  if (loading) return <SkeletonGrid count={4} />;
+
+  const st = stats || {};
+  const usagePct = st.usagePercent || 0;
+  const freeMB = st.freeMB || 0;
+  const usedMB = st.usedMB || 0;
+  const limitMB = st.limitMB || 512;
+  const respMs = st.responseMs || 0;
+
+  return (
+    <div className="space-y-6">
+      {/* REAL DB Stats Hero — the user's primary complaint fix */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        <DetailBox title="Storage Usage" subtitle={`${st.dbName || 'database'} • real data`} icon="server" accent={usagePct > 80 ? 'rose' : usagePct > 60 ? 'amber' : 'emerald'} live action={
+          <button onClick={loadStats} disabled={refreshing} className="text-xs text-slate-400 hover:text-white font-semibold flex items-center gap-1">
+            <IconByName name="refresh" size={12} className={refreshing ? 'animate-spin' : ''} /> Live
+          </button>
+        }>
+          <div className="mt-4 space-y-3">
+            <div className="text-center">
+              <span className={`text-4xl font-black ${usagePct > 80 ? 'text-rose-400' : usagePct > 60 ? 'text-amber-400' : 'text-emerald-400'}`}>{usagePct.toFixed(2)}</span>
+              <span className="text-lg text-slate-400">%</span>
+              <p className="text-xs text-slate-500 mt-1">used of {limitMB} MB limit</p>
+            </div>
+            <ProgressBar value={usagePct} max={100} color={usagePct > 80 ? 'rose' : usagePct > 60 ? 'amber' : 'emerald'} />
+            <div className="grid grid-cols-2 gap-2 text-center text-xs">
+              <div className="bg-white/5 rounded-lg py-2">
+                <p className="text-white font-bold text-sm">{usedMB.toFixed(1)}</p>
+                <p className="text-slate-500">MB used</p>
+              </div>
+              <div className="bg-white/5 rounded-lg py-2">
+                <p className="text-emerald-400 font-bold text-sm">{freeMB.toFixed(0)}</p>
+                <p className="text-slate-500">MB free</p>
+              </div>
+            </div>
+          </div>
+        </DetailBox>
+
+        <DetailBox title="Response Time" subtitle="Real ping latency" icon="bolt" accent={respMs < 50 ? 'emerald' : respMs < 200 ? 'amber' : 'rose'} live>
+          <div className="mt-4 text-center">
+            <span className={`text-4xl font-black ${respMs < 50 ? 'text-emerald-400' : respMs < 200 ? 'text-amber-400' : 'text-rose-400'}`}>{respMs.toFixed(0)}</span>
+            <span className="text-lg text-slate-400">ms</span>
+            <p className="text-xs text-slate-500 mt-1">MongoDB ping</p>
+            <div className="mt-3 flex items-center justify-center gap-2 text-xs">
+              <span className={`px-2 py-0.5 rounded-full ${st.readyState === 1 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
+                {st.readyState === 1 ? '● Connected' : '● Disconnected'}
+              </span>
+            </div>
+            {st.host && <p className="text-[10px] text-slate-600 mt-2 truncate">{st.host}</p>}
+          </div>
+        </DetailBox>
+
+        <DetailBox title="Data & Indexes" subtitle="On-disk breakdown" icon="database" accent="violet">
+          <div className="mt-3 space-y-2 text-sm">
+            <div className="flex items-center justify-between"><span className="text-slate-400">Data Size</span><span className="text-violet-300 font-bold">{(st.dataMB || 0).toFixed(1)} MB</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-400">Index Size</span><span className="text-indigo-300 font-bold">{(st.indexMB || 0).toFixed(1)} MB</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-400">On Disk</span><span className="text-sky-300 font-bold">{(st.storageOnDiskMB || 0).toFixed(1)} MB</span></div>
+            <div className="pt-2 border-t border-white/5 grid grid-cols-3 gap-1 text-center text-xs">
+              <div><p className="text-white font-bold">{st.objects || 0}</p><p className="text-slate-500">Objects</p></div>
+              <div><p className="text-white font-bold">{st.collections || 0}</p><p className="text-slate-500">Collections</p></div>
+              <div><p className="text-white font-bold">{st.indexes || 0}</p><p className="text-slate-500">Indexes</p></div>
+            </div>
+          </div>
+        </DetailBox>
+
+        <DetailBox title="Engine Info" subtitle="MongoDB server details" icon="info" accent="slate">
+          <div className="mt-3 space-y-2 text-sm">
+            <div className="flex justify-between"><span className="text-slate-400">Version</span><span className="text-white font-mono">{st.dbVersion || '—'}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">Engine</span><span className="text-white font-mono">{st.engine || '—'}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">Avg Obj Size</span><span className="text-white font-mono">{(st.avgObjSize || 0).toFixed(0)} B</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">Collections</span><span className="text-white font-mono">{st.collections || 0}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">Measured</span><span className="text-slate-300 text-xs">{st.measuredAt ? new Date(st.measuredAt).toLocaleTimeString() : '—'}</span></div>
+          </div>
+        </DetailBox>
+      </div>
+
+      {/* Collection Details table */}
+      {st.collectionDetails && st.collectionDetails.length > 0 && (
+        <DetailBox title="Collection Breakdown" subtitle="Per-collection real document counts & sizes" icon="list" accent="cyan">
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase text-slate-500 border-b border-white/10">
+                  <th className="py-2 pr-4">Collection</th>
+                  <th className="py-2 pr-4 text-right">Docs</th>
+                  <th className="py-2 pr-4 text-right">Data</th>
+                  <th className="py-2 pr-4 text-right">Storage</th>
+                  <th className="py-2 pr-4 text-right">Index</th>
+                  <th className="py-2 text-right">Avg Size</th>
+                </tr>
+              </thead>
+              <tbody>
+                {st.collectionDetails.sort((a, b) => (b.storageSize || 0) - (a.storageSize || 0)).map((c, i) => (
+                  <tr key={i} className="border-b border-white/5 hover:bg-white/5">
+                    <td className="py-2 pr-4 font-mono text-sky-300">{c.name}</td>
+                    <td className="py-2 pr-4 text-right text-white">{c.count?.toLocaleString() || 0}</td>
+                    <td className="py-2 pr-4 text-right text-slate-300">{((c.size || 0) / 1048576).toFixed(2)}</td>
+                    <td className="py-2 pr-4 text-right text-slate-300">{((c.storageSize || 0) / 1048576).toFixed(2)}</td>
+                    <td className="py-2 pr-4 text-right text-slate-300">{((c.totalIndexSize || 0) / 1048576).toFixed(2)}</td>
+                    <td className="py-2 text-right text-slate-400">{(c.avgObjSize || 0).toFixed(0)} B</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </DetailBox>
+      )}
+
+      {error && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-amber-300 text-sm flex items-center gap-2">
+          <IconByName name="alert" size={16} /> {error} — ensure MongoDB URI is configured.
+        </div>
+      )}
+
+      {/* Connection manager */}
+      <DetailBox
+        title="MongoDB Connections"
+        subtitle="Multi-database routing"
+        icon="server"
+        accent="sky"
+        action={<button onClick={() => setShowForm(s => !s)} className="px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 text-xs font-semibold flex items-center gap-1.5"><IconByName name="plus" size={14} /> Add</button>}
+      >
+        <div className="mt-3 space-y-2">
+          {conns.map((c) => (
+            <div key={c._id} className={`flex items-center justify-between p-3 rounded-xl border ${c.isActive ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-white/5 border-white/10'}`}>
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${c.isActive ? 'bg-emerald-500/20' : 'bg-white/10'}`}>
+                  <IconByName name="server" size={18} className={c.isActive ? 'text-emerald-400' : 'text-slate-400'} />
+                </div>
+                <div>
+                  <p className="text-white font-semibold text-sm">{c.label}</p>
+                  <p className="text-xs text-slate-500 font-mono">{c.uri ? c.uri.replace(/:\/\/.*@/, '://***@') : '—'}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {c.isActive && <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold">ACTIVE</span>}
+                {!c.isActive && <button onClick={() => setActive(c._id)} className="text-xs px-3 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white">Set Active</button>}
+                <button onClick={() => remove(c._id)} className="text-xs px-2 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300">Remove</button>
+              </div>
+            </div>
+          ))}
+          {conns.length === 0 && <p className="text-slate-500 text-sm text-center py-4">No connections configured</p>}
+
+          {showForm && (
+            <form onSubmit={add} className="bg-slate-900/50 rounded-xl p-4 border border-white/10 space-y-3">
+              <input value={form.label} onChange={e => setForm({ ...form, label: e.target.value })} placeholder="Label (e.g. Primary)" required className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm" />
+              <input value={form.uri} onChange={e => setForm({ ...form, uri: e.target.value })} placeholder="mongodb+srv://..." required className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
+              <input type="number" value={form.storageLimit} onChange={e => setForm({ ...form, storageLimit: Number(e.target.value) })} placeholder="Storage limit MB" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm" />
+              <button type="submit" disabled={creating} className="w-full py-2 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-sm font-semibold disabled:opacity-50">{creating ? 'Adding...' : 'Add Connection'}</button>
+            </form>
+          )}
+        </div>
+      </DetailBox>
+    </div>
+  );
+}
+
+
+// ============================================================================
+// GATEWAY DASHBOARD — PRIMARY TAB (user's most important section)
+// All sub-tabs: Overview, Config, Accounts, Validator, Lookup, Logs, Preview, Deploy
+// ============================================================================
+function GatewayDashboardTab() {
+  const [sub, setSub] = useState('overview');
+  const subTabs = [
+    { id: 'overview', label: 'Overview', icon: 'chart' },
+    { id: 'config', label: 'Gateway Settings', icon: 'settings', primary: true },
+    { id: 'accounts', label: 'Email Accounts', icon: 'mail' },
+    { id: 'validator', label: 'HLR Validator', icon: 'check' },
+    { id: 'lookup', label: 'Provider & Country', icon: 'globe' },
+    { id: 'logs', label: 'Live Logs', icon: 'list' },
+    { id: 'preview', label: 'MMS Preview', icon: 'eye' },
+    { id: 'deploy', label: 'Deploy', icon: 'rocket' },
+  ];
+  return (
+    <div className="space-y-4">
+      {/* Primary badge banner */}
+      <div className="flex items-center gap-3 bg-gradient-to-r from-violet-900/40 to-indigo-900/40 rounded-xl px-4 py-3 border border-violet-500/20">
+        <div className="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center">
+          <IconByName name="bolt" size={20} className="text-violet-400" />
+        </div>
+        <div>
+          <p className="text-white font-bold text-sm flex items-center gap-2">Email-to-MMS Gateway <span className="text-[9px] px-2 py-0.5 rounded-full bg-violet-500/30 text-violet-200 uppercase tracking-wider font-bold">Primary</span></p>
+          <p className="text-xs text-slate-400">Core delivery engine — carrier routing, HLR validation, AI rewriting, proxy masking</p>
+        </div>
+      </div>
+      {/* Sub-tab nav */}
+      <div className="flex gap-1 overflow-x-auto pb-1">
         {subTabs.map(t => (
-          <button key={t.id} onClick={() => setSub(t.id)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${sub === t.id ? 'bg-blue-600 text-white' : 'bg-slate-800/50 text-gray-400 hover:bg-slate-800 hover:text-gray-200'}`}>
-            {t.label}
+          <button key={t.id} onClick={() => setSub(t.id)} className={`px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 transition ${sub === t.id ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'} ${t.primary && sub === t.id ? 'ring-1 ring-violet-500/50' : ''}`}>
+            <IconByName name={t.icon} size={14} /> {t.label}
+            {t.primary && <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />}
           </button>
         ))}
       </div>
-
       {sub === 'overview' && <GatewayOverview />}
       {sub === 'config' && <GatewayConfig />}
       {sub === 'accounts' && <GatewayAccounts />}
+      {sub === 'validator' && <GatewayValidator />}
+      {sub === 'lookup' && <GatewayLookup />}
       {sub === 'logs' && <GatewayLogs />}
       {sub === 'preview' && <GatewayPreview />}
       {sub === 'deploy' && <GatewayDeploy />}
@@ -2234,722 +2434,750 @@ function GatewayDashboardTab() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// OVERVIEW — live health metrics dashboard
-// ---------------------------------------------------------------------------
+// ── Overview ──────────────────────────────────────────────────────────────
 function GatewayOverview() {
-  const [data, setData] = useState(null);
+  const [health, setHealth] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const load = async () => {
+    try { const d = await gatewayApi('/admin/gateway/health'); if (d.success || d.accountPool) setHealth(d); } catch {}
+    setLoading(false);
+  };
+  useEffect(() => { load(); const t = setInterval(load, 5000); return () => clearInterval(t); }, []);
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await gatewayApi('/health');
-        if (res.success) setData(res); else setError(res.error || 'Failed to load health data');
-      } catch (e) { setError(e.message); }
-      setLoading(false);
-    })();
-  }, [refreshKey]);
-
-  if (loading) return <Spinner label="Loading gateway health metrics..." />;
-  if (error) return (
-    <div className="bg-red-900/30 border border-red-800 rounded-xl p-6 text-red-300">
-      <p className="font-semibold">Error loading gateway health</p>
-      <p className="text-sm mt-1">{error}</p>
-      <button onClick={() => setRefreshKey(k => k + 1)} className="mt-3 px-4 py-2 bg-red-800 hover:bg-red-700 text-white rounded-lg text-sm">Retry</button>
-    </div>
-  );
-
-  const { accountPool, throughput, carrierCache, delivery24h, config } = data;
+  if (loading) return <SkeletonGrid count={4} />;
+  const h = health || {};
+  const pool = h.accountPool || {};
+  const throughput = h.throughput || {};
+  const carrier = h.carrierCache || {};
+  const delivery = h.delivery24h || {};
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-gray-500">Last updated: {new Date(data.timestamp).toLocaleString()}</p>
-        <button onClick={() => setRefreshKey(k => k + 1)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-gray-300 rounded-lg text-sm transition">
-          <Icon.Refresh /> Refresh
-        </button>
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Kpi label="Accounts Online" value={`${pool.active || 0}/${pool.total || 0}`} icon="mail" accent="emerald" sub={`${pool.cooldown || 0} cooling down`} />
+        <Kpi label="Throughput /min" value={throughput.lastMinute || 0} icon="bolt" accent="amber" sub={`${throughput.lastHour || 0} / hour`} />
+        <Kpi label="Carrier Cache Hit" value={`${(carrier.hitRate || 0).toFixed(0)}%`} icon="database" accent="violet" sub={`${carrier.size || 0} entries`} />
+        <Kpi label="24h Delivery" value={`${(delivery.successRate || 0).toFixed(1)}%`} icon="check" accent="sky" sub={`${delivery.total || 0} sent`} />
       </div>
-
-      {/* Row 1: Account Pool + Throughput */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <GWStatCard label="Total Accounts" value={accountPool.total} color="text-blue-300" sub={`${accountPool.active} active · ${accountPool.cooldown} cooldown · ${accountPool.suspended} suspended`} />
-        <GWStatCard label="Usable Now" value={accountPool.usable} color="text-emerald-300" sub="Accounts ready to send" />
-        <GWStatCard label="Sent Today" value={throughput.sentToday} color="text-cyan-300" sub={`Capacity: ${throughput.dailyCapacity} · Remaining: ${throughput.remainingToday}`} />
-        <GWStatCard label="Utilization" value={throughput.utilizationPct + '%'} color="text-amber-300" sub="Pool daily capacity used" />
-      </div>
-
-      {/* Row 2: Carrier Cache + Delivery */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
-          <h3 className="text-lg font-semibold text-gray-300 mb-4">Carrier Cache (24h)</h3>
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <GWMiniStat label="Total Entries" value={carrierCache.totalEntries} />
-            <GWMiniStat label="Active Entries" value={carrierCache.activeEntries} color="text-emerald-300" />
-            <GWMiniStat label="Expired Entries" value={carrierCache.expiredEntries} color="text-amber-300" />
-            <GWMiniStat label="Total Lookups" value={carrierCache.lookups24h} />
-            <GWMiniStat label="Cache Hits" value={carrierCache.cacheHits24h} color="text-emerald-300" />
-            <GWMiniStat label="API Calls" value={carrierCache.apiCalls24h} color="text-blue-300" />
-          </div>
-          <div className="mt-4 pt-3 border-t border-slate-800">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs text-gray-500">Hit Ratio</span>
-              <span className="text-sm font-bold text-cyan-300">{carrierCache.hitRatioPct}%</span>
-            </div>
-            <div className="w-full bg-slate-800 rounded-full h-2">
-              <div className="bg-gradient-to-r from-cyan-500 to-blue-500 h-2 rounded-full transition-all" style={{ width: Math.min(100, carrierCache.hitRatioPct) + '%' }} />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
-          <h3 className="text-lg font-semibold text-gray-300 mb-4">Delivery Pipeline (24h)</h3>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between bg-slate-800/50 rounded-lg px-4 py-3">
-              <span className="text-sm text-gray-400">Total Deliveries</span>
-              <span className="text-xl font-bold text-white">{delivery24h.total}</span>
-            </div>
-            {Object.entries(delivery24h.byStatus).map(([status, count]) => (
-              <div key={status} className="flex items-center justify-between bg-slate-800/30 rounded-lg px-4 py-2.5">
-                <span className="text-sm text-gray-400 capitalize">{status}</span>
-                <span className={`text-sm font-bold ${status === 'delivered' || status === 'sent' ? 'text-emerald-300' : status === 'failed' ? 'text-red-300' : 'text-gray-300'}`}>{count}</span>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <DetailBox title="Account Pool Health" subtitle="Per-provider availability" icon="mail" accent="emerald" live>
+          <div className="mt-3 space-y-2">
+            {Object.entries(pool.byProvider || {}).map(([prov, info]) => (
+              <div key={prov} className="flex items-center justify-between text-sm py-1.5 px-2 rounded-lg bg-white/5">
+                <span className="text-slate-300 font-mono text-xs">{prov}</span>
+                <div className="flex items-center gap-3 text-xs">
+                  <span className="text-emerald-400">{info.active || 0} active</span>
+                  <span className="text-amber-400">{info.cooldown || 0} cooldown</span>
+                  <span className="text-rose-400">{info.suspended || 0} susp.</span>
+                </div>
               </div>
             ))}
-            <div className="flex items-center justify-between bg-red-900/20 border border-red-900/40 rounded-lg px-4 py-3">
-              <span className="text-sm text-red-300">Spam Blocked</span>
-              <span className="text-sm font-bold text-red-400">{delivery24h.spamBlocked}</span>
+            {Object.keys(pool.byProvider || {}).length === 0 && <p className="text-slate-500 text-sm text-center py-4">No accounts configured</p>}
+          </div>
+        </DetailBox>
+        <DetailBox title="Delivery Last 24h" subtitle="Success & failure breakdown" icon="chart" accent="sky">
+          <div className="mt-3 space-y-3">
+            <ProgressBar value={delivery.successRate || 0} max={100} color={delivery.successRate > 90 ? 'emerald' : 'amber'} />
+            <div className="grid grid-cols-3 gap-2 text-center text-xs">
+              <div className="bg-emerald-500/10 rounded-lg py-2"><p className="text-emerald-400 font-bold text-base">{delivery.delivered || 0}</p><p className="text-slate-500">Delivered</p></div>
+              <div className="bg-amber-500/10 rounded-lg py-2"><p className="text-amber-400 font-bold text-base">{delivery.pending || 0}</p><p className="text-slate-500">Pending</p></div>
+              <div className="bg-rose-500/10 rounded-lg py-2"><p className="text-rose-400 font-bold text-base">{delivery.failed || 0}</p><p className="text-slate-500">Failed</p></div>
             </div>
           </div>
-        </div>
+        </DetailBox>
+      </div>
+    </div>
+  );
+}
+
+// ── Config (PRIMARY — ALL SystemConfig options) ──────────────────────────
+function GatewayConfig() {
+  const [config, setConfig] = useState(null);
+  const [dynamic, setDynamic] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState('');
+  const [form, setForm] = useState({
+    geminiApiKey: '', carrierLookupApiKey: '', routingDelaySeconds: 3, batchSizePerAccount: 5,
+    enablePhishingFilter: true, blockedKeywords: ['bank', 'otp', 'passcode', 'credit card'], renderDeployUrl: '',
+  });
+  const [dynForm, setDynForm] = useState({
+    routingDelayMs: 3000, batchSizePerAccount: 5, maxConcurrency: 10, queuePaused: false,
+    aiPolymorphEnabled: true, safetyFilterEnabled: true,
+  });
+
+  const load = async () => {
+    try {
+      const [cfg, dyn] = await Promise.all([
+        gatewayApi('/admin/gateway', { method: 'POST', body: JSON.stringify({ resource: 'config' }) }),
+        gatewayApi('/admin/gateway/dynamic'),
+      ]);
+      if (cfg.success && cfg.config) {
+        setConfig(cfg.config);
+        setForm({
+          geminiApiKey: cfg.config.geminiApiKey || '', carrierLookupApiKey: cfg.config.carrierLookupApiKey || '',
+          routingDelaySeconds: cfg.config.routingDelaySeconds ?? 3, batchSizePerAccount: cfg.config.batchSizePerAccount ?? 5,
+          enablePhishingFilter: cfg.config.enablePhishingFilter ?? true,
+          blockedKeywords: cfg.config.blockedKeywords || ['bank', 'otp', 'passcode', 'credit card'],
+          renderDeployUrl: cfg.config.renderDeployUrl || '',
+        });
+      }
+      if (dyn.success && dyn.config) {
+        setDynamic(dyn.config);
+        setDynForm({
+          routingDelayMs: dyn.config.routingDelayMs ?? 3000, batchSizePerAccount: dyn.config.batchSizePerAccount ?? 5,
+          maxConcurrency: dyn.config.maxConcurrency ?? 10, queuePaused: dyn.config.queuePaused ?? false,
+          aiPolymorphEnabled: dyn.config.aiPolymorphEnabled ?? true, safetyFilterEnabled: dyn.config.safetyFilterEnabled ?? true,
+        });
+      }
+    } catch {}
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  const saveConfig = async (e) => {
+    e.preventDefault(); setSaving(true); setSavedMsg('');
+    try {
+      const d = await gatewayApi('/admin/gateway', { method: 'POST', body: JSON.stringify({ resource: 'config', action: 'update', config: form }) });
+      if (d.success) { setSavedMsg('✓ Gateway config saved'); setConfig(d.config || form); }
+      else setSavedMsg(`✗ ${d.error || 'Failed'}`);
+    } catch (e) { setSavedMsg(`✗ ${e.message}`); }
+    setSaving(false); setTimeout(() => setSavedMsg(''), 4000);
+  };
+  const saveDynamic = async () => {
+    setSaving(true);
+    try {
+      const d = await gatewayApi('/admin/gateway/dynamic', { method: 'POST', body: JSON.stringify(dynForm) });
+      if (d.success) setSavedMsg('✓ Runtime config updated');
+      else setSavedMsg(`✗ ${d.error || 'Failed'}`);
+    } catch (e) { setSavedMsg(`✗ ${e.message}`); }
+    setSaving(false); setTimeout(() => setSavedMsg(''), 4000);
+  };
+  const toggleKeyword = (kw) => {
+    setForm(f => ({ ...f, blockedKeywords: f.blockedKeywords.includes(kw) ? f.blockedKeywords.filter(k => k !== kw) : [...f.blockedKeywords, kw] }));
+  };
+
+  if (loading) return <SkeletonGrid count={4} />;
+
+  return (
+    <div className="space-y-4">
+      {savedMsg && <div className={`rounded-xl p-3 text-sm font-semibold ${savedMsg.startsWith('✓') ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-300 border border-rose-500/30'}`}>{savedMsg}</div>}
+
+      {/* AI / Rewriting */}
+      <DetailBox title="AI Rewriting Engine" subtitle="Gemini-powered message polymorphism" icon="bolt" accent="violet" live>
+        <form onSubmit={saveConfig} className="mt-3 space-y-3">
+          <div>
+            <label className="text-xs text-slate-400 uppercase tracking-wide font-semibold">Gemini API Key</label>
+            <input value={form.geminiApiKey} onChange={e => setForm({ ...form, geminiApiKey: e.target.value })} placeholder="AIza..." type="password" className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
+            <p className="text-[10px] text-slate-500 mt-1">Used for AI message rewriting / polymorphism to bypass carrier filters</p>
+          </div>
+          <div className="flex items-center gap-3 pt-1">
+            <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-300">
+              <input type="checkbox" checked={form.enablePhishingFilter} onChange={e => setForm({ ...form, enablePhishingFilter: e.target.checked })} className="w-4 h-4 rounded accent-violet-500" />
+              Enable Phishing / Safety Filter
+            </label>
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 uppercase tracking-wide font-semibold">Blocked Keywords ({form.blockedKeywords.length})</label>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {form.blockedKeywords.map(kw => (
+                <button type="button" key={kw} onClick={() => toggleKeyword(kw)} className="px-2 py-1 rounded-lg bg-rose-500/15 text-rose-300 text-xs flex items-center gap-1 hover:bg-rose-500/25">{kw} <IconByName name="x" size={10} /></button>
+              ))}
+            </div>
+            <input onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); const v = e.target.value.trim(); if (v) { setForm(f => ({ ...f, blockedKeywords: [...f.blockedKeywords, v] })); e.target.value = ''; } } }} placeholder="Add keyword + Enter" className="w-full mt-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white text-xs" />
+          </div>
+        </form>
+      </DetailBox>
+
+      {/* Routing & Throttling */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <DetailBox title="Routing & Throttling" subtitle="Persistent config (SystemConfig)" icon="settings" accent="sky">
+          <div className="mt-3 space-y-3">
+            <div>
+              <label className="text-xs text-slate-400 font-semibold">Routing Delay (seconds)</label>
+              <input type="number" value={form.routingDelaySeconds} onChange={e => setForm({ ...form, routingDelaySeconds: Number(e.target.value) })} min="0" max="60" className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 font-semibold">Batch Size / Account</label>
+              <input type="number" value={form.batchSizePerAccount} onChange={e => setForm({ ...form, batchSizePerAccount: Number(e.target.value) })} min="1" max="100" className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 font-semibold">Carrier Lookup API Key (HLR)</label>
+              <input value={form.carrierLookupApiKey} onChange={e => setForm({ ...form, carrierLookupApiKey: e.target.value })} placeholder="sk_..." type="password" className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 font-semibold">Render Deploy Webhook URL</label>
+              <input value={form.renderDeployUrl} onChange={e => setForm({ ...form, renderDeployUrl: e.target.value })} placeholder="https://api.render.com/deploy/..." className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
+            </div>
+          </div>
+        </DetailBox>
+
+        <DetailBox title="Runtime Overrides" subtitle="Hot-reloadable (Redis) — no restart needed" icon="bolt" accent="amber" live>
+          <div className="mt-3 space-y-3">
+            <div>
+              <label className="text-xs text-slate-400 font-semibold">Routing Delay (ms) — live override</label>
+              <input type="number" value={dynForm.routingDelayMs} onChange={e => setDynForm({ ...dynForm, routingDelayMs: Number(e.target.value) })} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 font-semibold">Max Concurrency</label>
+              <input type="number" value={dynForm.maxConcurrency} onChange={e => setDynForm({ ...dynForm, maxConcurrency: Number(e.target.value) })} min="1" max="50" className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-300 bg-white/5 rounded-lg px-3 py-2">
+                <input type="checkbox" checked={dynForm.queuePaused} onChange={e => setDynForm({ ...dynForm, queuePaused: e.target.checked })} className="w-4 h-4 rounded accent-amber-500" /> Pause Queue
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-300 bg-white/5 rounded-lg px-3 py-2">
+                <input type="checkbox" checked={dynForm.aiPolymorphEnabled} onChange={e => setDynForm({ ...dynForm, aiPolymorphEnabled: e.target.checked })} className="w-4 h-4 rounded accent-violet-500" /> AI Polymorph
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-300 bg-white/5 rounded-lg px-3 py-2">
+                <input type="checkbox" checked={dynForm.safetyFilterEnabled} onChange={e => setDynForm({ ...dynForm, safetyFilterEnabled: e.target.checked })} className="w-4 h-4 rounded accent-emerald-500" /> Safety Filter
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-300 bg-white/5 rounded-lg px-3 py-2">
+                <input type="number" value={dynForm.batchSizePerAccount} onChange={e => setDynForm({ ...dynForm, batchSizePerAccount: Number(e.target.value) })} className="w-12 px-1 py-0 rounded bg-transparent text-white text-sm" /> Batch
+              </label>
+            </div>
+            <button onClick={saveDynamic} disabled={saving} className="w-full py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold disabled:opacity-50">{saving ? 'Applying...' : 'Apply Runtime Overrides'}</button>
+          </div>
+        </DetailBox>
       </div>
 
-      {/* Row 3: Config Summary */}
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
-        <h3 className="text-lg font-semibold text-gray-300 mb-4">Gateway Configuration Status</h3>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          <GWConfigBadge label="Routing Delay" value={config.routingDelaySeconds + 's'} ok />
-          <GWConfigBadge label="Batch Size" value={config.batchSizePerAccount} ok />
-          <GWConfigBadge label="Phishing Filter" value={config.enablePhishingFilter ? 'ON' : 'OFF'} ok={config.enablePhishingFilter} />
-          <GWConfigBadge label="Blocked Keywords" value={config.blockedKeywordsCount} ok />
-          <GWConfigBadge label="Gemini Key" value={config.hasGeminiKey ? 'SET' : 'NOT SET'} ok={config.hasGeminiKey} />
-          <GWConfigBadge label="Carrier Lookup Key" value={config.hasCarrierLookupKey ? 'SET' : 'NOT SET'} ok={config.hasCarrierLookupKey} />
-          <GWConfigBadge label="Render Deploy URL" value={config.hasRenderDeployUrl ? 'SET' : 'NOT SET'} ok={config.hasRenderDeployUrl} />
+      {/* Provider weights info */}
+      <DetailBox title="Provider Priority Weights" subtitle="Routing preference order (higher = preferred)" icon="info" accent="indigo">
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-5 gap-2">
+          {PROVIDER_TYPES.map(p => (
+            <div key={p.id} className="bg-white/5 rounded-lg p-3 text-center">
+              <div className="w-8 h-8 mx-auto rounded-lg bg-indigo-500/20 flex items-center justify-center mb-1">
+                <IconByName name="mail" size={16} className="text-indigo-400" />
+              </div>
+              <p className="text-white text-xs font-bold">{p.label}</p>
+              <p className="text-indigo-300 text-lg font-black">{p.weight}</p>
+              <p className="text-[9px] text-slate-500">{p.note}</p>
+            </div>
+          ))}
         </div>
+      </DetailBox>
+
+      <button onClick={saveConfig} disabled={saving} className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-bold disabled:opacity-50 flex items-center justify-center gap-2">
+        <IconByName name="save" size={18} /> {saving ? 'Saving Gateway Configuration...' : 'Save Gateway Configuration'}
+      </button>
+    </div>
+  );
+}
+
+// ── Email Accounts (CRUD with provider country logic) ────────────────────
+function GatewayAccounts() {
+  const [accounts, setAccounts] = useState([]);
+  const [config, setConfig] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ provider: 'GMAIL_OAUTH', email: '', label: '', dailyLimit: 400, credentials: {} });
+  const [testResult, setTestResult] = useState({});
+
+  const load = async () => {
+    try {
+      const d = await gatewayApi('/admin/gateway', { method: 'POST', body: JSON.stringify({ resource: 'accounts' }) });
+      if (d.success) { setAccounts(d.accounts || []); setConfig(d.config || {}); }
+    } catch {}
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  const save = async (e) => {
+    e.preventDefault(); setSaving(true);
+    try {
+      const body = { resource: 'accounts', action: editing ? 'update' : 'create', account: { ...form, _id: editing?._id } };
+      const d = await gatewayApi('/admin/gateway', { method: 'POST', body: JSON.stringify(body) });
+      if (d.success) { setShowForm(false); setEditing(null); setForm({ provider: 'GMAIL_OAUTH', email: '', label: '', dailyLimit: 400, credentials: {} }); load(); }
+      else alert(d.error || 'Failed');
+    } catch (e) { alert(e.message); }
+    setSaving(false);
+  };
+  const del = async (id) => {
+    if (!confirm('Delete this account?')) return;
+    const d = await gatewayApi('/admin/gateway', { method: 'POST', body: JSON.stringify({ resource: 'accounts', action: 'delete', accountId: id }) });
+    if (d.success) load();
+  };
+  const edit = (a) => { setEditing(a); setForm({ provider: a.provider, email: a.email, label: a.label || '', dailyLimit: a.dailyLimit || 400, credentials: a.credentials || {} }); setShowForm(true); };
+  const testAccount = async (a) => {
+    setTestResult(t => ({ ...t, [a._id]: 'testing' }));
+    try {
+      const d = await gatewayApi('/admin/gateway', { method: 'POST', body: JSON.stringify({ resource: 'accounts', action: 'test', accountId: a._id }) });
+      setTestResult(t => ({ ...t, [a._id]: d.success ? 'ok' : 'fail' }));
+    } catch { setTestResult(t => ({ ...t, [a._id]: 'fail' })); }
+  };
+  const resetCooldown = async (a) => {
+    const d = await gatewayApi('/admin/gateway', { method: 'POST', body: JSON.stringify({ resource: 'accounts', action: 'reset', accountId: a._id }) });
+    if (d.success) load();
+  };
+
+  const providerInfo = (id) => PROVIDER_TYPES.find(p => p.id === id) || { label: id, weight: 0, note: '' };
+
+  if (loading) return <SkeletonGrid count={4} />;
+
+  return (
+    <div className="space-y-4">
+      <DetailBox
+        title="Email Sender Accounts"
+        subtitle={`${accounts.length} configured • ${accounts.filter(a => a.status === 'ACTIVE').length} active`}
+        icon="mail" accent="emerald" live
+        action={<button onClick={() => { setShowForm(s => !s); setEditing(null); setForm({ provider: 'GMAIL_OAUTH', email: '', label: '', dailyLimit: 400, credentials: {} }); }} className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center gap-1.5"><IconByName name="plus" size={14} /> Add Account</button>}
+      >
+        <div className="mt-3 space-y-2">
+          {accounts.map(a => {
+            const pi = providerInfo(a.provider);
+            return (
+              <div key={a._id} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10 hover:border-white/20">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${a.status === 'ACTIVE' ? 'bg-emerald-500/20' : a.status === 'COOLDOWN' ? 'bg-amber-500/20' : 'bg-rose-500/20'}`}>
+                    <IconByName name="mail" size={18} className={a.status === 'ACTIVE' ? 'text-emerald-400' : a.status === 'COOLDOWN' ? 'text-amber-400' : 'text-rose-400'} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-white font-semibold text-sm truncate">{a.email}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-mono font-bold">{pi.label}</span>
+                      <span className="text-[10px] text-slate-500">w={pi.weight}</span>
+                      {a.label && <span className="text-[10px] text-slate-400">• {a.label}</span>}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <div className="text-right text-xs mr-2">
+                    <p className="text-white font-bold">{a.sentToday || 0}/{a.dailyLimit || 400}</p>
+                    <p className="text-slate-500 text-[9px]">sent today</p>
+                  </div>
+                  <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${a.status === 'ACTIVE' ? 'bg-emerald-500/20 text-emerald-300' : a.status === 'COOLDOWN' ? 'bg-amber-500/20 text-amber-300' : 'bg-rose-500/20 text-rose-300'}`}>{a.status}</span>
+                  {testResult[a._id] === 'testing' && <BtnSpinner />}
+                  {testResult[a._id] === 'ok' && <span className="text-emerald-400 text-xs">✓</span>}
+                  {testResult[a._id] === 'fail' && <span className="text-rose-400 text-xs">✗</span>}
+                  <button onClick={() => testAccount(a)} title="Test" className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300"><IconByName name="check" size={12} /></button>
+                  {a.status === 'COOLDOWN' && <button onClick={() => resetCooldown(a)} title="Reset cooldown" className="p-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300"><IconByName name="refresh" size={12} /></button>}
+                  <button onClick={() => edit(a)} title="Edit" className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300"><IconByName name="edit" size={12} /></button>
+                  <button onClick={() => del(a._id)} title="Delete" className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300"><IconByName name="trash" size={12} /></button>
+                </div>
+              </div>
+            );
+          })}
+          {accounts.length === 0 && <p className="text-slate-500 text-sm text-center py-4">No accounts configured. Click "Add Account" to begin.</p>}
+        </div>
+      </DetailBox>
+
+      {/* Add/Edit form */}
+      {showForm && (
+        <DetailBox title={editing ? 'Edit Account' : 'Add Email Account'} subtitle="Configure sender with provider-specific credentials" icon="plus" accent="sky">
+          <form onSubmit={save} className="mt-3 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-slate-400 font-semibold">Provider Type</label>
+                <select value={form.provider} onChange={e => setForm({ ...form, provider: e.target.value, credentials: {} })} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm">
+                  {PROVIDER_TYPES.map(p => <option key={p.id} value={p.id} className="bg-slate-800">{p.label} (w={p.weight})</option>)}
+                </select>
+                <p className="text-[10px] text-slate-500 mt-1">{providerInfo(form.provider).note}</p>
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 font-semibold">Email Address</label>
+                <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="sender@gmail.com" required type="email" className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 font-semibold">Label (optional)</label>
+                <input value={form.label} onChange={e => setForm({ ...form, label: e.target.value })} placeholder="Primary Gmail" className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 font-semibold">Daily Send Limit</label>
+                <input type="number" value={form.dailyLimit} onChange={e => setForm({ ...form, dailyLimit: Number(e.target.value) })} min="1" max="2000" className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm" />
+              </div>
+            </div>
+
+            {/* Provider-specific credential fields */}
+            <div className="bg-slate-900/50 rounded-xl p-4 border border-white/10">
+              <p className="text-xs text-slate-400 uppercase font-semibold mb-3">Credentials — {providerInfo(form.provider).label}</p>
+              {form.provider === 'GMAIL_OAUTH' && (
+                <div className="space-y-2">
+                  <input value={form.credentials.clientId || ''} onChange={e => setForm({ ...form, credentials: { ...form.credentials, clientId: e.target.value } })} placeholder="OAuth Client ID" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
+                  <input value={form.credentials.clientSecret || ''} onChange={e => setForm({ ...form, credentials: { ...form.credentials, clientSecret: e.target.value } })} placeholder="OAuth Client Secret" type="password" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
+                  <input value={form.credentials.refreshToken || ''} onChange={e => setForm({ ...form, credentials: { ...form.credentials, refreshToken: e.target.value } })} placeholder="Refresh Token" type="password" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
+                </div>
+              )}
+              {form.provider === 'OUTLOOK_GRAPH' && (
+                <div className="space-y-2">
+                  <input value={form.credentials.clientId || ''} onChange={e => setForm({ ...form, credentials: { ...form.credentials, clientId: e.target.value } })} placeholder="Azure App Client ID" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
+                  <input value={form.credentials.clientSecret || ''} onChange={e => setForm({ ...form, credentials: { ...form.credentials, clientSecret: e.target.value } })} placeholder="Azure App Secret" type="password" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
+                  <input value={form.credentials.tenantId || ''} onChange={e => setForm({ ...form, credentials: { ...form.credentials, tenantId: e.target.value } })} placeholder="Tenant ID" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
+                </div>
+              )}
+              {(form.provider === 'YAHOO' || form.provider === 'AOL') && (
+                <div className="space-y-2">
+                  <input value={form.credentials.password || ''} onChange={e => setForm({ ...form, credentials: { ...form.credentials, password: e.target.value } })} placeholder="App Password" type="password" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
+                </div>
+              )}
+              {form.provider === 'CUSTOM_SMTP' && (
+                <div className="space-y-2">
+                  <input value={form.credentials.host || ''} onChange={e => setForm({ ...form, credentials: { ...form.credentials, host: e.target.value } })} placeholder="SMTP Host (smtp.example.com)" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
+                  <input type="number" value={form.credentials.port || 587} onChange={e => setForm({ ...form, credentials: { ...form.credentials, port: Number(e.target.value) } })} placeholder="Port" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm" />
+                  <input value={form.credentials.user || ''} onChange={e => setForm({ ...form, credentials: { ...form.credentials, user: e.target.value } })} placeholder="SMTP Username" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm" />
+                  <input value={form.credentials.pass || ''} onChange={e => setForm({ ...form, credentials: { ...form.credentials, pass: e.target.value } })} placeholder="SMTP Password" type="password" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-sm font-semibold disabled:opacity-50">{saving ? 'Saving...' : (editing ? 'Update Account' : 'Add Account')}</button>
+              <button type="button" onClick={() => { setShowForm(false); setEditing(null); }} className="px-4 py-2.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm">Cancel</button>
+            </div>
+          </form>
+        </DetailBox>
+      )}
+    </div>
+  );
+}
+
+// ── HLR Validator (test number → carrier resolution) ─────────────────────
+function GatewayValidator() {
+  const [number, setNumber] = useState('');
+  const [text, setText] = useState('');
+  const [result, setResult] = useState(null);
+  const [testing, setTesting] = useState(false);
+  const [error, setError] = useState('');
+
+  const country = resolveCountryFromNumber(number);
+  const run = async () => {
+    if (!number.trim()) { setError('Enter a phone number'); return; }
+    setTesting(true); setError(''); setResult(null);
+    try {
+      const d = await gatewayApi('/admin/gateway/preview', { method: 'POST', body: JSON.stringify({ phoneNumber: number, text: text || 'Test MMS message from validator' }) });
+      if (d.success || d.ok) setResult(d);
+      else setError(d.error || d.message || 'Validation failed');
+    } catch (e) { setError(e.message); }
+    setTesting(false);
+  };
+
+  return (
+    <div className="space-y-4">
+      <DetailBox title="HLR Carrier Validator" subtitle="Test any number → carrier, MMS domain, E.164, line type, AI rewrite" icon="check" accent="emerald" live>
+        <div className="mt-3 space-y-3">
+          <div>
+            <label className="text-xs text-slate-400 font-semibold">Phone Number</label>
+            <input value={number} onChange={e => setNumber(e.target.value)} placeholder="+1 555 123 4567" className="w-full mt-1 px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white text-lg font-mono" />
+            {country && number.length > 3 && (
+              <div className="mt-2 flex items-center gap-2 text-sm bg-white/5 rounded-lg px-3 py-2">
+                <span className="text-2xl">{country.flag}</span>
+                <div>
+                  <p className="text-white font-bold">{country.name}</p>
+                  <p className="text-xs text-slate-500">Code: +{country.dial} • MMS: {country.mms ? '✓ supported' : '⚠ check carrier'}</p>
+                </div>
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 font-semibold">Test Message (optional)</label>
+            <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Enter a test message to also see AI rewriting + safety check" rows={2} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm" />
+          </div>
+          <button onClick={run} disabled={testing} className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold disabled:opacity-50 flex items-center justify-center gap-2">
+            {testing ? <><BtnSpinner /> Validating via HLR...</> : <><IconByName name="check" size={18} /> Validate Number + Resolve Carrier</>}
+          </button>
+        </div>
+      </DetailBox>
+
+      {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4 text-rose-300 text-sm"><IconByName name="alert" size={16} className="inline mr-2" />{error}</div>}
+
+      {result && (
+        <DetailBox title="Validation Result" subtitle="Full carrier resolution pipeline" icon="info" accent="violet">
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {[
+              ['Status', result.ok ? '✓ Valid' : '✗ Blocked', result.ok ? 'emerald' : 'rose'],
+              ['E.164 Format', result.e164 || '—', 'sky'],
+              ['MMS Address', result.mmsAddress || '—', 'violet'],
+              ['Carrier Name', result.carrierName || '—', 'amber'],
+              ['Carrier Domain', result.carrierDomain || '—', 'cyan'],
+              ['Line Type', result.lineType || '—', 'indigo'],
+              ['Carrier Source', result.carrierSource || '—', 'slate'],
+              ['AI Source', result.aiSource || '—', 'violet'],
+            ].map(([label, val, color]) => (
+              <div key={label} className="bg-white/5 rounded-lg p-3">
+                <p className="text-[10px] uppercase text-slate-500 font-semibold">{label}</p>
+                <p className="text-white text-sm font-mono mt-0.5 break-all">{val}</p>
+              </div>
+            ))}
+          </div>
+          {result.rewrittenText && result.rewrittenText !== result.originalText && (
+            <div className="mt-3 bg-violet-500/10 border border-violet-500/30 rounded-xl p-3">
+              <p className="text-xs text-violet-300 font-semibold mb-1">AI Rewritten Message</p>
+              <p className="text-white text-sm">{result.rewrittenText}</p>
+            </div>
+          )}
+          {result.safetyCheck && (
+            <div className="mt-2 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
+              <p className="text-xs text-amber-300 font-semibold">Safety Check: {typeof result.safetyCheck === 'string' ? result.safetyCheck : JSON.stringify(result.safetyCheck)}</p>
+            </div>
+          )}
+        </DetailBox>
+      )}
+    </div>
+  );
+}
+
+// ── Provider & Country Lookup ─────────────────────────────────────────────
+function GatewayLookup() {
+  const [query, setQuery] = useState('');
+  const [tab, setTab] = useState('carriers');
+
+  const filteredCarriers = CARRIER_DOMAINS.filter(c =>
+    !query || c.carrier.toLowerCase().includes(query.toLowerCase()) || c.domain.toLowerCase().includes(query.toLowerCase())
+  );
+  const filteredCountries = COUNTRY_CODES.filter(c =>
+    !query || c.name.toLowerCase().includes(query.toLowerCase()) || c.code.toLowerCase().includes(query.toLowerCase()) || String(c.dial).includes(query)
+  );
+  const supportedCountries = COUNTRY_CODES.filter(c => c.mms);
+
+  return (
+    <div className="space-y-4">
+      {/* Quick lookup by number */}
+      <DetailBox title="Number → Country Lookup" subtitle="Enter any number to detect country, dial code, and MMS support" icon="phone" accent="sky">
+        <div className="mt-3">
+          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="+1 555 123 4567  OR  country name  OR  carrier name" className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white text-lg font-mono" />
+          {query && resolveCountryFromNumber(query) && (
+            <div className="mt-3 bg-sky-500/10 border border-sky-500/30 rounded-xl p-4 flex items-center gap-4">
+              <span className="text-4xl">{resolveCountryFromNumber(query).flag}</span>
+              <div className="flex-1">
+                <p className="text-white text-lg font-bold">{resolveCountryFromNumber(query).name}</p>
+                <div className="flex items-center gap-3 text-sm mt-1">
+                  <span className="text-sky-300 font-mono">+{resolveCountryFromNumber(query).dial}</span>
+                  <span className={resolveCountryFromNumber(query).mms ? 'text-emerald-400' : 'text-amber-400'}>{resolveCountryFromNumber(query).mms ? '✓ MMS supported' : '⚠ Limited MMS'}</span>
+                  {resolveCountryFromNumber(query).note && <span className="text-slate-500 text-xs">{resolveCountryFromNumber(query).note}</span>}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </DetailBox>
+
+      {/* Sub-tab switch */}
+      <div className="flex gap-1">
+        {[
+          { id: 'carriers', label: `Carrier Domains (${CARRIER_DOMAINS.length})` },
+          { id: 'countries', label: `Country Codes (${COUNTRY_CODES.length})` },
+          { id: 'supported', label: `MMS Supported (${supportedCountries.length})` },
+        ].map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} className={`px-3 py-2 rounded-lg text-xs font-semibold ${tab === t.id ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white'}`}>{t.label}</button>
+        ))}
       </div>
 
-      {/* Row 4: Account pool table */}
-      {accountPool.accounts && accountPool.accounts.length > 0 && (
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
-          <h3 className="text-lg font-semibold text-gray-300 mb-4">Account Pool Detail</h3>
-          <div className="overflow-x-auto">
+      {/* Carrier domains table */}
+      {tab === 'carriers' && (
+        <DetailBox title="Carrier → MMS Domain Mapping" subtitle="Used for email-to-MMS routing" icon="mail" accent="violet">
+          <div className="mt-3 overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-gray-500 border-b border-slate-800">
-                  <th className="pb-2 pr-4">Email</th>
-                  <th className="pb-2 pr-4">Provider</th>
-                  <th className="pb-2 pr-4">Status</th>
-                  <th className="pb-2 pr-4">Sent/Limit</th>
-                  <th className="pb-2 pr-4">Usable</th>
-                  <th className="pb-2">Last Error</th>
-                </tr>
-              </thead>
+              <thead><tr className="text-left text-xs uppercase text-slate-500 border-b border-white/10"><th className="py-2 pr-4">Carrier</th><th className="py-2 pr-4">MMS Gateway Domain</th><th className="py-2">Note</th></tr></thead>
               <tbody>
-                {accountPool.accounts.map(a => (
-                  <tr key={a._id} className="border-b border-slate-800/50">
-                    <td className="py-2 pr-4 text-gray-300">{a.email}</td>
-                    <td className="py-2 pr-4 text-gray-400 text-xs">{a.provider}</td>
-                    <td className="py-2 pr-4">
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${a.status === 'ACTIVE' ? 'bg-emerald-900/40 text-emerald-300' : a.status === 'COOLDOWN' ? 'bg-amber-900/40 text-amber-300' : 'bg-red-900/40 text-red-300'}`}>{a.status}</span>
-                    </td>
-                    <td className="py-2 pr-4 text-gray-300 tabular-nums">{a.sentToday}/{a.dailyLimit}</td>
-                    <td className="py-2 pr-4">{a.usable ? <span className="text-emerald-400">✓</span> : <span className="text-red-400">✗</span>}</td>
-                    <td className="py-2 text-red-300 text-xs max-w-xs truncate">{a.lastError || '—'}</td>
+                {filteredCarriers.map(c => (
+                  <tr key={c.carrier} className="border-b border-white/5 hover:bg-white/5">
+                    <td className="py-2 pr-4 text-white font-semibold">{c.carrier}</td>
+                    <td className="py-2 pr-4 text-cyan-300 font-mono">{c.domain}</td>
+                    <td className="py-2 text-slate-500 text-xs">{c.note}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
+        </DetailBox>
+      )}
+
+      {/* Country codes grid */}
+      {tab === 'countries' && (
+        <DetailBox title="Country Dial Codes" subtitle="All supported country codes with MMS gateway support flags" icon="globe" accent="emerald">
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {filteredCountries.map(c => (
+              <div key={c.code} className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10">
+                <span className="text-2xl">{c.flag}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white text-sm font-bold truncate">{c.name}</p>
+                  <p className="text-xs text-slate-500 font-mono">+{c.dial}</p>
+                </div>
+                <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${c.mms ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>{c.mms ? 'MMS ✓' : 'Limited'}</span>
+              </div>
+            ))}
+          </div>
+        </DetailBox>
+      )}
+
+      {/* MMS supported countries only */}
+      {tab === 'supported' && (
+        <DetailBox title="Countries with Full MMS Support" subtitle="These countries have confirmed email-to-MMS gateway coverage" icon="check" accent="emerald">
+          <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+            {supportedCountries.map(c => (
+              <div key={c.code} className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-center">
+                <span className="text-3xl block">{c.flag}</span>
+                <p className="text-white text-xs font-bold mt-1">{c.name}</p>
+                <p className="text-emerald-300 text-xs font-mono">+{c.dial}</p>
+                {c.note && <p className="text-[9px] text-slate-500 mt-1">{c.note}</p>}
+              </div>
+            ))}
+          </div>
+        </DetailBox>
       )}
     </div>
   );
 }
 
-function GWStatCard({ label, value, color, sub }) {
-  return (
-    <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
-      <p className="text-xs text-gray-500 uppercase tracking-wide">{label}</p>
-      <p className={`text-3xl font-bold ${color} mt-1`}>{value}</p>
-      <p className="text-xs text-gray-600 mt-2">{sub}</p>
-    </div>
-  );
-}
-
-function GWMiniStat({ label, value, color = 'text-gray-300' }) {
-  return (
-    <div className="bg-slate-800/30 rounded-lg px-3 py-2">
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className={`text-lg font-bold ${color}`}>{value}</p>
-    </div>
-  );
-}
-
-function GWConfigBadge({ label, value, ok }) {
-  return (
-    <div className={`rounded-lg px-3 py-2.5 border ${ok ? 'bg-emerald-900/20 border-emerald-900/40' : 'bg-slate-800/40 border-slate-700/50'}`}>
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className={`text-sm font-bold mt-0.5 ${ok ? 'text-emerald-300' : 'text-amber-300'}`}>{value}</p>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// CONFIG — edit SystemConfig
-// ---------------------------------------------------------------------------
-function GatewayConfig() {
-  const [cfg, setCfg] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState(null);
-  const [form, setForm] = useState({
-    geminiApiKey: '',
-    carrierLookupApiKey: '',
-    routingDelaySeconds: 3,
-    batchSizePerAccount: 5,
-    enablePhishingFilter: true,
-    blockedKeywords: 'spam,scam,phishing,fraud',
-    renderDeployUrl: '',
-  });
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await gatewayApi('?resource=config');
-        if (res.success && res.config) {
-          setCfg(res.config);
-          setForm({
-            geminiApiKey: res.config.geminiApiKey && res.config.geminiApiKey.includes('••••') ? '' : (res.config.geminiApiKey || ''),
-            carrierLookupApiKey: res.config.carrierLookupApiKey && res.config.carrierLookupApiKey.includes('••••') ? '' : (res.config.carrierLookupApiKey || ''),
-            routingDelaySeconds: res.config.routingDelaySeconds ?? 3,
-            batchSizePerAccount: res.config.batchSizePerAccount ?? 5,
-            enablePhishingFilter: res.config.enablePhishingFilter ?? true,
-            blockedKeywords: Array.isArray(res.config.blockedKeywords) ? res.config.blockedKeywords.join(', ') : 'spam,scam,phishing,fraud',
-            renderDeployUrl: res.config.renderDeployUrl && res.config.renderDeployUrl.includes('••••') ? '' : (res.config.renderDeployUrl || ''),
-          });
-        }
-      } catch (e) { setMsg({ type: 'error', text: e.message }); }
-      setLoading(false);
-    })();
-  }, []);
-
-  const save = async () => {
-    setSaving(true);
-    setMsg(null);
-    try {
-      const body = {
-        resource: 'config',
-        routingDelaySeconds: Number(form.routingDelaySeconds),
-        batchSizePerAccount: Number(form.batchSizePerAccount),
-        enablePhishingFilter: form.enablePhishingFilter,
-        blockedKeywords: form.blockedKeywords.split(',').map(k => k.trim()).filter(Boolean),
-      };
-      // Only send keys if the user typed a new value (don't overwrite with empty).
-      if (form.geminiApiKey.trim()) body.geminiApiKey = form.geminiApiKey.trim();
-      if (form.carrierLookupApiKey.trim()) body.carrierLookupApiKey = form.carrierLookupApiKey.trim();
-      if (form.renderDeployUrl.trim()) body.renderDeployUrl = form.renderDeployUrl.trim();
-
-      const res = await gatewayApi('', { method: 'POST', body });
-      if (res.success) {
-        setMsg({ type: 'ok', text: 'Gateway configuration saved successfully!' });
-        setCfg(res.config);
-      } else {
-        setMsg({ type: 'error', text: res.error || 'Save failed' });
-      }
-    } catch (e) { setMsg({ type: 'error', text: e.message }); }
-    setSaving(false);
-  };
-
-  if (loading) return <Spinner label="Loading gateway configuration..." />;
-
-  return (
-    <div className="space-y-6">
-      {msg && (
-        <div className={`rounded-xl p-4 text-sm ${msg.type === 'ok' ? 'bg-emerald-900/30 border border-emerald-800 text-emerald-300' : 'bg-red-900/30 border border-red-800 text-red-300'}`}>
-          {msg.text}
-        </div>
-      )}
-
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 space-y-5">
-        <h3 className="text-lg font-semibold text-gray-300">Gateway Engine Configuration</h3>
-
-        {/* Routing settings */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="text-gray-400 text-sm font-medium block mb-1.5">Routing Delay (seconds)</label>
-            <input type="number" min="0" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={form.routingDelaySeconds} onChange={e => setForm({ ...form, routingDelaySeconds: e.target.value })} />
-            <p className="text-xs text-gray-600 mt-1">Delay between each send to avoid rate-limiting</p>
-          </div>
-          <div>
-            <label className="text-gray-400 text-sm font-medium block mb-1.5">Batch Size Per Account</label>
-            <input type="number" min="1" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={form.batchSizePerAccount} onChange={e => setForm({ ...form, batchSizePerAccount: e.target.value })} />
-            <p className="text-xs text-gray-600 mt-1">Max messages per account per batch cycle</p>
-          </div>
-        </div>
-
-        {/* Phishing filter */}
-        <div>
-          <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-            <input type="checkbox" checked={form.enablePhishingFilter} onChange={e => setForm({ ...form, enablePhishingFilter: e.target.checked })} className="w-4 h-4 rounded" />
-            Enable Phishing/Safety Filter (blocks spam keywords before sending)
-          </label>
-        </div>
-
-        {/* Blocked keywords */}
-        <div>
-          <label className="text-gray-400 text-sm font-medium block mb-1.5">Blocked Keywords (comma-separated)</label>
-          <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="spam, scam, phishing, fraud" value={form.blockedKeywords} onChange={e => setForm({ ...form, blockedKeywords: e.target.value })} />
-        </div>
-
-        {/* API Keys */}
-        <div className="pt-4 border-t border-slate-800">
-          <h4 className="text-sm font-semibold text-gray-400 mb-3">API Keys</h4>
-          <div className="space-y-4">
-            <div>
-              <label className="text-gray-400 text-sm font-medium block mb-1.5">Gemini AI API Key {cfg?.geminiApiKey && <span className="text-emerald-400 text-xs ml-2">(currently set: {cfg.geminiApiKey})</span>}</label>
-              <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" placeholder="AIzaSy..." value={form.geminiApiKey} onChange={e => setForm({ ...form, geminiApiKey: e.target.value })} />
-              <p className="text-xs text-amber-400/70 mt-1">Must start with AIzaSy... — leave blank to keep existing key</p>
-            </div>
-            <div>
-              <label className="text-gray-400 text-sm font-medium block mb-1.5">Carrier Lookup API Key {cfg?.carrierLookupApiKey && <span className="text-emerald-400 text-xs ml-2">(currently set: {cfg.carrierLookupApiKey})</span>}</label>
-              <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" placeholder="Carrier lookup API key" value={form.carrierLookupApiKey} onChange={e => setForm({ ...form, carrierLookupApiKey: e.target.value })} />
-              <p className="text-xs text-gray-600 mt-1">Leave blank to keep existing key</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Render deploy URL */}
-        <div className="pt-4 border-t border-slate-800">
-          <h4 className="text-sm font-semibold text-gray-400 mb-3">Render.com Deploy Hook</h4>
-          <div>
-            <label className="text-gray-400 text-sm font-medium block mb-1.5">Render Deploy Hook URL {cfg?.renderDeployUrl && <span className="text-emerald-400 text-xs ml-2">(currently set: {cfg.renderDeployUrl})</span>}</label>
-            <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" placeholder="https://api.render.com/deploy/hdl_..." value={form.renderDeployUrl} onChange={e => setForm({ ...form, renderDeployUrl: e.target.value })} />
-            <p className="text-xs text-gray-600 mt-1">Used by the Deploy tab to trigger fresh Render builds from the admin panel</p>
-          </div>
-        </div>
-
-        <button onClick={save} disabled={saving} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white text-sm px-6 py-2.5 rounded-lg transition font-semibold disabled:opacity-60">
-          {saving ? <BtnSpinner /> : null} Save Gateway Configuration
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// ACCOUNTS — email account pool management
-// ---------------------------------------------------------------------------
-function GatewayAccounts() {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [msg, setMsg] = useState(null);
-  const [form, setForm] = useState({ provider: 'GMAIL_OAUTH', email: '', label: '', dailyLimit: 400, credentials: '{}' });
-  const [saving, setSaving] = useState(false);
-  const [acting, setActing] = useState(null);
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const res = await gatewayApi('?resource=accounts');
-      if (res.success) setData(res); else setMsg({ type: 'error', text: res.error });
-    } catch (e) { setMsg({ type: 'error', text: e.message }); }
-    setLoading(false);
-  };
-
-  useEffect(() => { load(); }, [refreshKey]);
-
-  const addAccount = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    setMsg(null);
-    try {
-      let creds = {};
-      try { creds = JSON.parse(form.credentials); } catch { setMsg({ type: 'error', text: 'Credentials must be valid JSON' }); setSaving(false); return; }
-      const res = await gatewayApi('', { method: 'POST', body: { resource: 'accounts', provider: form.provider, email: form.email, label: form.label, dailyLimit: Number(form.dailyLimit), credentials: creds } });
-      if (res.success) { setMsg({ type: 'ok', text: 'Email account saved!' }); setShowForm(false); setForm({ provider: 'GMAIL_OAUTH', email: '', label: '', dailyLimit: 400, credentials: '{}' }); load(); }
-      else setMsg({ type: 'error', text: res.error });
-    } catch (e) { setMsg({ type: 'error', text: e.message }); }
-    setSaving(false);
-  };
-
-  const resetCooldown = async (id) => {
-    setActing(id);
-    try {
-      const res = await gatewayApi(`/accounts/${id}/reset-cooldown`, { method: 'POST', body: {} });
-      if (res.success) { setMsg({ type: 'ok', text: res.message }); load(); }
-      else setMsg({ type: 'error', text: res.error });
-    } catch (e) { setMsg({ type: 'error', text: e.message }); }
-    setActing(null);
-  };
-
-  if (loading) return <Spinner label="Loading email accounts..." />;
-
-  return (
-    <div className="space-y-6">
-      {msg && <div className={`rounded-xl p-4 text-sm ${msg.type === 'ok' ? 'bg-emerald-900/30 border border-emerald-800 text-emerald-300' : 'bg-red-900/30 border border-red-800 text-red-300'}`}>{msg.text}</div>}
-
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-300">Email Account Pool</h3>
-          {data?.summary && <p className="text-sm text-gray-500 mt-1">{data.summary.total} total · {data.summary.active} active · {data.summary.cooldown} cooldown · {data.summary.suspended} suspended · {data.summary.usable} usable</p>}
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => setRefreshKey(k => k + 1)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-gray-300 rounded-lg text-sm transition"><Icon.Refresh /> Refresh</button>
-          <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm px-3 py-1.5 rounded-lg transition"><Icon.Plus /> Add Account</button>
-        </div>
-      </div>
-
-      {showForm && (
-        <form onSubmit={addAccount} className="bg-slate-900/50 border border-slate-700 rounded-xl p-5 space-y-4">
-          <h4 className="text-sm font-semibold text-gray-300">Add / Update Email Account</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-gray-400 text-sm block mb-1.5">Provider</label>
-              <select className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={form.provider} onChange={e => setForm({ ...form, provider: e.target.value })}>
-                <option value="GMAIL_OAUTH">Gmail (OAuth2)</option>
-                <option value="OUTLOOK_GRAPH">Outlook (Microsoft Graph)</option>
-                <option value="YAHOO">Yahoo</option>
-                <option value="AOL">AOL</option>
-                <option value="CUSTOM_SMTP">Custom SMTP</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-gray-400 text-sm block mb-1.5">Email Address</label>
-              <input type="email" required className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="account@gmail.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
-            </div>
-            <div>
-              <label className="text-gray-400 text-sm block mb-1.5">Label (optional)</label>
-              <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Primary sender" value={form.label} onChange={e => setForm({ ...form, label: e.target.value })} />
-            </div>
-            <div>
-              <label className="text-gray-400 text-sm block mb-1.5">Daily Limit</label>
-              <input type="number" min="1" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={form.dailyLimit} onChange={e => setForm({ ...form, dailyLimit: e.target.value })} />
-            </div>
-          </div>
-          <div>
-            <label className="text-gray-400 text-sm block mb-1.5">Credentials (JSON — OAuth tokens or SMTP auth)</label>
-            <textarea required className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" rows="4" placeholder='{"accessToken": "...", "refreshToken": "..."}' value={form.credentials} onChange={e => setForm({ ...form, credentials: e.target.value })} />
-            <p className="text-xs text-gray-600 mt-1">For Gmail OAuth: {`{ "clientId": "...", "clientSecret": "...", "refreshToken": "..." }`}</p>
-          </div>
-          <div className="flex gap-2">
-            <button type="submit" disabled={saving} className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-2 rounded-lg transition disabled:opacity-60">{saving ? <BtnSpinner /> : null} Save Account</button>
-            <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-gray-300 text-sm rounded-lg transition">Cancel</button>
-          </div>
-        </form>
-      )}
-
-      {data?.accounts && data.accounts.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-gray-500 border-b border-slate-800">
-                <th className="pb-2 pr-4">Email</th>
-                <th className="pb-2 pr-4">Provider</th>
-                <th className="pb-2 pr-4">Label</th>
-                <th className="pb-2 pr-4">Status</th>
-                <th className="pb-2 pr-4">Sent/Limit</th>
-                <th className="pb-2 pr-4">Health</th>
-                <th className="pb-2 pr-4">Usable</th>
-                <th className="pb-2">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.accounts.map(a => (
-                <tr key={a._id} className="border-b border-slate-800/50">
-                  <td className="py-2.5 pr-4 text-gray-300">{a.email}</td>
-                  <td className="py-2.5 pr-4 text-gray-400 text-xs">{a.provider}</td>
-                  <td className="py-2.5 pr-4 text-gray-400 text-xs">{a.label || '—'}</td>
-                  <td className="py-2.5 pr-4">
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${a.status === 'ACTIVE' ? 'bg-emerald-900/40 text-emerald-300' : a.status === 'COOLDOWN' ? 'bg-amber-900/40 text-amber-300' : 'bg-red-900/40 text-red-300'}`}>{a.status}</span>
-                  </td>
-                  <td className="py-2.5 pr-4 text-gray-300 tabular-nums">{a.sentToday || 0}/{a.dailyLimit || 400}</td>
-                  <td className="py-2.5 pr-4">
-                    <span className={`text-sm font-bold ${a.health >= 80 ? 'text-emerald-300' : a.health >= 40 ? 'text-amber-300' : 'text-red-300'}`}>{a.health}</span>
-                  </td>
-                  <td className="py-2.5 pr-4">{a.usable ? <span className="text-emerald-400">✓</span> : <span className="text-red-400">✗</span>}</td>
-                  <td className="py-2.5">
-                    {a.status !== 'ACTIVE' && (
-                      <button onClick={() => resetCooldown(a._id)} disabled={acting === a._id} className="text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded-lg transition disabled:opacity-50">
-                        {acting === a._id ? 'Resetting...' : 'Reset Cooldown'}
-                      </button>
-                    )}
-                    {a.reason && <p className="text-xs text-red-300 mt-1 max-w-xs truncate">{a.reason}</p>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="bg-slate-900/30 border border-slate-800 rounded-xl p-8 text-center">
-          <p className="text-gray-500">No email accounts in the pool yet. Click "Add Account" to add your first sender.</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// LOGS — unified live log feed
-// ---------------------------------------------------------------------------
+// ── Live Logs (preserved logic from existing GatewayLogs) ─────────────────
 function GatewayLogs() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [filter, setFilter] = useState('');
-  const [type, setType] = useState('all');
-  const [cursor, setCursor] = useState(null);
-  const [hasMore, setHasMore] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const LIMIT = 25;
 
-  const load = async (append = false) => {
-    setLoading(true);
+  const load = async () => {
     try {
-      let path = `/logs?limit=50&type=${type}`;
-      if (filter) path += `&filter=${encodeURIComponent(filter)}`;
-      if (append && cursor) path += `&cursor=${cursor}`;
-      const res = await gatewayApi(path);
-      if (res.success) {
-        setLogs(append ? [...logs, ...res.logs] : res.logs);
-        setCursor(res.nextCursor);
-        setHasMore(Boolean(res.nextCursor) && res.logs.length > 0);
-      }
-    } catch (e) { console.error(e); }
+      const d = await gatewayApi(`/admin/gateway/logs?page=${page}&limit=${LIMIT}${filter ? `&q=${encodeURIComponent(filter)}` : ''}`);
+      if (d.success) { setLogs(d.entries || []); setTotal(d.total || 0); }
+    } catch {}
     setLoading(false);
   };
+  useEffect(() => { load(); const t = setInterval(load, 5000); return () => clearInterval(t); }, [page, filter]);
 
-  useEffect(() => { load(false); }, [refreshKey, type]);
+  if (loading) return <SkeletonGrid count={3} />;
+  const pages = Math.ceil(total / LIMIT) || 1;
 
-  const categoryColors = {
-    spam_blocked: 'bg-red-900/40 text-red-300',
-    ai_rewrite: 'bg-violet-900/40 text-violet-300',
-    cache_hit: 'bg-emerald-900/40 text-emerald-300',
-    cache_miss: 'bg-blue-900/40 text-blue-300',
-    cooldown: 'bg-amber-900/40 text-amber-300',
-    bounce: 'bg-orange-900/40 text-orange-300',
-    suspended: 'bg-red-900/40 text-red-300',
-    admin_action: 'bg-cyan-900/40 text-cyan-300',
-    routing: 'bg-indigo-900/40 text-indigo-300',
-    auth: 'bg-slate-700 text-gray-300',
-    delivery_success: 'bg-emerald-900/40 text-emerald-300',
-    delivery_failed: 'bg-red-900/40 text-red-300',
-    info: 'bg-slate-800 text-gray-400',
+  const entryClasses = (e) => {
+    if (e.level === 'error' || e.status === 'failed') return { dot: 'bg-rose-400', badge: 'bg-rose-500/20 text-rose-300' };
+    if (e.level === 'warn' || e.status === 'pending') return { dot: 'bg-amber-400', badge: 'bg-amber-500/20 text-amber-300' };
+    if (e.status === 'delivered') return { dot: 'bg-emerald-400', badge: 'bg-emerald-500/20 text-emerald-300' };
+    return { dot: 'bg-sky-400', badge: 'bg-sky-500/20 text-sky-300' };
   };
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h3 className="text-lg font-semibold text-gray-300">Unified Gateway Log Feed</h3>
-        <div className="flex gap-2">
-          <select value={type} onChange={e => { setType(e.target.value); setCursor(null); }} className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm">
-            <option value="all">All Logs</option>
-            <option value="activity">Activity Only</option>
-            <option value="delivery">Delivery Only</option>
-          </select>
-          <input placeholder="Filter..." value={filter} onChange={e => setFilter(e.target.value)} onKeyDown={e => e.key === 'Enter' && load(false)} className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm w-40" />
-          <button onClick={() => { setCursor(null); setRefreshKey(k => k + 1); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-gray-300 rounded-lg text-sm transition"><Icon.Refresh /> Refresh</button>
-        </div>
-      </div>
-
-      {loading && logs.length === 0 ? (
-        <Spinner label="Loading logs..." />
-      ) : logs.length === 0 ? (
-        <div className="bg-slate-900/30 border border-slate-800 rounded-xl p-8 text-center text-gray-500">No logs found.</div>
-      ) : (
-        <>
-          <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
-            <div className="max-h-[600px] overflow-y-auto">
-              {logs.map((log, i) => (
-                <div key={log.id + i} className="flex items-start gap-3 px-4 py-3 border-b border-slate-800/50 hover:bg-slate-800/30">
-                  <span className={`px-2 py-0.5 rounded text-xs font-medium flex-shrink-0 ${categoryColors[log.category] || categoryColors.info}`}>{log.category}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-300 truncate"><span className="text-gray-500 font-mono text-xs">{log.source}</span> {log.details || log.action}</p>
-                    <p className="text-xs text-gray-600 mt-0.5">{new Date(log.timestamp).toLocaleString()} {log.actorEmail && `· ${log.actorEmail}`} {log.number && `· → ${log.number}`} {log.provider && `· ${log.provider}`}</p>
-                  </div>
-                  {log.status && <span className={`text-xs font-medium flex-shrink-0 ${log.status === 'sent' || log.status === 'delivered' ? 'text-emerald-400' : 'text-red-400'}`}>{log.status}</span>}
+      <DetailBox title="Gateway Live Logs" subtitle={`${total} total entries • auto-refresh 5s`} icon="list" accent="slate" live
+        action={<input value={filter} onChange={e => { setFilter(e.target.value); setPage(1); }} placeholder="Filter..." className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white text-xs w-40" />}
+      >
+        <div className="mt-3 space-y-1.5 max-h-[500px] overflow-auto">
+          {logs.map((e, i) => (
+            <div key={i} className="flex items-start gap-3 p-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-sm">
+              {(() => { const ec = entryClasses(e); return <span className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${ec.dot}`} />; })()}
+              <div className="flex-1 min-w-0">
+                <p className="text-slate-200 truncate">{e.message || e.action || e.text || '—'}</p>
+                <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-0.5">
+                  {e.phoneNumber && <span className="font-mono">{e.phoneNumber}</span>}
+                  {e.carrier && <span>{e.carrier}</span>}
+                  {e.provider && <span className="font-mono">{e.provider}</span>}
+                  <span>{e.time || (e.createdAt && new Date(e.createdAt).toLocaleTimeString())}</span>
                 </div>
-              ))}
+              </div>
+              {e.status && (() => { const ec = entryClasses(e); return <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${ec.badge} flex-shrink-0`}>{e.status}</span>; })()}
             </div>
-          </div>
-          {hasMore && (
-            <button onClick={() => load(true)} disabled={loading} className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-gray-300 rounded-lg text-sm transition disabled:opacity-50">
-              {loading ? 'Loading...' : 'Load More Logs'}
-            </button>
-          )}
-        </>
+          ))}
+          {logs.length === 0 && <p className="text-slate-500 text-sm text-center py-8">No logs found</p>}
+        </div>
+      </DetailBox>
+      {pages > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-xs disabled:opacity-30">← Prev</button>
+          <span className="text-slate-400 text-xs">Page {page} / {pages}</span>
+          <button onClick={() => setPage(p => Math.min(pages, p + 1))} disabled={page === pages} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-xs disabled:opacity-30">Next →</button>
+        </div>
       )}
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// PREVIEW — dry-run MMS payload preview
-// ---------------------------------------------------------------------------
+// ── MMS Preview (dry-run payload builder) ─────────────────────────────────
 function GatewayPreview() {
-  const [phone, setPhone] = useState('');
+  const [number, setNumber] = useState('');
   const [text, setText] = useState('');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState('');
 
-  const runPreview = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setResult(null);
-    setError(null);
+  const run = async () => {
+    if (!number.trim()) { setError('Enter a phone number'); return; }
+    setLoading(true); setError(''); setResult(null);
     try {
-      const res = await gatewayApi('/preview', { method: 'POST', body: { phoneNumber: phone, text } });
-      if (res.success) setResult(res.payload);
-      else if (res.aborted) setError(`${res.code}: ${res.error}`);
-      else setError(res.error || 'Preview failed');
+      const d = await gatewayApi('/admin/gateway/preview', { method: 'POST', body: JSON.stringify({ phoneNumber: number, text }) });
+      if (d.success || d.ok) setResult(d); else setError(d.error || 'Preview failed');
     } catch (e) { setError(e.message); }
     setLoading(false);
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold text-gray-300">MMS Payload Preview (Dry Run)</h3>
-        <p className="text-sm text-gray-500 mt-1">Test the full Phase 2 pipeline without sending: safety filter → AI rewriter → carrier lookup</p>
-      </div>
-
-      <form onSubmit={runPreview} className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="md:col-span-1">
-            <label className="text-gray-400 text-sm block mb-1.5">Phone Number</label>
-            <input required className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="+8801XXXXXXXXX" value={phone} onChange={e => setPhone(e.target.value)} />
-          </div>
-          <div className="md:col-span-2">
-            <label className="text-gray-400 text-sm block mb-1.5">Message Text</label>
-            <input required className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Your MMS message content..." value={text} onChange={e => setText(e.target.value)} />
-          </div>
+    <div className="space-y-4">
+      <DetailBox title="MMS Payload Preview" subtitle="Dry-run the full pipeline without sending — see E.164, carrier domain, AI rewrite" icon="eye" accent="cyan">
+        <div className="mt-3 space-y-3">
+          <input value={number} onChange={e => setNumber(e.target.value)} placeholder="+1 555 123 4567" className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white text-lg font-mono" />
+          <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Message text to preview..." rows={4} className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm" />
+          <button onClick={run} disabled={loading} className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-bold disabled:opacity-50 flex items-center justify-center gap-2">
+            {loading ? <><BtnSpinner /> Building payload...</> : <><IconByName name="eye" size={18} /> Generate Preview</>}
+          </button>
         </div>
-        <button type="submit" disabled={loading} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white text-sm px-5 py-2 rounded-lg transition font-semibold disabled:opacity-60">
-          {loading ? <BtnSpinner /> : <Icon.Beaker />} Run Dry-Run Preview
-        </button>
-      </form>
-
-      {error && (
-        <div className="bg-red-900/30 border border-red-800 rounded-xl p-4 text-red-300 text-sm">
-          <p className="font-semibold">Preview Aborted / Failed</p>
-          <p className="mt-1">{error}</p>
-        </div>
-      )}
-
+      </DetailBox>
+      {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4 text-rose-300 text-sm"><IconByName name="alert" size={16} className="inline mr-2" />{error}</div>}
       {result && (
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 space-y-4">
-          <h4 className="text-sm font-semibold text-emerald-300">✓ Payload Prepared (no message was sent)</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            {result.to && <div><span className="text-gray-500">To:</span> <span className="text-gray-300 font-mono">{result.to}</span></div>}
-            {result.carrier && <div><span className="text-gray-500">Carrier:</span> <span className="text-gray-300">{result.carrier}</span></div>}
-            {result.mmsGateway && <div><span className="text-gray-500">MMS Gateway:</span> <span className="text-gray-300 font-mono">{result.mmsGateway}</span></div>}
-            {result.carrierSource && <div><span className="text-gray-500">Lookup Source:</span> <span className="text-gray-300">{result.carrierSource}</span></div>}
-            {result.rewritten && <div><span className="text-gray-500">AI Rewritten:</span> <span className="text-violet-300">Yes</span></div>}
-            {result.originalText && (
-              <div className="md:col-span-2">
-                <span className="text-gray-500 block mb-1">Original Text:</span>
-                <p className="text-gray-400 bg-slate-800/50 rounded-lg p-3 text-xs">{result.originalText}</p>
-              </div>
-            )}
-            {result.text && (
-              <div className="md:col-span-2">
-                <span className="text-gray-500 block mb-1">Final Text (to be sent):</span>
-                <p className="text-emerald-300 bg-emerald-900/20 rounded-lg p-3 text-xs">{result.text}</p>
-              </div>
-            )}
-          </div>
-          <details className="text-xs">
-            <summary className="text-gray-500 cursor-pointer hover:text-gray-400">Full payload JSON</summary>
-            <pre className="mt-2 bg-slate-950 rounded-lg p-3 overflow-x-auto text-gray-400">{JSON.stringify(result, null, 2)}</pre>
-          </details>
+        <div className="bg-slate-900/50 rounded-xl p-4 border border-white/10">
+          <p className="text-xs text-slate-400 uppercase font-semibold mb-2">Raw Pipeline Output</p>
+          <pre className="text-xs text-emerald-300 font-mono overflow-auto whitespace-pre-wrap">{JSON.stringify(result, null, 2)}</pre>
         </div>
       )}
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// DEPLOY — trigger Render deploy + clear carrier cache
-// ---------------------------------------------------------------------------
+// ── Deploy (trigger Render webhook + status) ──────────────────────────────
 function GatewayDeploy() {
   const [deploying, setDeploying] = useState(false);
-  const [clearing, setClearing] = useState(false);
-  const [clearAll, setClearAll] = useState(false);
-  const [msg, setMsg] = useState(null);
+  const [status, setStatus] = useState('');
+  const [renderUrl, setRenderUrl] = useState('');
 
-  const triggerDeploy = async () => {
-    setDeploying(true);
-    setMsg(null);
+  const loadConfig = async () => {
     try {
-      const res = await deployHookApi({ clearCache: true });
-      if (res.success) setMsg({ type: 'ok', text: `✓ Render deploy triggered! HTTP ${res.renderStatus}. ${res.renderResponse || ''}` });
-      else setMsg({ type: 'error', text: `Deploy failed: ${res.error || res.message || 'Unknown error'}${res.renderResponse ? ` (Render: ${res.renderResponse})` : ''}` });
-    } catch (e) { setMsg({ type: 'error', text: e.message }); }
+      const d = await gatewayApi('/admin/gateway', { method: 'POST', body: JSON.stringify({ resource: 'config' }) });
+      if (d.success && d.config) setRenderUrl(d.config.renderDeployUrl || '');
+    } catch {}
+  };
+  useEffect(() => { loadConfig(); }, []);
+
+  const trigger = async () => {
+    if (!renderUrl) { setStatus('⚠ No Render deploy URL configured. Add it in Gateway Settings.'); return; }
+    setDeploying(true); setStatus('Triggering deploy webhook...');
+    try {
+      const d = await deployHookApi({ url: renderUrl });
+      setStatus(d.success ? '✓ Deploy webhook triggered — Render will rebuild in ~30s' : `✗ ${d.error || 'Deploy failed'}`);
+    } catch (e) { setStatus(`✗ ${e.message}`); }
     setDeploying(false);
   };
 
-  const clearCache = async () => {
-    setClearing(true);
-    setMsg(null);
-    try {
-      const res = await gatewayApi('/cache/clear', { method: 'POST', body: { all: clearAll } });
-      if (res.success) setMsg({ type: 'ok', text: `✓ ${res.message}. Cleared: ${res.cleared}, Remaining: ${res.remaining}` });
-      else setMsg({ type: 'error', text: res.error || 'Cache clear failed' });
-    } catch (e) { setMsg({ type: 'error', text: e.message }); }
-    setClearing(false);
-  };
-
   return (
-    <div className="space-y-6">
-      {msg && <div className={`rounded-xl p-4 text-sm ${msg.type === 'ok' ? 'bg-emerald-900/30 border border-emerald-800 text-emerald-300' : 'bg-red-900/30 border border-red-800 text-red-300'}`}>{msg.text}</div>}
-
-      {/* Render Deploy */}
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 space-y-4">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-300 flex items-center gap-2"><Icon.Zap /> Render.com Deploy Hook</h3>
-          <p className="text-sm text-gray-500 mt-1">Trigger a fresh deploy of the Gateway Engine on Render.com. This rebuilds and restarts the service with the latest code and configuration.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button onClick={triggerDeploy} disabled={deploying} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white text-sm px-5 py-2.5 rounded-lg transition font-semibold disabled:opacity-60">
-            {deploying ? <BtnSpinner /> : <Icon.Zap />} Trigger Render Deploy
+    <div className="space-y-4">
+      <DetailBox title="Render Headless Deploy" subtitle="Trigger rebuild of the backend gateway engine on Render" icon="rocket" accent="amber">
+        <div className="mt-3 space-y-4">
+          <div className="bg-white/5 rounded-xl p-4">
+            <p className="text-xs text-slate-400 font-semibold mb-1">Configured Deploy URL</p>
+            <p className="text-white text-sm font-mono break-all">{renderUrl ? renderUrl.replace(/\/deploy\/[a-z0-9-]+/i, '/deploy/***') : '— not configured —'}</p>
+          </div>
+          <button onClick={trigger} disabled={deploying} className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-bold disabled:opacity-50 flex items-center justify-center gap-2">
+            {deploying ? <><BtnSpinner /> Deploying...</> : <><IconByName name="rocket" size={18} /> Trigger Render Deploy</>}
           </button>
-          <span className="text-xs text-gray-600">Sends clearCache: true to the Render deploy hook URL</span>
+          {status && <div className={`rounded-xl p-3 text-sm ${status.startsWith('✓') ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30' : status.startsWith('⚠') ? 'bg-amber-500/10 text-amber-300 border border-amber-500/30' : 'bg-rose-500/10 text-rose-300 border border-rose-500/30'}`}>{status}</div>}
         </div>
-        <div className="text-xs text-amber-400/70 bg-amber-950/20 rounded-lg p-3">
-          Note: The Render Deploy Hook URL must be set in the Configuration tab first. If not set, the deploy will fail with an error message.
-        </div>
-      </div>
+      </DetailBox>
 
-      {/* Carrier Cache Management */}
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 space-y-4">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-300 flex items-center gap-2"><Icon.Database /> Carrier Cache Management</h3>
-          <p className="text-sm text-gray-500 mt-1">Clear the carrier lookup cache. By default, only expired entries are removed. Use "Clear All" to purge the entire cache.</p>
+      <DetailBox title="Deployment Architecture" subtitle="3-platform single-codebase map" icon="server" accent="indigo">
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {[
+            { name: 'Vercel', mode: 'user', desc: 'User Panel (NEXT_PUBLIC_PANEL_MODE=user)', card: 'bg-sky-500/10 border-sky-500/20', iconBg: 'bg-sky-500/20', iconText: 'text-sky-400' },
+            { name: 'Netlify', mode: 'admin', desc: 'Admin Panel (NEXT_PUBLIC_PANEL_MODE=admin)', card: 'bg-violet-500/10 border-violet-500/20', iconBg: 'bg-violet-500/20', iconText: 'text-violet-400' },
+            { name: 'Render', mode: 'api', desc: 'Headless Engine (NEXT_PUBLIC_PANEL_MODE=api)', card: 'bg-amber-500/10 border-amber-500/20', iconBg: 'bg-amber-500/20', iconText: 'text-amber-400' },
+          ].map(p => (
+            <div key={p.name} className={`${p.card} border rounded-xl p-4 text-center`}>
+              <div className={`w-12 h-12 mx-auto rounded-xl ${p.iconBg} flex items-center justify-center mb-2`}>
+                <IconByName name="server" size={22} className={p.iconText} />
+              </div>
+              <p className="text-white font-bold text-sm">{p.name}</p>
+              <p className="text-slate-400 text-xs mt-1">{p.desc}</p>
+            </div>
+          ))}
         </div>
-        <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-            <input type="checkbox" checked={clearAll} onChange={e => setClearAll(e.target.checked)} className="w-4 h-4 rounded" />
-            Clear ALL entries (full purge)
-          </label>
-          <button onClick={clearCache} disabled={clearing} className="inline-flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 text-white text-sm px-4 py-2 rounded-lg transition disabled:opacity-60">
-            {clearing ? <BtnSpinner /> : <Icon.Trash />} {clearAll ? 'Clear All Cache' : 'Clear Expired Cache'}
-          </button>
-        </div>
-      </div>
+      </DetailBox>
     </div>
   );
 }
