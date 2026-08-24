@@ -2848,12 +2848,19 @@ function GatewayAccounts() {
   const startGmailOAuth = async () => {
     if (!gmailFile) { setOauthResult({ success: false, message: 'Please upload candidates.json first.' }); return; }
     setOauthLoading(true); setOauthResult(null);
+    const computedOrigin = typeof window !== 'undefined' ? window.location.origin.replace(/\/$/, '') : '';
+    const computedRedirectUri = `${computedOrigin}/api/auth/gmail/callback`;
     const statePayload = {
       clientId: gmailFile.clientId,
       clientSecret: gmailFile.clientSecret,
       label: form.label || '',
       dailyLimit: form.dailyLimit || 400,
-      redirectOrigin: typeof window !== 'undefined' ? window.location.origin : '',
+      redirectOrigin: computedOrigin,
+      // Carry the registered redirect URIs from candidates.json so the backend
+      // can match the current deployment against what Google Cloud accepts.
+      redirectUris: gmailFile.redirectUris || [],
+      // Explicit computed URI for the current deployment (highest priority fallback)
+      redirectUri: computedRedirectUri,
     };
     const state = btoa(JSON.stringify(statePayload));
     const oauthUrl = `/api/auth/gmail?state=${encodeURIComponent(state)}`;
@@ -3027,6 +3034,16 @@ function GatewayAccounts() {
                           {oauthLoading ? <><span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block"></span>Waiting for Google permission…</> : <>🔗 Add (Google Permission খুলবে)</>}
                         </button>
                         <span className="text-[10px] text-slate-500">Client ID: {String(gmailFile.clientId).substring(0, 25)}…</span>
+                      </div>
+                    )}
+                    {gmailFile && (
+                      <div className="mt-1 rounded-lg border border-amber-600/40 bg-amber-900/15 p-2">
+                        <p className="text-[10px] text-amber-300 font-semibold mb-1">⚠️ Google Cloud-এ এই Redirect URI যোগ করা আছে কিনা যাচাই করুন:</p>
+                        <code className="block text-[10px] text-amber-100 bg-black/30 rounded px-2 py-1 break-all select-all">{(typeof window !== 'undefined' ? window.location.origin.replace(/\/$/,'') : '') + '/api/auth/gmail/callback'}</code>
+                        <p className="text-[9px] text-amber-400/70 mt-1">
+                          Google Cloud Console → APIs &amp; Services → Credentials → আপনার OAuth Client → "Authorized redirect URIs" → উপরের URI যোগ করুন। যোগ করা না থাকলে <strong className="text-amber-300">Error 400: redirect_uri_mismatch</strong> দেখাবে।
+                        </p>
+                        <button type="button" onClick={() => { const uri = (typeof window !== 'undefined' ? window.location.origin.replace(/\/$/,'') : '') + '/api/auth/gmail/callback'; try { navigator.clipboard?.writeText(uri); } catch(e){} }} className="mt-1 text-[10px] text-amber-200 hover:text-amber-100 underline">📋 URI কপি করুন</button>
                       </div>
                     )}
                     {oauthResult && (

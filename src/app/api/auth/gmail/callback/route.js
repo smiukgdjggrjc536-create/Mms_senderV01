@@ -74,8 +74,26 @@ export async function GET(req) {
       return successPage('Missing OAuth client credentials in the uploaded candidates.json.', true);
     }
 
-    const origin = cfg.redirectOrigin || url.origin;
-    const redirectUri = `${origin}/api/auth/gmail/callback`;
+    // FIX (redirect_uri_mismatch): The redirect_uri sent to the token endpoint
+    // MUST EXACTLY match the one used in the initial /api/auth/gmail redirect.
+    // We mirror the same resolution logic as the initiate route so the token
+    // exchange never fails with "redirect_uri_mismatch".
+    const origin = (cfg.redirectOrigin || url.origin).replace(/\/$/, '');
+    let redirectUri;
+    if (cfg.redirectUri && typeof cfg.redirectUri === 'string') {
+      redirectUri = cfg.redirectUri;
+    } else {
+      const registered = Array.isArray(cfg.redirectUris) ? cfg.redirectUris : [];
+      const defaultUri = `${origin}/api/auth/gmail/callback`;
+      const hostMatch = registered.find(
+        (u) => typeof u === 'string' && u.includes('/api/auth/gmail/callback') &&
+              new URL(u).host === new URL(defaultUri).host
+      );
+      const anyCallback = registered.find(
+        (u) => typeof u === 'string' && u.includes('/api/auth/gmail/callback')
+      );
+      redirectUri = hostMatch || anyCallback || defaultUri;
+    }
 
     // ---- Step 1: Exchange code for tokens ----
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {

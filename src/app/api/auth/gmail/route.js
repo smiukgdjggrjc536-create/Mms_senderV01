@@ -5,11 +5,20 @@
 //
 // The admin panel uploads a candidates.json (Google OAuth client credentials)
 // and enters a label/name. When "Add" is pressed, the frontend base64-encodes
-// the { clientId, clientSecret, label, dailyLimit, redirectOrigin } payload
-// into the `state` param and redirects the browser here. We build the Google
-// OAuth consent URL and 302-redirect the user to Google's permission screen.
+// the { clientId, clientSecret, label, dailyLimit, redirectOrigin, redirectUris }
+// payload into the `state` param and redirects the browser here. We build the
+// Google OAuth consent URL and 302-redirect the user to Google's permission
+// screen.
 //
-// Scopes: gmail.send (send-as) — the minimum needed to send MMS-via-email.
+// Scopes: gmail.send + gmail.readonly — needed to send MMS-via-email.
+//
+// FIX (redirect_uri_mismatch): The candidates.json downloaded from Google
+// Cloud Console contains `redirect_uris[]` (the list of Authorized redirect
+// URIs). We now try to match the current deployment origin against that list
+// and use the EXACT registered URI as redirect_uri. If the admin panel also
+// passes an explicit redirectUri in state, that wins. This makes the flow
+// robust across Netlify/Vercel/Render/localhost without forcing the admin to
+// guess which URI Google will accept.
 // ============================================================================
 import { NextResponse } from 'next/server';
 
@@ -20,6 +29,46 @@ const SCOPES = [
   'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/gmail.readonly',
 ];
+
+/**
+ * Pick the best registered redirect URI for the current origin.
+ * Strategy:
+ *   1. If the admin passed an explicit cfg.redirectUri → use it (highest priority).
+ *   2. If candidates.json had redirect_uris[], find one that ends with our
+ *      `/api/auth/gmail/callback` AND whose host matches the current origin.
+ *   3. Otherwise, fall back to `${origin}/api/auth/gmail/callback` (legacy
+ *      behavior — requires the URI to be registered in Google Cloud).
+ *
+ * Returns { redirectUri, origin }.
+ */
+function resolveRedirectUri(cfg, url) {
+  const origin = (cfg.redirectOrigin || url.origin).replace(/\/$/, '');
+  const defaultUri = `${origin}/api/auth/gmail/callback`;
+
+  // (1) explicit override from the admin panel
+  if (cfg.redirectUri && typeof cfg.redirectUri === 'string') {
+    return { redirectUri: cfg.redirectUri, origin };
+  }
+
+  // (2) match against registered URIs from candidates.json
+  const registered = Array.isArray(cfg.redirectUris) ? cfg.redirectUris : [];
+  if (registered.length > 0) {
+    // Prefer an exact host match first
+    const hostMatch = registered.find(
+      (u) => typeof u === 'string' && u.includes(`/api/auth/gmail/callback`) && new URL(u).host === new URL(defaultUri).host
+    );
+    if (hostMatch) return { redirectUri: hostMatch, origin };
+
+    // Otherwise prefer the FIRST registered callback URI (admin picked one)
+    const anyCallback = registered.find(
+      (u) => typeof u === 'string' && u.includes(`/api/auth/gmail/callback`)
+    );
+    if (anyCallback) return { redirectUri: anyCallback, origin: new URL(anyCallback).origin };
+  }
+
+  // (3) legacy fallback
+  return { redirectUri: defaultUri, origin };
+}
 
 export async function GET(req) {
   try {
@@ -52,11 +101,7 @@ export async function GET(req) {
       );
     }
 
-    // The redirect URI must match exactly what's configured in Google Cloud Console.
-    // We use the origin that the admin panel was on (passed in state) so it works
-    // on Netlify, Vercel, or localhost.
-    const origin = cfg.redirectOrigin || url.origin;
-    const redirectUri = `${origin}/api/auth/gmail/callback`;
+    const { redirectUri } = resolveRedirectUri(cfg, url);
 
     const params = new URLSearchParams({
       client_id: cfg.clientId,
