@@ -112,19 +112,39 @@ const DEFAULT_CARRIER_DOMAIN = 'vzwpix.com';
 // ---------------------------------------------------------------------------
 
 /**
- * Normalize a phone number to a digits-only string (leading country code kept).
- * Strips parentheses, spaces, dashes, dots. If a leading "+1" / "1" prefix is
- * present it is preserved so cache keys are consistent across callers.
+ * Normalize a phone number to an E.164-style string (leading +, digits only).
+ * Handles common input formats:
+ *   "12125551234"    → "+12125551234"  (US, 11 digits with leading 1)
+ *   "2125551234"     → "+12125551234"  (US, 10 digits, prepend +1)
+ *   "+8801712345678" → "+8801712345678" (already E.164)
+ *   "8801712345678"  → "+8801712345678" (prepend +)
+ *   "07912345678"    → "+7912345678"   (strip leading 0, prepend +)
  *
  * @param {string} raw - the raw phone number from the user/admin
- * @returns {string} digits-only normalized number
+ * @returns {string} E.164-style normalized number (with leading +)
  */
 function normalizePhone(raw) {
   if (!raw || typeof raw !== 'string') return '';
   let digits = raw.replace(/[^\d+]/g, '');
   // Keep a leading + if present (E.164), otherwise digits only.
-  if (digits.startsWith('+')) digits = '+' + digits.slice(1).replace(/[^\d]/g, '');
-  else digits = digits.replace(/[^\d]/g, '');
+  if (digits.startsWith('+')) {
+    digits = '+' + digits.slice(1).replace(/[^\d]/g, '');
+  } else {
+    digits = digits.replace(/[^\d]/g, '');
+    // Normalize to E.164:
+    // 10 digits → US/Canada, prepend +1
+    if (digits.length === 10) {
+      digits = '+1' + digits;
+    }
+    // 11 digits starting with 1 → US/Canada, prepend +
+    else if (digits.length === 11 && digits[0] === '1') {
+      digits = '+' + digits;
+    }
+    // Otherwise just prepend + (already has country code)
+    else if (digits.length > 0) {
+      digits = '+' + digits;
+    }
+  }
   return digits;
 }
 

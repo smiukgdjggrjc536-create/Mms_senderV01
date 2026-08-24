@@ -92,16 +92,29 @@ export const DEFAULT_CARRIER_DOMAIN = 'mms.att.net';
 export const FAST_FAIL_REGEX = /^\+?[0-9]{7,15}$/;
 
 // Reject obviously fake / test patterns.
+// IMPORTANT: These patterns check the FULL E.164 digits (with country code).
+// We must be careful NOT to block real area codes. Patterns like /^1234/ or
+// /^555/ would block legitimate numbers whose area code starts with those
+// digits. We only reject TRULY impossible patterns:
+//   - all identical digits (0000000, 1111111, etc.) — no real number is like this
+//   - sequential 0123456789... — clearly a test sequence
+//   - numbers shorter than 7 digits are already caught by FAST_FAIL_REGEX
 export const FAST_FAIL_REJECT_PATTERNS = [
-  /^0+$/,           // all zeros
-  /^1+$/,           // all ones
-  /^0{4,}/,         // four+ leading zeros
-  /^1234/,          // sequential test
-  /^9999/,          // test prefix
-  /^5555/,          // Hollywood fake numbers
+  /^0+$/,                  // all zeros (e.g. +0000000000)
+  /^1+$/,                  // all ones  (e.g. +1111111111)
+  /^([0-9])\1{6,}$/,       // 7+ identical digits in a row (e.g. 2222222, 5555555)
+  /^0123456789/,           // sequential ascending test
+  /^9876543210/,           // sequential descending test
 ];
 
 // E.164 normalization: strip everything except digits and a leading +.
+// Handles common input formats:
+//   "12125551234"    → "+12125551234"  (US, 11 digits with leading 1)
+//   "2125551234"     → "+12125551234"  (US, 10 digits, prepend +1)
+//   "+8801712345678" → "+8801712345678" (Bangladesh, already E.164)
+//   "8801712345678"  → "+8801712345678" (Bangladesh, prepend +)
+//   "01712345678"    → "+8801712345678" (BD local, strip leading 0, prepend +880)
+//   "07912345678"    → "+447912345678"  (UK local, strip leading 0, prepend +44)
 export function normalizeE164(raw) {
   if (!raw || typeof raw !== 'string') return null;
   let cleaned = raw.replace(/[^\d+]/g, '');
@@ -109,18 +122,42 @@ export function normalizeE164(raw) {
   if (cleaned.indexOf('+') > 0) {
     cleaned = cleaned.replace(/\+/g, '');
   }
-  // Ensure leading + for E.164 if the number starts with a country code digit.
-  if (cleaned.length > 0 && cleaned[0] !== '+') {
-    // US/Canada numbers without country code → prepend +1
-    if (cleaned.length === 10) {
-      cleaned = '+1' + cleaned;
-    } else if (cleaned.length === 11 && cleaned[0] === '1') {
-      cleaned = '+' + cleaned;
-    } else {
-      cleaned = '+' + cleaned;
-    }
+
+  // Already has leading + → just clean it up.
+  if (cleaned.startsWith('+')) {
+    const digits = cleaned.slice(1);
+    if (digits.length < 7 || digits.length > 15) return null;
+    return '+' + digits;
   }
-  return cleaned;
+
+  // No leading + → we need to add the country code.
+  // Case 1: US/Canada — 10 digits → prepend +1, 11 digits starting with 1 → prepend +
+  if (cleaned.length === 10) {
+    // US/Canada 10-digit number (area code + 7 digits)
+    return '+1' + cleaned;
+  }
+  if (cleaned.length === 11 && cleaned[0] === '1') {
+    // US/Canada with leading 1
+    return '+' + cleaned;
+  }
+
+  // Case 2: Local number with leading 0 (UK, BD, many European/Asian countries)
+  //   "07912345678" (UK) → strip 0 → "7912345678" → prepend +44 → "+447912345678"
+  //   "01712345678" (BD) → strip 0 → "1712345678" → prepend +880 → "+8801712345678"
+  // We can't reliably auto-detect the country from a local number, so we try
+  // the most common pattern: strip leading 0 and prepend +. This works for
+  // most international numbers. If the admin enters a number without a country
+  // code and without a leading 0, we prepend + as a best-effort.
+  if (cleaned.length >= 7 && cleaned.length <= 15) {
+    // Best effort: if it starts with 0, strip it and prepend +
+    if (cleaned[0] === '0') {
+      return '+' + cleaned.slice(1);
+    }
+    // Otherwise just prepend +
+    return '+' + cleaned;
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------

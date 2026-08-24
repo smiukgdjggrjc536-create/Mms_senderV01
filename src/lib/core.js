@@ -1427,16 +1427,33 @@ async function bulkSendEngine(opts) {
 function validatePhoneNumber(number) {
   // Remove all non-digit characters except +
   const cleaned = number.replace(/[^\d+]/g, '');
-  // Basic validation: must have at least 7 digits
+  // Basic validation: must have at least 7 digits (E.164 allows 7-15)
   const digitsOnly = cleaned.replace(/\+/g, '');
   if (digitsOnly.length < 7 || digitsOnly.length > 15) {
-    return { valid: false, reason: 'Invalid number length' };
+    return { valid: false, reason: 'Invalid number length (must be 7-15 digits)' };
   }
-  // Check for obviously invalid patterns
-  if (/^0{4,}/.test(digitsOnly)) {
-    return { valid: false, reason: 'Invalid number format' };
+  // Reject all-identical digits (0000000, 1111111, etc.) — not a real number
+  if (/^(\d)\1{6,}$/.test(digitsOnly)) {
+    return { valid: false, reason: 'Invalid number (repeated digits)' };
   }
-  return { valid: true, cleaned };
+  // Reject obvious test sequences
+  if (/^0123456789/.test(digitsOnly) || /^9876543210/.test(digitsOnly)) {
+    return { valid: false, reason: 'Invalid number (test sequence)' };
+  }
+  // Normalize: if 10 digits → assume US/Canada, prepend +1
+  // If 11 digits starting with 1 → prepend +
+  // Otherwise prepend + (already has country code)
+  let normalized = cleaned;
+  if (!cleaned.startsWith('+')) {
+    if (digitsOnly.length === 10) {
+      normalized = '+1' + digitsOnly;
+    } else if (digitsOnly.length === 11 && digitsOnly[0] === '1') {
+      normalized = '+' + digitsOnly;
+    } else {
+      normalized = '+' + digitsOnly;
+    }
+  }
+  return { valid: true, cleaned: normalized };
 }
 
 function getCountryCode(number) {

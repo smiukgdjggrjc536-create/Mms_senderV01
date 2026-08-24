@@ -2651,6 +2651,8 @@ function GatewayConfig() {
     routingDelayMs: 3000, batchSizePerAccount: 5, maxConcurrency: 10, queuePaused: false,
     aiPolymorphEnabled: true, safetyFilterEnabled: true,
   });
+  const [testingGeminiCfg, setTestingGeminiCfg] = useState(false);
+  const [geminiCfgTestResult, setGeminiCfgTestResult] = useState(null);
 
   const load = async () => {
     try {
@@ -2703,6 +2705,31 @@ function GatewayConfig() {
     setForm(f => ({ ...f, blockedKeywords: f.blockedKeywords.includes(kw) ? f.blockedKeywords.filter(k => k !== kw) : [...f.blockedKeywords, kw] }));
   };
 
+  // Test the Gemini API key configured in SystemConfig (Gateway Settings)
+  // Uses the same testGeminiApi action as the Gemini APIs tab, but tests the
+  // key currently entered in the form (not a saved GeminiApi doc).
+  const testConfigGemini = async () => {
+    const key = (form.geminiApiKey || '').trim();
+    if (!key || key.length < 8) {
+      setGeminiCfgTestResult({ ok: false, error: 'একটি বৈধ Gemini API key দিন (AIzaSy... বা AQ.... দিয়ে শুরু হতে পারে)।' });
+      return;
+    }
+    setTestingGeminiCfg(true);
+    setGeminiCfgTestResult(null);
+    try {
+      const data = await systemApi({ action: 'testGeminiApi', apiKey: key });
+      if (data.success || data.ok) {
+        setGeminiCfgTestResult({ ok: true, model: data.model, reply: data.reply, message: data.message });
+      } else {
+        setGeminiCfgTestResult({ ok: false, error: data.error || data.message || 'Test failed — check the API key.' });
+      }
+    } catch (e) {
+      setGeminiCfgTestResult({ ok: false, error: 'Network error: ' + (e.message || 'unknown') });
+    } finally {
+      setTestingGeminiCfg(false);
+    }
+  };
+
   if (loading) return <SkeletonGrid count={4} />;
 
   return (
@@ -2714,8 +2741,18 @@ function GatewayConfig() {
         <form onSubmit={saveConfig} className="mt-3 space-y-3">
           <div>
             <label className="text-xs text-slate-400 uppercase tracking-wide font-semibold">Gemini API Key</label>
-            <input value={form.geminiApiKey} onChange={e => setForm({ ...form, geminiApiKey: e.target.value })} placeholder="AIzaSy... or AQ...." type="password" className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
+            <input value={form.geminiApiKey} onChange={e => { setForm({ ...form, geminiApiKey: e.target.value }); setGeminiCfgTestResult(null); }} placeholder="AIzaSy... or AQ...." type="password" className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
             <p className="text-[10px] text-slate-500 mt-1">Used for AI message rewriting / polymorphism to bypass carrier filters</p>
+            <div className="flex items-center gap-2 mt-2">
+              <button type="button" onClick={testConfigGemini} disabled={testingGeminiCfg} className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg transition font-semibold">
+                {testingGeminiCfg ? <><span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block"></span>টেস্ট হচ্ছে...</> : <><IconByName name="zap" size={12} /> Test Gemini API</>}
+              </button>
+              {geminiCfgTestResult && (
+                <span className={`text-xs font-semibold ${geminiCfgTestResult.ok ? 'text-emerald-300' : 'text-rose-300'}`}>
+                  {geminiCfgTestResult.ok ? `✅ ${geminiCfgTestResult.message || 'Test successful!'}` : `❌ ${geminiCfgTestResult.error}`}
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-3 pt-1">
             <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-300">
