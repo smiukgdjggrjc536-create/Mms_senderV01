@@ -230,18 +230,23 @@ export async function GET(req) {
     // ── 2. Gemini API probe ────────────────────────────────────────────
     const cfg = await SystemConfig.findOne({}) || {};
     const geminiKeys = await GeminiApi.find({ status: 'active' }).lean();
+    // Filter out placeholder/demo keys (e.g. "demo_gemini_key") — only test real keys
+    const realGeminiKeys = geminiKeys.filter(k => k.apiKey && k.apiKey.length > 20 && !k.apiKey.startsWith('demo_'));
     let geminiProbe;
-    if (geminiKeys.length > 0) {
-      // Test the first active key
-      geminiProbe = await probeGemini(geminiKeys[0].apiKey, geminiKeys[0].model);
+    if (realGeminiKeys.length > 0) {
+      // Test the first real key
+      geminiProbe = await probeGemini(realGeminiKeys[0].apiKey, realGeminiKeys[0].model);
       geminiProbe.keyCount = geminiKeys.length;
+      geminiProbe.realKeyCount = realGeminiKeys.length;
       geminiProbe.models = geminiKeys.map(k => k.model);
-    } else if (cfg.geminiApiKey) {
+    } else if (cfg.geminiApiKey && cfg.geminiApiKey.length > 20 && !cfg.geminiApiKey.startsWith('demo_')) {
+      // Fall back to SystemConfig key if no real GeminiApi keys
       geminiProbe = await probeGemini(cfg.geminiApiKey, 'gemini-flash-lite-latest');
-      geminiProbe.keyCount = 0;
+      geminiProbe.keyCount = geminiKeys.length;
+      geminiProbe.realKeyCount = 0;
       geminiProbe.note = 'Key in SystemConfig only (not in GeminiApi collection)';
     } else {
-      geminiProbe = { status: 'not_configured', message: 'No Gemini API key found', keyCount: 0 };
+      geminiProbe = { status: 'not_configured', message: 'No valid Gemini API key found', keyCount: geminiKeys.length, realKeyCount: 0 };
     }
 
     // ── 3. Email account pool probe ───────────────────────────────────
