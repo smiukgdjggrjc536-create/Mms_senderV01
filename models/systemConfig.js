@@ -67,6 +67,31 @@ const systemConfigSchema = new mongoose.Schema({
     default: '',
   },
 
+  // Render service ID + API key for direct deploy API calls (Phase 4).
+  renderServiceId: { type: String, default: '' },
+  renderApiKey: { type: String, default: '' },
+
+  // ── Enterprise: Webhook Delivery Callbacks (Phase 5) ─────────────────
+  // When a delivery completes (sent/failed/bounced), the engine POSTs a
+  // JSON payload to this URL so external systems can track delivery status
+  // in real-time. Secret is sent as X-Webhook-Signature header (HMAC-SHA256).
+  webhookUrl: {
+    type: String,
+    default: '',
+  },
+  webhookSecret: {
+    type: String,
+    default: '',
+  },
+  webhookEnabled: {
+    type: Boolean,
+    default: false,
+  },
+  webhookEvents: {
+    type: [String],
+    default: ['sent', 'failed', 'bounced'],
+  },
+
   updatedAt: {
     type: Date,
     default: Date.now,

@@ -1867,7 +1867,57 @@ async function sendAlert(type, message) {
 }
 
 // ============================================================================
-// Config File Generator (for user self-management)
+// Enterprise: Webhook Delivery Callback (Phase 5)
+// ============================================================================
+// Fires a POST request to the configured webhook URL when a delivery event
+// occurs (sent/failed/bounced). The payload is signed with HMAC-SHA256 using
+// the webhook secret, sent as the X-Webhook-Signature header.
+// This is fire-and-forget — failures are logged but do NOT block the sending
+// pipeline. Called by the sending engine after each delivery attempt.
+// ============================================================================
+
+async function fireDeliveryWebhook(event, deliveryData) {
+  try {
+    const cfg = await SystemConfig.findOne({}) || {};
+    if (!cfg.webhookEnabled || !cfg.webhookUrl) return { skipped: true, reason: 'webhook disabled or no URL' };
+    if (!cfg.webhookEvents || !cfg.webhookEvents.includes(event)) {
+      return { skipped: true, reason: `event "${event}" not in subscribed events` };
+    }
+
+    const payload = {
+      event,
+      timestamp: new Date().toISOString(),
+      data: deliveryData,
+    };
+    const bodyStr = JSON.stringify(payload);
+    const signature = cfg.webhookSecret
+      ? crypto.createHmac('sha256', cfg.webhookSecret).update(bodyStr).digest('hex')
+      : '';
+
+    const res = await fetch(cfg.webhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Webhook-Event': event,
+        'X-Webhook-Signature': signature,
+        'User-Agent': 'MMS-Gateway-Webhook/1.0',
+      },
+      body: bodyStr,
+      signal: AbortSignal.timeout(8000),
+    }).catch((e) => ({ error: e.message, ok: false }));
+
+    if (res && res.ok) {
+      return { success: true, statusCode: res.status };
+    }
+    const errText = res && res.text ? await res.text().catch(() => 'unknown') : (res && res.error) || 'no response';
+    await logActivity(null, 'admin', 'system', 'webhook_delivery_failed',
+      `Webhook to ${cfg.webhookUrl.slice(0, 40)}... failed: ${typeof errText === 'string' ? errText.slice(0, 200) : 'fetch error'}`, null);
+    return { success: false, statusCode: res?.status || 0, error: typeof errText === 'string' ? errText.slice(0, 200) : 'fetch error' };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
 // ============================================================================
 
 const configKeyMap = {
@@ -1981,6 +2031,8 @@ export {
   computeExpiryDate,
   // Alerts
   sendAlert,
+  // Enterprise: Webhook delivery callbacks (Phase 5)
+  fireDeliveryWebhook,
   // Config files
   refreshConfigFile,
   // Response helper
