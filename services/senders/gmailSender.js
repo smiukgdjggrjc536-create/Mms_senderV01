@@ -22,15 +22,22 @@
 //
 // NON-DESTRUCTIVE: brand-new module, does not modify any existing file.
 //
-// [MODULE 6 WIRING]: Both outbound HTTP calls (token refresh + messages.send)
-// now route through routedFetch() which respects the IP-masking toggle. When
-// IP masking is ON, requests go through Cloudflare Workers / rotating proxies
-// with strict origin-header stripping. When OFF, falls back to direct fetch.
-// See services/senders/proxyFetch.js.
+// [MODULE 6 WIRING]: Gmail OAuth calls (token refresh + messages.send) use
+// DIRECT fetch() because they target Google's own API servers — NOT telecom
+// carrier gateways. IP masking / proxy routing is only relevant for outbound
+// dispatch to carrier MMS gateways (SMTP / custom-SMTP paths). Keeping Gmail
+// OAuth direct avoids proxyRouter dynamic-import failures and "fetch failed"
+// errors when no proxy is configured.
 // ============================================================================
 
-import { routedFetch } from './proxyFetch.js';
-
+// NOTE: We intentionally use direct `fetch()` for BOTH Google OAuth token
+// refresh AND Gmail messages.send. These are calls to GOOGLE'S OWN servers
+// (oauth2.googleapis.com / gmail.googleapis.com), NOT telecom/MMS carrier
+// gateways — so IP masking / proxy routing is irrelevant and would only add
+// failure points (proxyRouter dynamic-import errors, Redis lookup failures,
+// "fetch failed" when no healthy proxy is configured). Carrier-gateway IP
+// masking is applied separately in the SMTP/custom-SMTP send paths where it
+// matters. Keeping Gmail OAuth direct = robust, fewer moving parts.
 const GMAIL_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GMAIL_SEND_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
 
@@ -63,12 +70,25 @@ async function refreshAccessToken(credsIn) {
     grant_type: 'refresh_token',
   });
 
-  const resp = await routedFetch(GMAIL_TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-    signal: AbortSignal.timeout(15000),
-  });
+  let resp;
+  try {
+    resp = await fetch(GMAIL_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+      signal: AbortSignal.timeout(20000),
+    });
+  } catch (fetchErr) {
+    // Wrap the generic "fetch failed" with actionable context so the admin
+    // sees WHY it failed (timeout, DNS, connection refused, etc.)
+    const err = new Error(
+      `Gmail token refresh: could not reach Google OAuth endpoint — ${fetchErr.cause?.code || fetchErr.code || fetchErr.name}: ${fetchErr.cause?.message || fetchErr.message || 'fetch failed'}`
+    );
+    err.bounceType = 'TRANSIENT';
+    err.status = 0;
+    err.originalError = String(fetchErr);
+    throw err;
+  }
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
@@ -208,15 +228,26 @@ export async function sendViaGmail({ account, to, subject, body, attachment }) {
     attachment,
   });
 
-  const resp = await fetch(GMAIL_SEND_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${tokenJson.access_token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ raw: base64url(mime) }),
-    signal: AbortSignal.timeout(30000),
-  });
+  let resp;
+  try {
+    resp = await fetch(GMAIL_SEND_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${tokenJson.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ raw: base64url(mime) }),
+      signal: AbortSignal.timeout(30000),
+    });
+  } catch (fetchErr) {
+    const err = new Error(
+      `Gmail send: could not reach Gmail API endpoint — ${fetchErr.cause?.code || fetchErr.code || fetchErr.name}: ${fetchErr.cause?.message || fetchErr.message || 'fetch failed'}`
+    );
+    err.bounceType = 'TRANSIENT';
+    err.status = 0;
+    err.originalError = String(fetchErr);
+    throw err;
+  }
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
