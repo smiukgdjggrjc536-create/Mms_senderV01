@@ -24,6 +24,7 @@
 // ============================================================================
 
 import { connectDB, CarrierCache, SystemConfig } from '@/lib/core';
+import { FAST_FAIL_REJECT_PATTERNS, normalizeE164 } from '@/lib/gateway/constants';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -335,7 +336,41 @@ async function persistCache(phoneNumber, carrierDomain, lineType, carrierName) {
 }
 
 // ---------------------------------------------------------------------------
-// Public API
+
+/**
+ * Fast-fail pre-filter: reject obviously fake / test numbers BEFORE any cache
+ * lookup or API call. Mirrors the logic in hlrValidator.fastFailCheck() so
+ * both the preview path and the bulk-send path apply the same filtering.
+ *
+ * Checks BOTH the normalized E.164 digits and the raw input digits, because
+ * normalizeE164 prepends a country code (e.g. +1 for US) which can mask
+ * all-identical-digit patterns (e.g. "0000000000" → "+10000000000" no longer
+ * matches /^0+$/ on the full string, but the raw digits still do).
+ *
+ * @param {string} raw - raw phone number
+ * @returns {{ passed: boolean, reason: string|null }}
+ */
+function fastFailCheck(raw) {
+  if (!raw || typeof raw !== 'string') {
+    return { passed: false, reason: 'Empty or non-string phone number' };
+  }
+  const e164 = normalizeE164(raw);
+  if (!e164) {
+    return { passed: false, reason: 'Could not normalize phone number' };
+  }
+  const digitsOnly = e164.replace(/\+/g, '');
+  const rawDigits = raw.replace(/[^\d]/g, '');
+  const testStrings = [digitsOnly, rawDigits];
+  for (const str of testStrings) {
+    for (const pattern of FAST_FAIL_REJECT_PATTERNS) {
+      if (pattern.test(str)) {
+        return { passed: false, reason: `Number matches rejected pattern: ${e164}` };
+      }
+    }
+  }
+  return { passed: true, reason: null };
+}
+
 // ---------------------------------------------------------------------------
 
 /**
@@ -356,6 +391,12 @@ async function persistCache(phoneNumber, carrierDomain, lineType, carrierName) {
  * @throws {Error} if the number is a landline (cannot receive MMS) or invalid.
  */
 export async function getCarrierGateway(phoneNumber) {
+  // Fast-fail: reject obviously fake / test numbers before any work.
+  const ff = fastFailCheck(phoneNumber);
+  if (!ff.passed) {
+    throw new Error(ff.reason || 'Invalid phone number');
+  }
+
   const normalized = normalizePhone(phoneNumber);
   if (!normalized || bareDigits(normalized).length < 7) {
     throw new Error('Invalid phone number');

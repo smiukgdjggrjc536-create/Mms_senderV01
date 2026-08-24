@@ -64,10 +64,22 @@ export function fastFailCheck(rawNumber) {
   }
 
   // Reject obviously fake / test patterns.
+  // CRITICAL: We check BOTH the full E.164 digits (with country code) AND the
+  // raw input digits. This is necessary because normalizeE164 prepends a country
+  // code (e.g. +1 for US), so a raw "0000000000" becomes "+10000000000" — the
+  // /^0+$/ pattern would NOT match "10000000000" (starts with 1). By also
+  // checking the raw input digits, we catch fake numbers regardless of
+  // country-code normalization.
   const digitsOnly = e164.replace(/\+/g, '');
-  for (const pattern of FAST_FAIL_REJECT_PATTERNS) {
-    if (pattern.test(digitsOnly)) {
-      return { passed: false, e164, reason: `Number matches rejected pattern: ${e164}` };
+  const rawDigits = rawNumber.replace(/[^\d]/g, '');
+
+  const testStrings = [digitsOnly, rawDigits];
+
+  for (const str of testStrings) {
+    for (const pattern of FAST_FAIL_REJECT_PATTERNS) {
+      if (pattern.test(str)) {
+        return { passed: false, e164, reason: `Number matches rejected pattern: ${e164}` };
+      }
     }
   }
 
