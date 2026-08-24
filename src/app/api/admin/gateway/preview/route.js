@@ -74,7 +74,7 @@ export async function POST(req) {
     });
   } catch (err) {
     // Distinguish a controlled abort (safety block / landline) from a real 500.
-    if (err && (err.code === 'BLOCKED_BY_SAFETY_FILTER' || /Landline cannot receive MMS/.test(err.message) || /Invalid phone number/.test(err.message))) {
+    if (err && (err.code === 'BLOCKED_BY_SAFETY_FILTER' || err.code === 'INVALID_NUMBER' || err.code === 'LANDLINE' || err.code === 'VOIP' || /Landline cannot receive MMS/.test(err.message) || /Invalid phone number/.test(err.message) || /rejected pattern/.test(err.message) || /Could not normalize/.test(err.message))) {
       return jsonResponse({
         success: false,
         aborted: true,
@@ -119,7 +119,7 @@ export async function GET(req) {
       payload,
     });
   } catch (err) {
-    if (err && (err.code === 'BLOCKED_BY_SAFETY_FILTER' || /Landline cannot receive MMS/.test(err.message) || /Invalid phone number/.test(err.message))) {
+    if (err && (err.code === 'BLOCKED_BY_SAFETY_FILTER' || err.code === 'INVALID_NUMBER' || err.code === 'LANDLINE' || err.code === 'VOIP' || /Landline cannot receive MMS/.test(err.message) || /Invalid phone number/.test(err.message) || /rejected pattern/.test(err.message) || /Could not normalize/.test(err.message))) {
       return jsonResponse({
         success: false,
         aborted: true,
