@@ -533,6 +533,58 @@ export async function POST(req) {
       });
     }
 
+    // ===== ACTION: testSystemGemini (test the Gemini key saved in SystemConfig) =====
+    // This is different from testGeminiApi: it reads the key directly from the
+    // database (SystemConfig.geminiApiKey) so the admin can test the SAVED key
+    // without re-typing it. This fixes the 401 error that happened because the
+    // gateway route masks the key in GET responses (••••••••), and the masked
+    // key was being sent to Google's API.
+    if (action === 'testSystemGemini') {
+      const auth = await verifyAdmin(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const cfg = await SystemConfig.findOne({}).lean();
+      const testKey = cfg?.geminiApiKey || '';
+      if (!testKey || testKey.length < 8) {
+        return jsonResponse({ success: false, ok: false, status: 400, error: 'No Gemini API key is saved in SystemConfig. Enter and save a key first, then test.' });
+      }
+      const ep = cfg?.geminiEndpoint || 'https://generativelanguage.googleapis.com/v1beta/models';
+      const fallbackModels = [];
+      if (cfg?.geminiModel) fallbackModels.push(cfg.geminiModel);
+      for (const m of ['gemini-flash-lite-latest','gemini-3.5-flash-lite','gemini-3.1-flash-lite','gemini-flash-latest','gemini-2.5-flash','gemini-2.5-flash-lite','gemini-1.5-flash']) {
+        if (!fallbackModels.includes(m)) fallbackModels.push(m);
+      }
+      const testPrompt = 'Reply with exactly: "Gemini API test successful."';
+      let lastStatus = 0, lastErr = '';
+      for (const mdl of fallbackModels) {
+        const url = `${ep}/${mdl}:generateContent?key=${testKey}`;
+        try {
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: testPrompt }] }], generationConfig: { temperature: 0, maxOutputTokens: 32 } }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text || '(empty)';
+            return jsonResponse({ success: true, ok: true, status: 200, model: mdl, reply: replyText, message: `✅ Test successful! Model "${mdl}" works. The saved API key is valid.` });
+          }
+          lastStatus = res.status;
+          lastErr = await res.text().catch(() => '');
+          if (res.status === 404) continue;
+          if (res.status === 400 || res.status === 403 || res.status === 429) break;
+          continue;
+        } catch (e) { lastStatus = 0; lastErr = e.message; continue; }
+      }
+      let hint = '';
+      if (lastStatus === 403) hint = 'The API key is invalid OR the "Generative Language API" is not enabled.';
+      else if (lastStatus === 400) hint = 'Bad request — the API key may be invalid. Keys start with "AIzaSy" or "AQ.".';
+      else if (lastStatus === 429) hint = 'Rate limit / quota exceeded. Wait and try again.';
+      else if (lastStatus === 404) hint = 'All models returned 404. The API key is likely invalid.';
+      else hint = 'Network error. Check the endpoint URL.';
+      return jsonResponse({ success: false, ok: false, status: lastStatus, error: `Test FAILED (HTTP ${lastStatus || 'network'}). ${lastErr.slice(0, 200)}`, hint, modelsTried: fallbackModels });
+    }
+
     // ================================================================
     // MESSAGE TEMPLATE MANAGEMENT
     // ================================================================

@@ -2708,8 +2708,13 @@ function GatewayConfig() {
   // Test the Gemini API key configured in SystemConfig (Gateway Settings)
   // Uses the same testGeminiApi action as the Gemini APIs tab, but tests the
   // key currently entered in the form (not a saved GeminiApi doc).
+  // IMPORTANT: If the key contains mask characters (•), it means the key was
+  // loaded from the DB in masked form. In that case, we use the testSystemGemini
+  // action which reads the REAL key from the database — this avoids the 401
+  // error that happened when the masked key was sent to Google's API.
   const testConfigGemini = async () => {
     const key = (form.geminiApiKey || '').trim();
+    const isMasked = key.includes('•') || key.includes('●');
     if (!key || key.length < 8) {
       setGeminiCfgTestResult({ ok: false, error: 'একটি বৈধ Gemini API key দিন (AIzaSy... বা AQ.... দিয়ে শুরু হতে পারে)।' });
       return;
@@ -2717,7 +2722,11 @@ function GatewayConfig() {
     setTestingGeminiCfg(true);
     setGeminiCfgTestResult(null);
     try {
-      const data = await systemApi({ action: 'testGeminiApi', apiKey: key });
+      // If the key is masked (loaded from DB), test the SAVED key from DB.
+      // If the user typed a new key, test that specific key.
+      const data = isMasked
+        ? await systemApi({ action: 'testSystemGemini' })
+        : await systemApi({ action: 'testGeminiApi', apiKey: key });
       if (data.success || data.ok) {
         setGeminiCfgTestResult({ ok: true, model: data.model, reply: data.reply, message: data.message });
       } else {
