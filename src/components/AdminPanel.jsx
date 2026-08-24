@@ -137,6 +137,7 @@ const CARRIER_DOMAINS = [
 // Email-to-MMS sender providers
 const PROVIDER_TYPES = [
   { id: 'GMAIL_OAUTH', label: 'Gmail OAuth2', countries: 'Global', weight: 5, note: 'Best deliverability — OAuth2 refresh-token based, no password needed' },
+  { id: 'GMAIL_APP_PASSWORD', label: 'Gmail App Password', countries: 'Global', weight: 5, note: 'Easiest — use a Gmail App Password (16 chars). No OAuth setup needed. Enable 2FA, generate app password at myaccount.google.com/apppasswords' },
   { id: 'OUTLOOK_GRAPH', label: 'Outlook Graph API', countries: 'Global', weight: 4, note: 'Microsoft Graph API — Azure app registration + client secret' },
   { id: 'CUSTOM_SMTP', label: 'Custom SMTP', countries: 'Global', weight: 3, note: 'Any SMTP server — host, port, user, pass (e.g. Amazon SES, Postmark)' },
   { id: 'YAHOO', label: 'Yahoo Mail', countries: 'Global', weight: 2, note: 'Yahoo account with app password' },
@@ -180,11 +181,17 @@ async function gatewayApi(path = '', options = {}) {
   let suffix = path || '';
   if (suffix.startsWith('/admin/gateway')) suffix = suffix.slice('/admin/gateway'.length);
   const url = `/api/admin/gateway${suffix}`;
+  // Callers pass body as either a pre-stringified string OR a raw object.
+  // Only stringify if it's not already a string (avoids double-encoding).
+  let bodyPayload = undefined;
+  if (options.body !== undefined && options.body !== null) {
+    bodyPayload = typeof options.body === 'string' ? options.body : JSON.stringify(options.body);
+  }
   const res = await fetch(url, {
     method: options.method || 'GET',
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     credentials: 'include',
-    body: options.body ? JSON.stringify(options.body) : undefined,
+    body: bodyPayload,
   });
   return res.json().catch(() => ({ error: 'Invalid JSON response' }));
 }
@@ -2643,7 +2650,7 @@ function GatewayConfig() {
   const load = async () => {
     try {
       const [cfg, dyn] = await Promise.all([
-        gatewayApi('/admin/gateway', { method: 'POST', body: JSON.stringify({ resource: 'config' }) }),
+        gatewayApi('/admin/gateway?resource=config'),
         gatewayApi('/admin/gateway/dynamic'),
       ]);
       if (cfg.success && cfg.config) {
@@ -2892,7 +2899,8 @@ function GatewayAccounts() {
 
   const load = async () => {
     try {
-      const d = await gatewayApi('/admin/gateway', { method: 'POST', body: JSON.stringify({ resource: 'accounts' }) });
+      // Use GET with ?resource=accounts to list accounts (POST is for mutations only).
+      const d = await gatewayApi('/admin/gateway?resource=accounts');
       if (d.success) { setAccounts(d.accounts || []); setConfig(d.config || {}); }
     } catch {}
     setLoading(false);
@@ -3059,6 +3067,29 @@ function GatewayAccounts() {
                   <input value={form.credentials.clientId || ''} onChange={e => setForm({ ...form, credentials: { ...form.credentials, clientId: e.target.value } })} placeholder="OAuth Client ID" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
                   <input value={form.credentials.clientSecret || ''} onChange={e => setForm({ ...form, credentials: { ...form.credentials, clientSecret: e.target.value } })} placeholder="OAuth Client Secret" type="password" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
                   <input value={form.credentials.refreshToken || ''} onChange={e => setForm({ ...form, credentials: { ...form.credentials, refreshToken: e.target.value } })} placeholder="Refresh Token (auto-filled by OAuth)" type="password" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
+                </div>
+              )}
+              {form.provider === 'GMAIL_APP_PASSWORD' && (
+                <div className="space-y-3">
+                  <div className="bg-emerald-900/15 border border-emerald-700/30 rounded-lg p-3 space-y-2">
+                    <p className="text-xs text-emerald-300 font-semibold flex items-center gap-1.5">
+                      <IconByName name="mail" size={12} /> Gmail App Password — easiest method (no OAuth setup)
+                    </p>
+                    <p className="text-[10px] text-slate-400 leading-relaxed">
+                      1. Go to <span className="text-emerald-300 font-mono">myaccount.google.com</span> → Security → 2-Step Verification (must be ON)<br/>
+                      2. Visit <span className="text-emerald-300 font-mono">myaccount.google.com/apppasswords</span> → create app password for "Mail"<br/>
+                      3. Copy the 16-character password (no spaces) and paste below.
+                    </p>
+                  </div>
+                  <input
+                    value={form.credentials.appPassword || ''}
+                    onChange={e => setForm({ ...form, credentials: { ...form.credentials, appPassword: e.target.value } })}
+                    placeholder="16-character App Password (e.g. abcd efgh ijkl mnop)"
+                    type="password"
+                    required
+                    className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono"
+                  />
+                  <p className="text-[10px] text-slate-500">The email address above is used as the SMTP username. Connection test verifies smtp.gmail.com:465.</p>
                 </div>
               )}
               {form.provider === 'OUTLOOK_GRAPH' && (
@@ -3395,7 +3426,7 @@ function GatewayDeploy() {
 
   const loadConfig = async () => {
     try {
-      const d = await gatewayApi('/admin/gateway', { method: 'POST', body: JSON.stringify({ resource: 'config' }) });
+      const d = await gatewayApi('/admin/gateway?resource=config');
       if (d.success && d.config) setRenderUrl(d.config.renderDeployUrl || '');
     } catch {}
   };

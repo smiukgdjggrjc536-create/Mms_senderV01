@@ -26,6 +26,7 @@ import {
   CarrierCache,
   SystemConfig,
 } from '@/lib/core';
+import nodemailer from 'nodemailer';
 
 // ---------------------------------------------------------------------------
 // Auth helpers (mirrors the pattern in /api/system/route.js)
@@ -50,7 +51,7 @@ async function verifyAdmin(req) {
 // ---------------------------------------------------------------------------
 // Validation helpers
 // ---------------------------------------------------------------------------
-const ALLOWED_PROVIDERS = ['GMAIL_OAUTH', 'OUTLOOK_GRAPH', 'YAHOO', 'AOL', 'CUSTOM_SMTP'];
+const ALLOWED_PROVIDERS = ['GMAIL_OAUTH', 'GMAIL_APP_PASSWORD', 'OUTLOOK_GRAPH', 'YAHOO', 'AOL', 'CUSTOM_SMTP'];
 
 function isValidEmail(str) {
   return typeof str === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str);
@@ -101,6 +102,117 @@ function computeAccountHealth(acc) {
     reason,
     remainingToday: remaining,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Credential validation — provider-specific required fields
+// ---------------------------------------------------------------------------
+// Returns an error STRING if invalid, or null if valid.
+function validateCredentials(provider, credentials) {
+  if (!credentials || typeof credentials !== 'object') {
+    return 'credentials object is required';
+  }
+  switch (provider) {
+    case 'GMAIL_OAUTH':
+      if (!credentials.refreshToken) return 'Gmail OAuth requires refreshToken';
+      if (!credentials.clientId) return 'Gmail OAuth requires clientId';
+      if (!credentials.clientSecret) return 'Gmail OAuth requires clientSecret';
+      return null;
+    case 'GMAIL_APP_PASSWORD':
+      if (!credentials.appPassword || typeof credentials.appPassword !== 'string') {
+        return 'Gmail App Password requires appPassword (16-char code from Google Account)';
+      }
+      // App passwords are 16 chars, possibly with spaces. Strip spaces for the check.
+      if (credentials.appPassword.replace(/\s/g, '').length < 16) {
+        return 'Gmail App Password appears too short (expected 16 characters)';
+      }
+      return null;
+    case 'OUTLOOK_GRAPH':
+      if (!credentials.accessToken && !credentials.refreshToken) {
+        return 'Outlook Graph requires accessToken or refreshToken';
+      }
+      if (!credentials.clientId) return 'Outlook Graph requires clientId';
+      return null;
+    case 'YAHOO':
+    case 'AOL':
+      if (!credentials.password) return (provider === 'YAHOO' ? 'Yahoo' : 'AOL') + ' requires password (app password)';
+      return null;
+    case 'CUSTOM_SMTP':
+      if (!credentials.host) return 'Custom SMTP requires host';
+      if (!credentials.port) return 'Custom SMTP requires port';
+      if (!credentials.user) return 'Custom SMTP requires user';
+      if (!credentials.pass) return 'Custom SMTP requires pass';
+      return null;
+    default:
+      return 'Unknown provider: ' + provider;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Connectivity test — lightweight SMTP verify for SMTP-based providers
+// ---------------------------------------------------------------------------
+// Performs a nodemailer "verify" call (connects + authenticates, does NOT
+// send mail). For OAuth providers we can't easily verify without token
+// refresh logic, so we return a soft-pass with a note.
+// Returns { success: boolean, message: string }
+async function testEmailAccountConnectivity(acc) {
+  try {
+    const provider = acc.provider;
+    const cred = acc.credentials || {};
+
+    if (provider === 'GMAIL_APP_PASSWORD' || provider === 'YAHOO' || provider === 'AOL') {
+      // SMTP-based providers — do a real connection test.
+      const hostMap = {
+        GMAIL_APP_PASSWORD: 'smtp.gmail.com',
+        YAHOO: 'smtp.mail.yahoo.com',
+        AOL: 'smtp.aol.com',
+      };
+      const port = 465;
+      const user = acc.email;
+      let pass = cred.appPassword || cred.password || '';
+      pass = String(pass).replace(/\s/g, ''); // strip spaces from app passwords
+
+      const transporter = nodemailer.createTransport({
+        host: hostMap[provider],
+        port,
+        secure: true,
+        auth: { user, pass },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 10000,
+      });
+
+      await transporter.verify();
+      return { success: true, message: `SMTP connection to ${hostMap[provider]}:465 verified successfully for ${user}` };
+    }
+
+    if (provider === 'CUSTOM_SMTP') {
+      const port = Number(cred.port) || 587;
+      const transporter = nodemailer.createTransport({
+        host: cred.host,
+        port,
+        secure: port === 465,
+        auth: { user: cred.user, pass: cred.pass },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 10000,
+      });
+      await transporter.verify();
+      return { success: true, message: `SMTP connection to ${cred.host}:${port} verified successfully` };
+    }
+
+    if (provider === 'GMAIL_OAUTH' || provider === 'OUTLOOK_GRAPH') {
+      // OAuth-based — would need token refresh to fully verify. Soft-pass.
+      return {
+        success: true,
+        message: 'OAuth account stored. Full connectivity test requires token refresh at send-time. Credentials validated structurally.',
+      };
+    }
+
+    return { success: false, message: 'Unknown provider — cannot test connectivity' };
+  } catch (err) {
+    return { success: false, message: 'Connectivity test failed: ' + (err.message || String(err)) };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -228,10 +340,36 @@ export async function POST(req) {
     }
 
     // ====================================================================
-    // POST /api/admin/gateway/accounts -> Add/Update email account
+    // POST /api/admin/gateway/accounts -> Add/Update/Delete/Test email account
     // ====================================================================
     if (resource === 'accounts') {
-      const { provider, email, credentials, dailyLimit, label } = body;
+      // Support both flat payload (legacy) and { action, account } payload (frontend).
+      const action = body.action || 'create';
+      const acc = body.account || body; // frontend nests under .account; legacy is flat
+      const accountId = body.accountId || acc._id || null;
+
+      // DELETE
+      if (action === 'delete' && accountId) {
+        await EmailAccount.findByIdAndDelete(accountId);
+        return jsonResponse({ success: true, message: 'Email account deleted' });
+      }
+
+      // TEST (verify the account can actually send via its provider)
+      if (action === 'test' && accountId) {
+        const acc2 = await EmailAccount.findById(accountId).lean();
+        if (!acc2) return jsonResponse({ error: 'Account not found' }, 404);
+        const testRes = await testEmailAccountConnectivity(acc2);
+        return jsonResponse(testRes);
+      }
+
+      // RESET COOLDOWN
+      if (action === 'reset' && accountId) {
+        await EmailAccount.findByIdAndUpdate(accountId, { status: 'ACTIVE', cooldownUntil: null, consecutiveBounces: 0, lastError: null });
+        return jsonResponse({ success: true, message: 'Cooldown reset' });
+      }
+
+      // CREATE / UPDATE (upsert by email)
+      const { provider, email, credentials, dailyLimit, label } = acc;
 
       if (!provider || !ALLOWED_PROVIDERS.includes(provider)) {
         return jsonResponse({ error: 'Invalid provider. Allowed: ' + ALLOWED_PROVIDERS.join(', ') }, 400);
@@ -240,8 +378,12 @@ export async function POST(req) {
         return jsonResponse({ error: 'A valid email address is required' }, 400);
       }
       if (!credentials || typeof credentials !== 'object' || Object.keys(credentials).length === 0) {
-        return jsonResponse({ error: 'credentials object is required (OAuth tokens or SMTP auth)' }, 400);
+        return jsonResponse({ error: 'credentials object is required (OAuth tokens, app password, or SMTP auth)' }, 400);
       }
+
+      // Validate provider-specific credentials
+      const credErr = validateCredentials(provider, credentials);
+      if (credErr) return jsonResponse({ error: credErr }, 400);
 
       // Build the update payload — password/secret fields are kept as-is.
       const update = {

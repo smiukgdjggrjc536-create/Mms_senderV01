@@ -48,3 +48,8 @@ next-env.d.ts
 
 # Local Netlify folder
 .netlify
+
+# Generated config files (created by init-configs.js at build time)
+config-database.js
+config-gemini.js
+config-sending.js

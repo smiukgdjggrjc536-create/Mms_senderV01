@@ -399,7 +399,7 @@ export async function POST(req) {
       const { name, apiKey, model, endpoint, limit, priority, autoRoute } = body;
       if (!name || !apiKey) return jsonResponse({ error: 'Name and API key required' }, 400);
       const api = await GeminiApi.create({
-        name, apiKey, model: model || 'gemini-2.5-flash',
+        name, apiKey, model: model || 'gemini-flash-lite-latest',
         endpoint: endpoint || 'https://generativelanguage.googleapis.com/v1beta/models',
         limit: limit || 1500, remaining: limit || 1500,
         priority: priority || 0, autoRoute: autoRoute !== false,
@@ -459,7 +459,17 @@ export async function POST(req) {
       const ep = testEndpoint || 'https://generativelanguage.googleapis.com/v1beta/models';
       const fallbackModels = [];
       if (testModel) fallbackModels.push(testModel);
-      for (const m of ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-flash-latest']) {
+      // Updated model list — Google has deprecated many older models for new users.
+      // Working models verified: gemini-flash-lite-latest, gemini-3.5-flash-lite, gemini-3.1-flash-lite
+      for (const m of [
+        'gemini-flash-lite-latest',
+        'gemini-3.5-flash-lite',
+        'gemini-3.1-flash-lite',
+        'gemini-flash-latest',
+        'gemini-2.5-flash',
+        'gemini-2.5-flash-lite',
+        'gemini-1.5-flash',
+      ]) {
         if (!fallbackModels.includes(m)) fallbackModels.push(m);
       }
       const testPrompt = 'Reply with exactly: "Gemini API test successful."';

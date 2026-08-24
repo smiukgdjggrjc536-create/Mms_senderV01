@@ -406,7 +406,7 @@ const senderApiSchema = new mongoose.Schema({
 const geminiApiSchema = new mongoose.Schema({
   name: { type: String, required: true },
   apiKey: { type: String, required: true },
-  model: { type: String, default: 'gemini-2.5-flash' },
+  model: { type: String, default: 'gemini-flash-lite-latest' },
   endpoint: { type: String, default: 'https://generativelanguage.googleapis.com/v1beta/models' },
   limit: { type: Number, default: 1500 }, // requests per day free tier
   used: { type: Number, default: 0 },
@@ -884,7 +884,7 @@ async function updateGeminiApiUsage(apiId, requestCount) {
 //   const result = await callGemini(geminiApi, promptText, { temperature, maxOutputTokens });
 //   if (result.ok) { result.text } else { result.error, result.status, result.hint }
 // ============================================================================
-const GEMINI_FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-flash-latest'];
+const GEMINI_FALLBACK_MODELS = ['gemini-flash-lite-latest', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-1.5-flash'];
 
 async function callGemini(geminiApi, promptText, opts = {}) {
   if (!geminiApi) {
@@ -1887,7 +1887,7 @@ function refreshConfigFile(keyName, keyValue) {
 
   switch (keyName) {
     case 'GEMINI_API_KEY':
-      content = `export const GEMINI_CONFIG = {\n  apiKey: '${keyValue}',\n  model: 'gemini-2.5-flash',\n  endpoint: 'https://generativelanguage.googleapis.com/v1beta/models',\n};\n`;
+      content = `export const GEMINI_CONFIG = {\n  apiKey: '${keyValue}',\n  model: 'gemini-flash-lite-latest',\n  endpoint: 'https://generativelanguage.googleapis.com/v1beta/models',\n};\n`;
       break;
     case 'MONGODB_URI':
       content = `export const DB_CONFIG = {\n  uri: '${keyValue}',\n  options: {\n    bufferCommands: false,\n  },\n};\n`;

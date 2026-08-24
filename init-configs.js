@@ -15,7 +15,7 @@ const databaseConfig = `export const DB_CONFIG = {
 
 const geminiConfig = `export const GEMINI_CONFIG = {
   apiKey: 'YOUR_GEMINI_API_KEY_HERE',
-  model: 'gemini-1.5-flash',
+  model: 'gemini-flash-lite-latest',
   endpoint: 'https://generativelanguage.googleapis.com/v1beta/models',
 };
 `;
