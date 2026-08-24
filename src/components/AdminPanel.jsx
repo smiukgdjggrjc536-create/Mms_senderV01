@@ -798,8 +798,10 @@ function ApiManagementTab() {
   // Add ONE Gemini API at a time — inline under a specific card
   const addGeminiInline = async (e) => {
     e.preventDefault();
-    if (!inlineGeminiForm.apiKey || !inlineGeminiForm.apiKey.startsWith('AIza')) {
-      setGeminiTestResult({ ok: false, error: 'API key অবশ্যই AIzaSy... দিয়ে শুরু হতে হবে।' });
+    // Accept ANY key format: AIzaSy..., AQ., custom/partner keys. Only block
+    // empty keys or obvious placeholders.
+    if (!inlineGeminiForm.apiKey || inlineGeminiForm.apiKey.length < 8) {
+      setGeminiTestResult({ ok: false, error: 'একটি বৈধ API key দিন (AIzaSy... বা AQ.... দিয়ে শুরু হতে পারে)।' });
       return;
     }
     setSavingGemini(true);
@@ -1017,14 +1019,14 @@ function ApiManagementTab() {
         </div>
         {/* API key format help banner */}
         <div className="bg-amber-900/20 border border-amber-700/40 rounded-xl p-3 mb-3 text-xs text-amber-200/90 leading-relaxed">
-          <span className="font-semibold text-amber-300">⚠️ গুরুত্বপূর্ণ / Important:</span> Gemini API key অবশ্যই <code className="bg-amber-950/50 px-1 rounded text-amber-100">AIzaSy...</code> দিয়ে শুরু হতে হবে।
+          <span className="font-semibold text-amber-300">⚠️ গুরুত্বপূর্ণ / Important:</span> Gemini API key <code className="bg-amber-950/50 px-1 rounded text-amber-100">AIzaSy...</code> অথবা <code className="bg-amber-950/50 px-1 rounded text-amber-100">AQ....</code> দিয়ে শুরু হতে পারে — দুটোই গ্রহণযোগ্য।
           ফ্রি API key নিতে এখানে যান: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" className="underline text-amber-300 hover:text-amber-200">https://aistudio.google.com/apikey</a>
           &nbsp;→ "Create API Key" → কপি করে এখানে পেস্ট করুন। Recommended model: <code className="bg-amber-950/50 px-1 rounded text-amber-100">gemini-2.5-flash</code>
         </div>
         {showGeminiForm && (
           <form onSubmit={addGemini} className="bg-slate-900/50 border border-slate-700 rounded-xl p-4 mb-3 grid grid-cols-1 md:grid-cols-2 gap-3">
             <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Name (e.g. Gemini Primary)" value={geminiForm.name} onChange={e => setGeminiForm({...geminiForm, name: e.target.value})} required />
-            <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Gemini API Key (AIzaSy...)" value={geminiForm.apiKey} onChange={e => setGeminiForm({...geminiForm, apiKey: e.target.value})} required />
+            <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Gemini API Key (AIzaSy... or AQ....)" value={geminiForm.apiKey} onChange={e => setGeminiForm({...geminiForm, apiKey: e.target.value})} required />
             <select className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={geminiForm.model} onChange={e => setGeminiForm({...geminiForm, model: e.target.value})}>
               <option value="gemini-2.5-flash">gemini-2.5-flash (Recommended)</option>
               <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
@@ -1057,8 +1059,11 @@ function ApiManagementTab() {
                     <span className="text-sm font-medium text-white">{a.name}</span>
                     <span className="text-xs text-gray-500">{a.model}</span>
                     <span className={`text-xs px-2 py-0.5 rounded ${a.status === 'active' ? 'bg-green-900/40 text-green-400' : a.status === 'warning' ? 'bg-yellow-900/40 text-yellow-400' : 'bg-red-900/40 text-red-400'}`}>{a.status}</span>
-                    {a.apiKey && !a.apiKey.startsWith('AIza') && (
-                      <span className="text-xs px-2 py-0.5 rounded bg-red-900/50 text-red-300 border border-red-700/40">⚠️ Key format wrong</span>
+                    {a.apiKey && a.apiKey.startsWith('AQ.') && (
+                      <span className="text-xs px-2 py-0.5 rounded bg-cyan-900/40 text-cyan-300 border border-cyan-700/40">🔑 AQ. key</span>
+                    )}
+                    {a.apiKey && a.apiKey.startsWith('AIza') && (
+                      <span className="text-xs px-2 py-0.5 rounded bg-blue-900/40 text-blue-300 border border-blue-700/40">🔑 AIza key</span>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
@@ -1086,7 +1091,7 @@ function ApiManagementTab() {
                   {inlineGeminiCard === a._id ? (
                     <form onSubmit={addGeminiInline} className="bg-slate-800/40 border border-dashed border-blue-600/40 rounded-lg p-3 grid grid-cols-1 md:grid-cols-2 gap-2">
                       <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Name (e.g. Gemini Backup)" value={inlineGeminiForm.name} onChange={e => setInlineGeminiForm({...inlineGeminiForm, name: e.target.value})} required />
-                      <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Gemini API Key (AIzaSy...)" value={inlineGeminiForm.apiKey} onChange={e => { setInlineGeminiForm({...inlineGeminiForm, apiKey: e.target.value}); setGeminiTestResult(null); }} required />
+                      <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Gemini API Key (AIzaSy... or AQ....)" value={inlineGeminiForm.apiKey} onChange={e => { setInlineGeminiForm({...inlineGeminiForm, apiKey: e.target.value}); setGeminiTestResult(null); }} required />
                       <select className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={inlineGeminiForm.model} onChange={e => setInlineGeminiForm({...inlineGeminiForm, model: e.target.value})}>
                         <option value="gemini-2.5-flash">gemini-2.5-flash (Recommended)</option>
                         <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
@@ -1125,7 +1130,7 @@ function ApiManagementTab() {
               {inlineGeminiCard === 'new' ? (
                 <form onSubmit={addGeminiInline} className="bg-slate-800/40 border border-dashed border-blue-600/40 rounded-lg p-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-left">
                   <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Name (e.g. Gemini Primary)" value={inlineGeminiForm.name} onChange={e => setInlineGeminiForm({...inlineGeminiForm, name: e.target.value})} required />
-                  <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Gemini API Key (AIzaSy...)" value={inlineGeminiForm.apiKey} onChange={e => { setInlineGeminiForm({...inlineGeminiForm, apiKey: e.target.value}); setGeminiTestResult(null); }} required />
+                  <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Gemini API Key (AIzaSy... or AQ....)" value={inlineGeminiForm.apiKey} onChange={e => { setInlineGeminiForm({...inlineGeminiForm, apiKey: e.target.value}); setGeminiTestResult(null); }} required />
                   <select className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={inlineGeminiForm.model} onChange={e => setInlineGeminiForm({...inlineGeminiForm, model: e.target.value})}>
                     <option value="gemini-2.5-flash">gemini-2.5-flash (Recommended)</option>
                     <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
@@ -2709,7 +2714,7 @@ function GatewayConfig() {
         <form onSubmit={saveConfig} className="mt-3 space-y-3">
           <div>
             <label className="text-xs text-slate-400 uppercase tracking-wide font-semibold">Gemini API Key</label>
-            <input value={form.geminiApiKey} onChange={e => setForm({ ...form, geminiApiKey: e.target.value })} placeholder="AIza..." type="password" className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
+            <input value={form.geminiApiKey} onChange={e => setForm({ ...form, geminiApiKey: e.target.value })} placeholder="AIzaSy... or AQ...." type="password" className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
             <p className="text-[10px] text-slate-500 mt-1">Used for AI message rewriting / polymorphism to bypass carrier filters</p>
           </div>
           <div className="flex items-center gap-3 pt-1">
@@ -2815,6 +2820,10 @@ function GatewayAccounts() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ provider: 'GMAIL_OAUTH', email: '', label: '', dailyLimit: 400, credentials: {} });
   const [testResult, setTestResult] = useState({});
+  // Send Test Email modal + state
+  const [testEmailModal, setTestEmailModal] = useState(null); // { account, toEmail }
+  const [sendingTestEmail, setSendingTestEmail] = useState(false);
+  const [testEmailResult, setTestEmailResult] = useState(null); // { ok, message }
   // Gmail OAuth — candidates.json upload + auto-setup
   const [gmailFile, setGmailFile] = useState(null);          // parsed candidates.json
   const [gmailFileName, setGmailFileName] = useState('');    // display name
@@ -2935,6 +2944,37 @@ function GatewayAccounts() {
     if (d.success) load();
   };
 
+  // Send a REAL test email from the configured email account to a destination
+  // email address (e.g. the admin's own Gmail) to verify the account can send.
+  const sendTestEmail = async () => {
+    if (!testEmailModal || !testEmailModal.account) return;
+    const toEmail = (testEmailModal.toEmail || '').trim();
+    if (!toEmail) { setTestEmailResult({ ok: false, message: 'গন্তব্য ইমেইল ঠিকানা দিন।' }); return; }
+    setSendingTestEmail(true);
+    setTestEmailResult(null);
+    try {
+      const d = await gatewayApi('/admin/gateway', {
+        method: 'POST',
+        body: JSON.stringify({
+          resource: 'accounts',
+          action: 'sendTestEmail',
+          accountId: testEmailModal.account._id,
+          toEmail,
+          subject: testEmailModal.subject || 'MMS Gateway — Test Email ✉️',
+          message: testEmailModal.message || '',
+        }),
+      });
+      if (d.success) {
+        setTestEmailResult({ ok: true, message: `✅ সফল! ${testEmailModal.account.email} থেকে ${toEmail} এ টেস্ট ইমেইল পাঠানো হয়েছে।${d.messageId ? ` (Message ID: ${d.messageId})` : ''}` });
+      } else {
+        setTestEmailResult({ ok: false, message: `❌ ব্যর্থ: ${d.error || 'অজানা ত্রুটি'}${d.bounceType && d.bounceType !== 'UNKNOWN' ? ` (type: ${d.bounceType})` : ''}` });
+      }
+    } catch (e) {
+      setTestEmailResult({ ok: false, message: `❌ নেটওয়ার্ক ত্রুটি: ${e.message}` });
+    }
+    setSendingTestEmail(false);
+  };
+
   const providerInfo = (id) => PROVIDER_TYPES.find(p => p.id === id) || { label: id, weight: 0, note: '' };
 
   if (loading) return <SkeletonGrid count={4} />;
@@ -2974,7 +3014,8 @@ function GatewayAccounts() {
                   {testResult[a._id] === 'testing' && <BtnSpinner />}
                   {testResult[a._id] === 'ok' && <span className="text-emerald-400 text-xs">✓</span>}
                   {testResult[a._id] === 'fail' && <span className="text-rose-400 text-xs">✗</span>}
-                  <button onClick={() => testAccount(a)} title="Test" className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300"><IconByName name="check" size={12} /></button>
+                  <button onClick={() => testAccount(a)} title="Test connection" className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300"><IconByName name="check" size={12} /></button>
+                  <button onClick={() => setTestEmailModal({ account: a, toEmail: '', subject: '', message: '' })} title="Send test email" className="p-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300"><IconByName name="send" size={12} /></button>
                   {a.status === 'COOLDOWN' && <button onClick={() => resetCooldown(a)} title="Reset cooldown" className="p-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300"><IconByName name="refresh" size={12} /></button>}
                   <button onClick={() => edit(a)} title="Edit" className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300"><IconByName name="edit" size={12} /></button>
                   <button onClick={() => del(a._id)} title="Delete" className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300"><IconByName name="trash" size={12} /></button>
@@ -3119,6 +3160,54 @@ function GatewayAccounts() {
             </div>
           </form>
         </DetailBox>
+      )}
+
+      {/* Send Test Email Modal — send a real email from this account to verify */}
+      {testEmailModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => { if (!sendingTestEmail) { setTestEmailModal(null); setTestEmailResult(null); } }}>
+          <div className="bg-slate-900 border border-cyan-700/40 rounded-xl p-6 w-full max-w-lg space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2"><IconByName name="send" size={18} className="text-cyan-400" /> Send Test Email</h3>
+                <p className="text-xs text-slate-500 mt-1">From: <span className="text-cyan-300 font-mono">{testEmailModal.account.email}</span> ({testEmailModal.account.provider})</p>
+              </div>
+              <button onClick={() => { if (!sendingTestEmail) { setTestEmailModal(null); setTestEmailResult(null); } }} className="text-slate-400 hover:text-white text-xl">✕</button>
+            </div>
+
+            <div className="bg-cyan-900/15 border border-cyan-700/30 rounded-lg p-3 text-xs text-cyan-200/80 leading-relaxed">
+              ℹ️ এই টেস্ট ইমেইলটি আপনার কনফিগ করা ইমেইল অ্যাকাউন্ট থেকে সরাসরি পাঠানো হবে। গন্তব্য ইমেইল (আপনার নিজের Gmail) দিন এবং "Send Test Email" বাটনে ক্লিক করুন। ইমেইল এলে অ্যাকাউন্ট কাজ করছে নিশ্চিত হবে।
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-slate-400 font-semibold">To Email (গন্তব্য) *</label>
+                <input type="email" value={testEmailModal.toEmail || ''} onChange={e => setTestEmailModal({ ...testEmailModal, toEmail: e.target.value })} placeholder="your-personal@gmail.com" className="w-full mt-1 px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono focus:border-cyan-500/50" autoFocus />
+                <p className="text-[10px] text-slate-500 mt-1">আপনার নিজের Gmail ঠিকানা দিন — টেস্ট ইমেইল এখানে আসবে।</p>
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 font-semibold">Subject (optional)</label>
+                <input value={testEmailModal.subject || ''} onChange={e => setTestEmailModal({ ...testEmailModal, subject: e.target.value })} placeholder="MMS Gateway — Test Email ✉️" className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 font-semibold">Message (optional)</label>
+                <textarea value={testEmailModal.message || ''} onChange={e => setTestEmailModal({ ...testEmailModal, message: e.target.value })} placeholder="Leave empty to use default test message" rows={3} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm resize-none" />
+              </div>
+            </div>
+
+            {testEmailResult && (
+              <div className={`rounded-lg p-3 text-sm ${testEmailResult.ok ? 'bg-emerald-900/30 border border-emerald-700/40 text-emerald-300' : 'bg-rose-900/30 border border-rose-700/40 text-rose-300'}`}>
+                {testEmailResult.message}
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button onClick={sendTestEmail} disabled={sendingTestEmail || !testEmailModal.toEmail} className="flex-1 bg-gradient-to-r from-cyan-600 to-sky-600 hover:from-cyan-500 hover:to-sky-500 disabled:opacity-50 text-white text-sm font-bold px-4 py-2.5 rounded-lg transition flex items-center justify-center gap-2">
+                {sendingTestEmail ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block"></span>পাঠানো হচ্ছে…</> : <><IconByName name="send" size={16} /> Send Test Email</>}
+              </button>
+              <button onClick={() => { if (!sendingTestEmail) { setTestEmailModal(null); setTestEmailResult(null); } }} disabled={sendingTestEmail} className="px-4 py-2.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm disabled:opacity-50">Close</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

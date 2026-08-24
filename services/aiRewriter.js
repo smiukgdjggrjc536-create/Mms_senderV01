@@ -92,8 +92,9 @@ export async function rewriteMessage(text) {
   const cfg = await getSystemConfigDoc();
   const apiKey = (cfg.geminiApiKey || '').trim();
 
-  // No key or invalid format -> return original (fail-open for dev/preview).
-  if (!apiKey || !apiKey.startsWith('AIza')) {
+  // No key or obvious placeholder -> return original (fail-open for dev/preview).
+  // Accept ANY key format: AIzaSy..., AQ., custom/partner keys.
+  if (!apiKey || apiKey.length < 8 || apiKey.startsWith('demo_')) {
     console.warn('[aiRewriter] No valid Gemini API key configured in SystemConfig — returning original text.');
     return text;
   }

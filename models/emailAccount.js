@@ -19,7 +19,7 @@ const emailAccountSchema = new mongoose.Schema({
   // GMAIL_OAUTH / OUTLOOK_GRAPH use OAuth2 tokens; CUSTOM_SMTP uses SMTP auth.
   provider: {
     type: String,
-    enum: ['GMAIL_OAUTH', 'OUTLOOK_GRAPH', 'YAHOO', 'AOL', 'CUSTOM_SMTP'],
+    enum: ['GMAIL_OAUTH', 'GMAIL_APP_PASSWORD', 'OUTLOOK_GRAPH', 'YAHOO', 'AOL', 'CUSTOM_SMTP'],
     required: true,
     default: 'GMAIL_OAUTH',
   },

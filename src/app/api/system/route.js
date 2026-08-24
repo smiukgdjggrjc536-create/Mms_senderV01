@@ -517,7 +517,7 @@ export async function POST(req) {
       // All failed
       let hint = '';
       if (lastStatus === 403) hint = 'The API key is invalid OR the "Generative Language API" is not enabled. Create a new key at https://aistudio.google.com/apikey';
-      else if (lastStatus === 400) hint = 'Bad request — the API key format is wrong. It must start with "AIzaSy...". Get one from https://aistudio.google.com/apikey';
+      else if (lastStatus === 400) hint = 'Bad request — the API key may be invalid or wrong format. Keys start with "AIzaSy" or "AQ.". Get a free one at https://aistudio.google.com/apikey';
       else if (lastStatus === 429) hint = 'Rate limit / quota exceeded. Wait a moment and try again, or add another key.';
       else if (lastStatus === 404) hint = `All models returned 404. The API key is likely invalid. Get a free key from https://aistudio.google.com/apikey`;
       else hint = 'Network error. Check the endpoint URL and your internet connection.';
@@ -1813,15 +1813,15 @@ User question: ${message}`;
             return jsonResponse({ success: true, reply: fallbackReply });
           }
           return jsonResponse({
-            error: 'AI request failed: model not found (404). Tried fallback models but all failed. The Gemini API key may be invalid (should start with "AIza...") or the model name is wrong.',
+            error: 'AI request failed: model not found (404). Tried fallback models but all failed. The Gemini API key may be invalid or the model name is wrong.',
             detail: lastErr.slice(0, 300),
-            hint: 'Go to Admin Panel → API Management → edit the Gemini API. Set model to "gemini-2.5-flash" and make sure the API key starts with "AIzaSy..." (get it from https://aistudio.google.com/apikey)',
+            hint: 'Go to Admin Panel → API Management → edit the Gemini API. Set model to "gemini-2.5-flash" and make sure the API key is valid (starts with "AIzaSy" or "AQ."). Get one from https://aistudio.google.com/apikey',
           }, 502);
         }
         const errText = await geminiRes.text().catch(() => '');
         // Provide helpful error based on status
         let helpfulError = `AI request failed: ${geminiRes.status}`;
-        if (geminiRes.status === 400) helpfulError += ' — Bad request. The API key format may be wrong (should start with "AIzaSy..."). Get a free key from https://aistudio.google.com/apikey';
+        if (geminiRes.status === 400) helpfulError += ' — Bad request. The API key may be invalid or wrong format (starts with "AIzaSy" or "AQ."). Get a free key from https://aistudio.google.com/apikey';
         else if (geminiRes.status === 403) helpfulError += ' — API key invalid or permission denied. Check the Gemini API key in Admin Panel → API Management.';
         else if (geminiRes.status === 429) helpfulError += ' — Rate limit exceeded. Try again in a moment.';
         return jsonResponse({ error: helpfulError, detail: errText.slice(0, 300) }, 502);

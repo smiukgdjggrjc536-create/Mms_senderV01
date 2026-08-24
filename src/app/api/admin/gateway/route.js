@@ -27,6 +27,8 @@ import {
   SystemConfig,
 } from '@/lib/core';
 import nodemailer from 'nodemailer';
+import { sendByProvider } from '@/services/senders/index.js';
+
 
 // ---------------------------------------------------------------------------
 // Auth helpers (mirrors the pattern in /api/system/route.js)
@@ -360,6 +362,65 @@ export async function POST(req) {
         if (!acc2) return jsonResponse({ error: 'Account not found' }, 404);
         const testRes = await testEmailAccountConnectivity(acc2);
         return jsonResponse(testRes);
+      }
+
+      // SEND TEST EMAIL — sends a REAL test email FROM the configured email
+      // account TO a destination email address the admin provides. This uses
+      // the actual provider sender (sendByProvider) so it exercises the real
+      // send path (Gmail OAuth token refresh + REST, or SMTP, or App Password).
+      // Required body: { resource: 'accounts', action: 'sendTestEmail',
+      //   accountId: '<id>', toEmail: '<destination@gmail.com>' }
+      // Optional: subject, message
+      if (action === 'sendTestEmail' && accountId) {
+        const acc3 = await EmailAccount.findById(accountId).lean();
+        if (!acc3) return jsonResponse({ error: 'Account not found' }, 404);
+
+        const toEmail = (body.toEmail || '').trim();
+        if (!toEmail || !isValidEmail(toEmail)) {
+          return jsonResponse({ error: 'A valid destination email (toEmail) is required' }, 400);
+        }
+
+        const subject = body.subject || 'MMS Gateway — Test Email ✉️';
+        const message = body.message || `This is a test email sent from the MMS Sender Gateway to verify that the email account ${acc3.email} can send mail successfully.\n\nTimestamp: ${new Date().toISOString()}\nProvider: ${acc3.provider}\n\nIf you received this email, the account is working correctly.`;
+
+        try {
+          const result = await sendByProvider({
+            account: acc3,
+            to: toEmail,
+            subject,
+            body: message,
+          });
+
+          // Update lastUsedAt + clear lastError on success
+          await EmailAccount.findByIdAndUpdate(accountId, {
+            lastUsedAt: new Date(),
+            lastError: null,
+          }).catch(() => {});
+
+          return jsonResponse({
+            success: true,
+            message: `Test email sent successfully from ${acc3.email} to ${toEmail}`,
+            provider: result.provider,
+            messageId: result.messageId,
+            from: acc3.email,
+            to: toEmail,
+          });
+        } catch (sendErr) {
+          // Record the error on the account for diagnostics
+          const errMsg = `${sendErr.bounceType || 'SEND_ERROR'}: ${sendErr.message || String(sendErr)}`;
+          await EmailAccount.findByIdAndUpdate(accountId, {
+            lastError: errMsg.slice(0, 300),
+          }).catch(() => {});
+
+          return jsonResponse({
+            success: false,
+            error: `Test email FAILED: ${sendErr.message || String(sendErr)}`,
+            bounceType: sendErr.bounceType || 'UNKNOWN',
+            status: sendErr.status || 0,
+            from: acc3.email,
+            to: toEmail,
+          }, 500);
+        }
       }
 
       // RESET COOLDOWN

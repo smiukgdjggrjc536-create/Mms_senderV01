@@ -875,7 +875,7 @@ async function updateGeminiApiUsage(apiId, requestCount) {
 // ----------------------------------------------------------------------------
 // A single robust entry point for ALL Gemini API calls across the app.
 // Handles:
-//   • API-key format validation (must start with "AIza")
+//   • Accepts ANY API key format (AIzaSy..., AQ., custom/partner keys)
 //   • Automatic model fallback on 404 (tries a list of known-good models)
 //   • Clear, structured error objects with human-readable hints
 //   • Auto-updates the DB record to the working model
@@ -958,7 +958,7 @@ async function callGemini(geminiApi, promptText, opts = {}) {
   // All models failed — build a helpful error
   let hint = '';
   if (lastStatus === 403) hint = 'API key is invalid or the Generative Language API is not enabled for this key. Get a new key from https://aistudio.google.com/apikey';
-  else if (lastStatus === 400) hint = 'Bad request — usually means the API key format is wrong. It must start with "AIzaSy...". Get one from https://aistudio.google.com/apikey';
+  else if (lastStatus === 400) hint = 'Bad request — the API key may be invalid or the wrong format. Get a free key from https://aistudio.google.com/apikey (keys start with AIzaSy or AQ.)';
   else if (lastStatus === 429) hint = 'Rate limit / quota exceeded. Wait a moment or add another Gemini API key.';
   else if (lastStatus === 404) hint = `Tried models [${modelList.join(', ')}] but all returned 404. The API key may be invalid. Get a free key from https://aistudio.google.com/apikey`;
   else hint = 'Network or unknown error. Check the endpoint URL and try again. Get a valid key from https://aistudio.google.com/apikey';

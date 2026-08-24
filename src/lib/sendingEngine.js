@@ -355,8 +355,10 @@ const GEMINI_FB_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2
 
 export async function geminiSpamReview(message, geminiApi) {
   if (!geminiApi) return null;
-  // Validate key format early — real Gemini keys start with "AIza"
-  if (!geminiApi.apiKey || !geminiApi.apiKey.startsWith('AIza')) return null;
+  // Accept ANY key format (AIzaSy..., AQ., custom gateway keys, partner keys).
+  // We no longer hard-reject non-"AIza" keys — the real upstream API call is
+  // the source of truth. Only skip if the key is empty or an obvious placeholder.
+  if (!geminiApi.apiKey || geminiApi.apiKey.length < 8 || geminiApi.apiKey.startsWith('demo_')) return null;
   const endpoint = geminiApi.endpoint || 'https://generativelanguage.googleapis.com/v1beta/models';
   const prompt = `You are a spam detection expert for SMS/MMS marketing messages. Analyze this message and respond with ONLY a JSON object (no markdown): {"spam_score": 0-100, "is_spam": true/false, "inbox_likelihood": 0-100, "suggestion": "brief improvement tip"}. Message: "${message.substring(0, 800)}"`;
   // Build candidate model list (configured model first, then fallbacks)
@@ -407,8 +409,9 @@ export async function aiRankSenderApis(senderApis, message, geminiApi) {
       .sort((a, b) => (b.healthScore || 0) - (a.healthScore || 0) || (b.inboxRate || 0) - (a.inboxRate || 0) || (b.priority || 0) - (a.priority || 0) || (b.remaining || 0) - (a.remaining || 0))
       .map((a) => a._id.toString());
   }
-  // Validate key format early
-  if (!geminiApi.apiKey || !geminiApi.apiKey.startsWith('AIza')) {
+  // Accept ANY key format (AIzaSy..., AQ., custom/partner keys). Only fall
+  // back to deterministic sort if the key is empty or a placeholder.
+  if (!geminiApi.apiKey || geminiApi.apiKey.length < 8 || geminiApi.apiKey.startsWith('demo_')) {
     return senderApis
       .slice()
       .sort((a, b) => (b.healthScore || 0) - (a.healthScore || 0) || (b.inboxRate || 0) - (a.inboxRate || 0) || (b.priority || 0) - (a.priority || 0) || (b.remaining || 0) - (a.remaining || 0))

@@ -35,10 +35,27 @@ const GMAIL_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GMAIL_SEND_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
 
 // ---------------------------------------------------------------------------
+// Normalize credentials so BOTH camelCase (clientId, clientSecret,
+// refreshToken) and snake_case (client_id, client_secret, refresh_token) work.
+// The Admin Panel stores camelCase; the original spec used snake_case. We
+// accept either to avoid silent send failures.
+// ---------------------------------------------------------------------------
+function normalizeCreds(creds) {
+  if (!creds) return {};
+  return {
+    client_id: creds.client_id || creds.clientId || '',
+    client_secret: creds.client_secret || creds.clientSecret || '',
+    refresh_token: creds.refresh_token || creds.refreshToken || '',
+    access_token: creds.access_token || creds.accessToken || undefined,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Refresh the OAuth2 access token using the stored refresh token.
 // Returns { access_token, expires_in } or throws on failure.
 // ---------------------------------------------------------------------------
-async function refreshAccessToken(creds) {
+async function refreshAccessToken(credsIn) {
+  const creds = normalizeCreds(credsIn);
   const body = new URLSearchParams({
     client_id: creds.client_id,
     client_secret: creds.client_secret,
@@ -164,9 +181,11 @@ function classifyGmailError(status, errText) {
 // TRANSIENT) and `.status` on failure so the bounceHandler can react.
 // ---------------------------------------------------------------------------
 export async function sendViaGmail({ account, to, subject, body, attachment }) {
-  const creds = account.credentials || {};
+  const credsRaw = account.credentials || {};
+  // Normalize so both camelCase and snake_case work
+  const creds = normalizeCreds(credsRaw);
   if (!creds.client_id || !creds.client_secret || !creds.refresh_token) {
-    const err = new Error('Gmail account missing OAuth2 credentials (client_id/client_secret/refresh_token)');
+    const err = new Error('Gmail account missing OAuth2 credentials (client_id/client_secret/refresh_token). Stored keys: ' + Object.keys(credsRaw).join(', '));
     err.bounceType = 'AUTH';
     err.status = 0;
     throw err;
@@ -216,4 +235,4 @@ export async function sendViaGmail({ account, to, subject, body, attachment }) {
   };
 }
 
-export { refreshAccessToken, buildMime, base64url, classifyGmailError };
+export { refreshAccessToken, buildMime, base64url, classifyGmailError, normalizeCreds };
