@@ -14,7 +14,7 @@
 - [x] Babel PARSE OK
 
 ## Build & Deploy
-- [ ] npm run build — no errors
-- [ ] git commit & push to main
-- [ ] Verify Vercel deployment live
-- [ ] Respond in Bengali
+- [x] npm run build — no errors
+- [x] git commit & push to main
+- [x] Verify Vercel deployment live
+- [x] Respond in Bengali
