@@ -1,23 +1,24 @@
 // ============================================================================
-// Email-to-MMS Gateway Engine — Admin MMS Preview Endpoint (Phase 2)
+// Email Sending Module — Admin Email Preview Endpoint
 // ============================================================================
 // POST /api/admin/gateway/preview
-//   Body: { phoneNumber: string, text: string }
+//   Body: { email: string, text: string }  (phoneNumber accepted as alias)
 //
-// Runs the full Phase 2 pipeline as a DRY RUN (no email is actually sent):
+// Runs the full preparation pipeline as a DRY RUN (no email is actually sent):
 //   1. Safety filter  -> aborts with BLOCKED_BY_SAFETY_FILTER on a keyword hit
 //   2. AI rewriter    -> returns the unique variant (or original if no key)
-//   3. Carrier lookup -> resolves the MMS gateway address (cache-first)
+//   (No carrier lookup — the recipient IS an email address.)
 //
 // Returns the prepared payload so the admin can preview exactly what would be
-// sent, which carrier was resolved, and whether the text was rewritten.
+// sent, the recipient email/domain, and whether the text was rewritten.
 //
-// NON-DESTRUCTIVE: brand-new route. Reuses the existing admin auth helpers
-// (verifyToken from @/lib/core) so security is consistent with /api/system and
-// the Phase 1 gateway config/accounts endpoints. No existing route is touched.
+// SECURITY: Reuses the existing admin auth helpers (verifyToken from
+// @/lib/core) so security is consistent with /api/system and the gateway
+// config/accounts endpoints.
 // ============================================================================
 
-import { connectDB, verifyToken, jsonResponse, prepareMMSPayload } from '@/lib/core';
+import { connectDB, verifyToken, jsonResponse, validateEmailAddress } from '@/lib/core';
+import { prepareEmailPayload } from '@/services/prepareEmail.js';
 
 // ---------------------------------------------------------------------------
 // Auth helpers (mirrors /api/admin/gateway/route.js)
@@ -40,7 +41,7 @@ async function verifyAdmin(req) {
 }
 
 // ---------------------------------------------------------------------------
-// POST handler — dry-run preview of the MMS payload
+// POST handler — dry-run preview of the email payload
 // ---------------------------------------------------------------------------
 export async function POST(req) {
   try {
@@ -49,32 +50,44 @@ export async function POST(req) {
     await connectDB();
 
     const body = await req.json();
-    const { phoneNumber, text } = body;
+    // Accept `email` (primary) or `phoneNumber` (backward-compat alias).
+    const rawEmail = body.email || body.phoneNumber;
+    const { text } = body;
 
-    if (!phoneNumber || typeof phoneNumber !== 'string') {
-      return jsonResponse({ error: 'phoneNumber is required' }, 400);
+    if (!rawEmail || typeof rawEmail !== 'string') {
+      return jsonResponse({ error: 'email is required' }, 400);
     }
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return jsonResponse({ error: 'text is required and must be non-empty' }, 400);
     }
 
-    // Run the Phase 2 pipeline as a dry run. The admin context is forwarded so
-    // any BLOCKED_BY_SAFETY_FILTER event is attributed correctly in the logs.
-    const payload = await prepareMMSPayload(phoneNumber, text, {
+    // Validate the email first so we can return a clean 422 for bad addresses.
+    const check = validateEmailAddress(rawEmail);
+    if (!check.valid) {
+      return jsonResponse({
+        success: false,
+        aborted: true,
+        code: 'INVALID_EMAIL',
+        error: check.reason,
+      }, 422);
+    }
+
+    // Run the preparation pipeline as a dry run. The admin context is
+    // forwarded so any BLOCKED_BY_SAFETY_FILTER event is attributed correctly.
+    const payload = await prepareEmailPayload(rawEmail, text, {
       userId: auth.decoded.userId,
       actorType: 'admin',
       username: auth.decoded.username,
-      phoneNumber,
+      email: rawEmail,
     });
 
     return jsonResponse({
       success: true,
-      message: 'MMS payload prepared (dry run — no message was sent)',
+      message: 'Email payload prepared (dry run — no message was sent)',
       payload,
     });
   } catch (err) {
-    // Distinguish a controlled abort (safety block / landline) from a real 500.
-    if (err && (err.code === 'BLOCKED_BY_SAFETY_FILTER' || err.code === 'INVALID_NUMBER' || err.code === 'LANDLINE' || err.code === 'VOIP' || /Landline cannot receive MMS/.test(err.message) || /Invalid phone number/.test(err.message) || /rejected pattern/.test(err.message) || /Could not normalize/.test(err.message))) {
+    if (err && (err.code === 'BLOCKED_BY_SAFETY_FILTER' || err.code === 'INVALID_EMAIL')) {
       return jsonResponse({
         success: false,
         aborted: true,
@@ -96,30 +109,40 @@ export async function GET(req) {
     await connectDB();
 
     const url = new URL(req.url);
-    const phoneNumber = url.searchParams.get('phoneNumber');
+    const rawEmail = url.searchParams.get('email') || url.searchParams.get('phoneNumber');
     const text = url.searchParams.get('text');
 
-    if (!phoneNumber) {
-      return jsonResponse({ error: 'phoneNumber query param is required' }, 400);
+    if (!rawEmail) {
+      return jsonResponse({ error: 'email query param is required' }, 400);
     }
     if (!text) {
       return jsonResponse({ error: 'text query param is required' }, 400);
     }
 
-    const payload = await prepareMMSPayload(phoneNumber, text, {
+    const check = validateEmailAddress(rawEmail);
+    if (!check.valid) {
+      return jsonResponse({
+        success: false,
+        aborted: true,
+        code: 'INVALID_EMAIL',
+        error: check.reason,
+      }, 422);
+    }
+
+    const payload = await prepareEmailPayload(rawEmail, text, {
       userId: auth.decoded.userId,
       actorType: 'admin',
       username: auth.decoded.username,
-      phoneNumber,
+      email: rawEmail,
     });
 
     return jsonResponse({
       success: true,
-      message: 'MMS payload prepared (dry run — no message was sent)',
+      message: 'Email payload prepared (dry run — no message was sent)',
       payload,
     });
   } catch (err) {
-    if (err && (err.code === 'BLOCKED_BY_SAFETY_FILTER' || err.code === 'INVALID_NUMBER' || err.code === 'LANDLINE' || err.code === 'VOIP' || /Landline cannot receive MMS/.test(err.message) || /Invalid phone number/.test(err.message) || /rejected pattern/.test(err.message) || /Could not normalize/.test(err.message))) {
+    if (err && (err.code === 'BLOCKED_BY_SAFETY_FILTER' || err.code === 'INVALID_EMAIL')) {
       return jsonResponse({
         success: false,
         aborted: true,

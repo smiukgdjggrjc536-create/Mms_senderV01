@@ -1,8 +1,8 @@
 // ============================================================================
-// queueRouter.js — Dynamic Queue Router (Phase 3, Step 2)
+// queueRouter.js — Dynamic Queue Router (Email Sending Module)
 // ============================================================================
-// Implements `sendMMS(targetCarrierEmail, subject, body, attachment)` which is
-// the core send primitive for the Email-to-MMS Gateway. It:
+// Implements `sendEmail(recipientEmail, subject, body, attachment)` which is
+// the core send primitive for the Email Sending Gateway. It:
 //
 //   1. Reads the global SystemConfig (routingDelaySeconds, batchSizePerAccount).
 //   2. Fetches every EmailAccount that is ACTIVE (status === 'ACTIVE'),
@@ -14,15 +14,18 @@
 //      distribution without a separate rotation cursor).
 //   5. Applies a dynamic inter-send delay (routingDelaySeconds) between
 //      successive dispatches to pace the provider and protect reputation.
-//   6. Delegates the actual send to `sendByProvider` (Phase 3, Step 1) and
-//      hands the result to `bounceHandler.withBounceHandling` (Phase 3, Step 3)
-//      so sentToday/consecutiveBounces/CarrierCache are updated correctly.
+//   6. Delegates the actual send to `sendByProvider` and hands the result to
+//      `bounceHandler.withBounceHandling` so sentToday/consecutiveBounces are
+//      updated correctly.
 //
 // The router is stateless across requests: it always queries the DB for the
 // freshest account state, which makes it safe under serverless concurrency
 // (Vercel/Netlify) where no in-process state survives between invocations.
 //
-// NON-DESTRUCTIVE: brand-new module. Does not modify any existing file.
+// NOTE: `sendMMS` is kept as a backward-compatible alias for `sendEmail`. The
+// function is fully generic — it sends to whatever email address is passed as
+// the first argument (Gmail, Yahoo, AOL, Comcast, any domain). The "MMS" name
+// is retained only so older import sites keep working during the transition.
 // ============================================================================
 
 import { connectDB, EmailAccount, SystemConfig } from '@/lib/core';
@@ -125,12 +128,13 @@ function pickNextAccount(accounts) {
 }
 
 // ---------------------------------------------------------------------------
-// Public API: sendMMS(targetCarrierEmail, subject, body, attachment)
+// Public API: sendEmail(recipientEmail, subject, body, attachment)
+//   (sendMMS is kept as a backward-compatible alias)
 //
-//   targetCarrierEmail — the MMS gateway address (e.g. 12125551234@vzwpix.com)
-//   subject            — email subject (usually empty for MMS gateways)
-//   body               — plain-text message body
-//   attachment         — optional { filename, contentType, content }
+//   recipientEmail — the target email address (e.g. user@gmail.com)
+//   subject        — email subject
+//   body           — plain-text message body
+//   attachment     — optional { filename, contentType, content }
 //
 // Returns:
 //   { success: true, provider, accountEmail, messageId, carrierEmail }
@@ -141,7 +145,7 @@ function pickNextAccount(accounts) {
 //   / bulkSendEngine wrapper) maps this to a 503-style result.
 //
 //   Any provider error is wrapped by withBounceHandling BEFORE it reaches
-//   the caller, so sentToday / consecutiveBounces / CarrierCache are updated.
+//   the caller, so sentToday / consecutiveBounces are updated.
 // ---------------------------------------------------------------------------
 export async function sendMMS(targetCarrierEmail, subject, body, attachment) {
   await connectDB();
@@ -244,5 +248,11 @@ export async function sendMMSBatch(targets, subject, body, attachment) {
 export function resetRoutingDelayState() {
   _lastSendAt = 0;
 }
+
+// ---------------------------------------------------------------------------
+// sendEmail — primary alias for the Email Sending Module.
+// sendMMS   — backward-compatible alias (same function reference).
+// ---------------------------------------------------------------------------
+export { sendMMS as sendEmail };
 
 export { getSystemConfig, getUsableAccounts, pickNextAccount, sleep };

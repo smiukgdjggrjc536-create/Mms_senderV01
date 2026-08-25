@@ -1084,6 +1084,37 @@ async function bulkSendEngine(opts) {
 
   // ── 2. AI routing — rank sender APIs by inbox quality ─────────────────────
   let allApis = await SenderApi.find({ status: 'active' }).sort({ healthScore: -1 }).lean();
+  // ── Email Sending Module ──────────────────────────────────────────────────
+  // When the caller requests channel === 'email' (the Email Sending Module),
+  // ALWAYS route through the email engine regardless of whether SMS sender
+  // APIs exist. This makes the email path the primary (not fallback) path.
+  if (options.channel === 'email') {
+    try {
+      const { bulkSendEngineEmailMMS } = await import('@/services/bulkSendEmailMms.js');
+      if (typeof bulkSendEngineEmailMMS === 'function') {
+        const emailResult = await bulkSendEngineEmailMMS({
+          user,
+          message,
+          numbers,
+          invalidNumbers,
+          countryInfo,
+          geminiApi,
+          campaign,
+          appSettings,
+          options: {
+            ...options,
+            _spamScore: spamScore,
+            _spamLevel: spamLevel,
+            _spamReasons: spamReasons,
+            _aiReview: aiReview,
+          },
+        });
+        return emailResult;
+      }
+    } catch (_emailErr) {
+      // fall through to the no_sender_api / SMS path below
+    }
+  }
   if (allApis.length === 0) {
     // ── Phase 3 NON-DESTRUCTIVE FALLBACK ───────────────────────────────────────────────────────────────
     // When NO SMS sender API is configured, attempt the Email-to-MMS Gateway
@@ -1121,7 +1152,7 @@ async function bulkSendEngine(opts) {
         // error. Only when it ALSO found no accounts (totalSent === 0 AND a
         // NO_SENDER_ACCOUNT situation) do we fall through to the original
         // no_sender_api return below.
-        if (emailMmsResult && (emailMmsResult.totalSent > 0 || emailMmsResult.channel === 'email_mms')) {
+        if (emailMmsResult && (emailMmsResult.totalSent > 0 || emailMmsResult.channel === 'email_mms' || emailMmsResult.channel === 'email')) {
           return emailMmsResult;
         }
       }
@@ -1504,6 +1535,97 @@ function countryCodeToCountry(code) {
     '64': 'New Zealand',
   };
   return map[code] || 'Unknown';
+}
+
+// ============================================================================
+// Email Address Validation (Email Sending Module)
+// ============================================================================
+// Validates any email address (Gmail, Yahoo, AOL, Comcast, Outlook, any domain).
+// No carrier/MMS restrictions — pure RFC 5322-style validation.
+// Returns the SAME shape as validatePhoneNumber() so callers can swap cleanly:
+//   { valid: true, cleaned: normalizedEmail }
+//   { valid: false, reason: '...' }
+//
+// The cleaned value is the lowercased, trimmed email with surrounding spaces
+// and angle brackets removed. We do NOT alter the local-part or domain beyond
+// trimming + lowercasing the domain (per RFC 5321, domain is case-insensitive).
+// ============================================================================
+
+// RFC 5322 simplified email regex (practical, not exhaustive).
+// Allows: local-part@domain.tld
+//   local-part: letters, digits, !#$%&'*+-/=?^_`{|}~. and quoted sections
+//   domain:     labels of letters/digits/hyphens, separated by dots, TLD ≥2 chars
+const EMAIL_REGEX =
+  /^(?=.{1,254}$)(?=.{1,64}@)[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+@[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,}$/;
+
+// Common free / consumer email domains for domain-level sanity checks.
+// (Not an allow-list — ANY domain passes the regex; this is just a hint set
+//  used for a "recognized domain" flag we can surface to the UI later.)
+const COMMON_EMAIL_DOMAINS = new Set([
+  'gmail.com', 'yahoo.com', 'yahoo.co.uk', 'aol.com', 'outlook.com',
+  'hotmail.com', 'live.com', 'msn.com', 'icloud.com', 'me.com', 'mac.com',
+  'comcast.net', 'verizon.net', 'att.net', 'bellsouth.net', 'sbcglobal.net',
+  'rocketmail.com', 'yandex.com', 'mail.ru', 'protonmail.com', 'proton.me',
+  'zoho.com', 'gmx.com', 'gmx.net', 'tutanota.com', 'fastmail.com',
+  'earthlink.net', 'cox.net', 'charter.net', 'optimum.net', 'suddenlink.net',
+  'frontier.com', 'windstream.net', 'centurylink.net', 'q.com', 'gmail.co.in',
+]);
+
+function validateEmailAddress(email) {
+  if (!email || typeof email !== 'string') {
+    return { valid: false, reason: 'Email address is required' };
+  }
+
+  // Trim + strip surrounding angle brackets / whitespace.
+  let cleaned = email.trim();
+  if (cleaned.startsWith('<') && cleaned.endsWith('>')) {
+    cleaned = cleaned.slice(1, -1).trim();
+  }
+
+  if (cleaned.length === 0) {
+    return { valid: false, reason: 'Email address is empty' };
+  }
+  if (cleaned.length > 254) {
+    return { valid: false, reason: 'Email address is too long (max 254 chars)' };
+  }
+  if (cleaned.indexOf('@') === -1) {
+    return { valid: false, reason: 'Missing @ symbol' };
+  }
+
+  // Lowercase the domain part for RFC 5321 compliance (local-part is
+  // case-sensitive in theory but case-insensitive in practice for all
+  // mainstream providers).
+  const atIdx = cleaned.lastIndexOf('@');
+  const local = cleaned.slice(0, atIdx);
+  const domain = cleaned.slice(atIdx + 1).toLowerCase();
+  cleaned = local + '@' + domain;
+
+  if (!EMAIL_REGEX.test(cleaned)) {
+    return { valid: false, reason: 'Invalid email format' };
+  }
+
+  // Reject dot-only local parts or consecutive dots.
+  if (local.startsWith('.') || local.endsWith('.') || local.indexOf('..') !== -1) {
+    return { valid: false, reason: 'Invalid email local-part (dot placement)' };
+  }
+
+  // Reject domains that lack a valid TLD structure (regex already enforces
+  // this, but double-check the TLD length).
+  const tld = domain.slice(domain.lastIndexOf('.') + 1);
+  if (tld.length < 2) {
+    return { valid: false, reason: 'Invalid email domain (TLD too short)' };
+  }
+
+  return { valid: true, cleaned, domain };
+}
+
+// Convenience helper: returns true if the email's domain is in the common
+// consumer-domain set. Useful for UI badges / analytics (not a gate).
+function isCommonEmailDomain(email) {
+  if (!email || typeof email !== 'string') return false;
+  const at = email.lastIndexOf('@');
+  if (at === -1) return false;
+  return COMMON_EMAIL_DOMAINS.has(email.slice(at + 1).toLowerCase());
 }
 
 // ============================================================================
@@ -2037,6 +2159,9 @@ export {
   // Number validation
   validatePhoneNumber,
   getCountryCode,
+  // Email validation (Email Sending Module)
+  validateEmailAddress,
+  isCommonEmailDomain,
   // Dashboard
   getDashboardStats,
   // Activity log

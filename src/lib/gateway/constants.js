@@ -1,16 +1,18 @@
 // ============================================================================
-// Gateway Constants — Email-to-MMS Gateway Engine
+// Gateway Constants — Email Sending Module
 // ============================================================================
 // Centralized configuration for all gateway modules:
-//   • Carrier MMS gateway domain map (US carriers + international fallback)
-//   • Fast-Fail regex pre-filters (HLR Validator Module 1)
+//   • Carrier MMS gateway domain map (kept for reference / backward compat —
+//     no longer used by the Email Sending Module's primary path)
+//   • Fast-Fail regex pre-filters (legacy phone validation — kept for compat)
 //   • Circuit Breaker thresholds (Auto-Healing Module 5)
 //   • Token Bucket defaults (Round-Robin Module 3)
 //   • Queue / BullMQ naming conventions
 //   • Gemini AI polymorphism prompt template (Module 4)
 //
-// NON-DESTRUCTIVE: brand-new constants module. Pure data + config — no side
-// effects, no DB calls. Imported by every gateway service.
+// The Email Sending Module sends to ANY email address (Gmail, Yahoo, AOL,
+// Comcast, Outlook, any domain) with no carrier/MMS restrictions. Carrier
+// domains below are retained only for historical reference.
 // ============================================================================
 
 // ---------------------------------------------------------------------------
@@ -228,7 +230,7 @@ export const PROVIDER_WEIGHTS = {
 // uniqueness while keeping the core intent intact. This evades carrier spam
 // filters that fingerprint identical payloads.
 // ---------------------------------------------------------------------------
-export const AI_POLYMORPH_PROMPT = `You are an MMS message rewriter. Rewrite the following message so that it is structurally unique (different word choice, sentence structure, phrasing) while keeping the EXACT same core intent, meaning, and any URLs, phone numbers, or codes unchanged. Do not add or remove information. Do not add greetings or sign-offs unless they exist in the original. Output ONLY the rewritten message, nothing else.
+export const AI_POLYMORPH_PROMPT = `You are an email message rewriter. Rewrite the following message so that it is structurally unique (different word choice, sentence structure, phrasing) while keeping the EXACT same core intent, meaning, and any URLs, email addresses, or codes unchanged. Do not add or remove information. Do not add greetings or sign-offs unless they exist in the original. Output ONLY the rewritten message, nothing else.
 
 Original message:
 """
@@ -315,9 +317,14 @@ export const SEND_RESULT = {
   SENT: 'sent',
   FAILED: 'failed',
   BLOCKED_SAFETY: 'blocked_safety',
+  // Legacy MMS-specific results (kept for backward compatibility with
+  // existing delivery reports / UI):
   BLOCKED_LANDLINE: 'blocked_landline',
   BLOCKED_VOIP: 'blocked_voip',
   BLOCKED_INVALID: 'blocked_invalid',
+  // Email-specific results (Email Sending Module):
+  BLOCKED_INVALID_EMAIL: 'blocked_invalid_email',
+  BOUNCED: 'bounced',
   CIRCUIT_OPEN: 'circuit_open',
   QUEUED: 'queued',
 };

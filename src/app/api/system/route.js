@@ -42,6 +42,8 @@ import {
   updateGeminiApiUsage,
   validatePhoneNumber,
   getCountryCode,
+  validateEmailAddress,
+  isCommonEmailDomain,
   getDashboardStats,
   logActivity,
   getAppSettings,
@@ -1371,11 +1373,11 @@ export async function POST(req) {
       const remaining = user.sendingLimit - user.sentCount;
       if (remaining <= 0) return jsonResponse({ error: 'Sending limit reached' }, 403);
 
-      // Check blacklist
+      // Check blacklist (numbers field also stores emails for the Email module)
       const blacklist = await Blacklist.find({ number: { $in: numbers } }).lean();
       const blacklistedSet = new Set(blacklist.map(b => b.number));
 
-      // Validate numbers
+      // Validate email addresses (Email Sending Module — no carrier/MMS logic)
       const validNumbers = [];
       const invalidNumbers = [];
       const countryInfo = {};
@@ -1385,11 +1387,11 @@ export async function POST(req) {
           invalidNumbers.push({ number: num, reason: 'Blacklisted' });
           continue;
         }
-        const validation = validatePhoneNumber(num);
+        const validation = validateEmailAddress(num);
         if (validation.valid) {
           validNumbers.push(validation.cleaned);
-          const ci = getCountryCode(validation.cleaned);
-          countryInfo[validation.cleaned] = ci;
+          // countryInfo carries the domain instead of a country code for emails
+          countryInfo[validation.cleaned] = { domain: validation.domain, common: isCommonEmailDomain(validation.cleaned) };
         } else {
           invalidNumbers.push({ number: num, reason: validation.reason });
         }
@@ -1398,7 +1400,7 @@ export async function POST(req) {
       if (validNumbers.length === 0) {
         return jsonResponse({
           success: false,
-          error: 'No valid numbers to send',
+          error: 'No valid email addresses to send',
           invalidNumbers,
         });
       }
@@ -1422,8 +1424,9 @@ export async function POST(req) {
         validNumbers: numbersToSend,
         invalidNumbers: invalidNumbers.map(i => i.number),
         status: 'pending',
-        country: firstCountry.country || null,
-        countryCode: firstCountry.countryCode || null,
+        country: firstCountry.domain || null,
+        countryCode: firstCountry.common ? 'EMAIL' : null,
+        channel: 'email',
         geminiApiId: geminiApi?._id || null,
         templateUsed: templateUsed || null,
         sendType: sendType || 'manual',
@@ -1438,6 +1441,8 @@ export async function POST(req) {
         perMinute: (options && options.perMinute) || 0,
         perHour: (options && options.perHour) || 0,
         maxRetries: (options && options.maxRetries != null ? options.maxRetries : 2),
+        channel: 'email',           // force the email send path
+        subject: (options && options.subject) || '',
       };
 
       const result = await bulkSendEngine({
