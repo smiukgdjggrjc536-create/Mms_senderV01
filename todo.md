@@ -27,12 +27,14 @@
 - [x] "Connect Gmail" UI in SendTab (file upload → OAuth popup → result message)
 - [x] listSenders action filter by ownerId (user sees own + shared pool)
 
-## Phase 4: Build + Deploy
+## Phase 4: Build + Deploy  ✅
 - [x] Build test — compiled successfully (17 routes, 0 errors)
 - [x] Git push → Vercel auto-deploy (user panel) — LIVE (commit 8b8ee5b)
-- [x] Render auto-deploy (API gateway) — LIVE (track/open endpoint confirmed)
-- [ ] Netlify manual deploy (admin panel) — BLOCKED: token expired (nfp_…cca → 401)
+- [x] Render auto-deploy (API gateway) — LIVE (track/open endpoint confirmed, GIF verified)
+- [~] Netlify manual deploy (admin panel) — BLOCKED: token expired (needs new token from user)
 - [x] Verify Vercel + Render URLs live + report
+
+## ALL BM2 ULTRA FEATURES LIVE ON VERCEL (USER PANEL) ✅
 
 ## ⚠️ Netlify Admin Panel — Needs New Token
 The Netlify auth token (nfp_WgaFR5M4gTPDmf262U4dmG33FzVtGkR19cca) has EXPIRED (HTTP 401).
