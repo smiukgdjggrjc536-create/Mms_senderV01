@@ -27,14 +27,18 @@
 - [x] "Connect Gmail" UI in SendTab (file upload → OAuth popup → result message)
 - [x] listSenders action filter by ownerId (user sees own + shared pool)
 
-## Phase 4: Build + Deploy  ✅
+## Phase 4: Build + Deploy  ✅ ALL COMPLETE
 - [x] Build test — compiled successfully (17 routes, 0 errors)
-- [x] Git push → Vercel auto-deploy (user panel) — LIVE (commit 8b8ee5b)
-- [x] Render auto-deploy (API gateway) — LIVE (track/open endpoint confirmed, GIF verified)
-- [~] Netlify manual deploy (admin panel) — BLOCKED: token expired (needs new token from user)
-- [x] Verify Vercel + Render URLs live + report
+- [x] Git push → Vercel auto-deploy (user panel) — LIVE
+- [x] Render auto-deploy (API gateway) — LIVE (track/open confirmed)
+- [x] Netlify deploy (admin panel) — LIVE on NEW site (emailengineadminaccesspanel.netlify.app)
+  - New Netlify account + new site created (old account was deleted)
+  - @netlify/plugin-nextjs added to netlify.toml for CLI deploys
+  - 3 env vars set (MONGODB_URI, JWT_SECRET, NEXT_PUBLIC_PANEL_MODE)
+  - Admin login verified: 3-layer auth → MongoDB → SUCCESS
+- [x] Verify ALL 3 platform URLs live + report
 
-## ALL BM2 ULTRA FEATURES LIVE ON VERCEL (USER PANEL) ✅
+## ✅ ALL TASKS COMPLETE — 3 PLATFORMS LIVE
 
 ## ⚠️ Netlify Admin Panel — Needs New Token
 The Netlify auth token (nfp_WgaFR5M4gTPDmf262U4dmG33FzVtGkR19cca) has EXPIRED (HTTP 401).
