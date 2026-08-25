@@ -53,6 +53,8 @@ export async function POST(req) {
     // Accept `email` (primary) or `phoneNumber` (backward-compat alias).
     const rawEmail = body.email || body.phoneNumber;
     const { text } = body;
+    // Optional subject line (supports #RANDOM# token rotation).
+    const rawSubject = typeof body.subject === 'string' ? body.subject : '';
 
     if (!rawEmail || typeof rawEmail !== 'string') {
       return jsonResponse({ error: 'email is required' }, 400);
@@ -60,6 +62,12 @@ export async function POST(req) {
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return jsonResponse({ error: 'text is required and must be non-empty' }, 400);
     }
+
+    // Resolve #RANDOM# subject token for the preview so the admin sees a
+    // real example subject (mirrors services/bulkSendEmailMms.js logic).
+    const previewSubject = rawSubject.includes('#RANDOM#')
+      ? rawSubject.replace(/#RANDOM#/g, Math.random().toString(36).slice(2, 8))
+      : rawSubject;
 
     // Validate the email first so we can return a clean 422 for bad addresses.
     const check = validateEmailAddress(rawEmail);
@@ -84,6 +92,7 @@ export async function POST(req) {
     return jsonResponse({
       success: true,
       message: 'Email payload prepared (dry run — no message was sent)',
+      subject: previewSubject,
       payload,
     });
   } catch (err) {

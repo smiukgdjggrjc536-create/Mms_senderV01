@@ -1,25 +1,44 @@
 # MMS→Email Module Transformation Plan
 
-## Phase 1: Core Validation & Engine Transformation
-- [x] Explore codebase (complete from prior session)
-- [x] Read prepareMms.js, bulkSendEmailMms.js, queueRouter.js, constants.js, core.js
-- [x] Read sendCampaign action in system/route.js
-- [x] Add `validateEmailAddress()` to core.js (keep validatePhoneNumber for compat)
+## Phase 1: Core Validation & Engine Transformation  ✅
+- [x] Explore codebase
+- [x] Add `validateEmailAddress()` + `isCommonEmailDomain()` to core.js
 - [x] Create `services/prepareEmail.js` (safety + AI rewrite, NO carrier lookup)
-- [x] Transform `services/bulkSendEmailMms.js` → email-direct bulk engine
-- [x] Update `services/queueRouter.js` — add sendEmail alias, update comments
+- [x] Transform `services/bulkSendEmailMms.js` → email-direct bulk engine (subject + #RANDOM#)
+- [x] Update `bulkSendEngine` in core.js to route to email engine
 
-## Phase 2: API & Constants Transformation
-- [ ] Transform `sendCampaign` action in system/route.js — validate emails
-- [ ] Update `src/lib/gateway/constants.js` — update AI prompt, SEND_RESULT
-- [ ] Update preview route for email preview
+## Phase 2: API & Constants Transformation  ✅
+- [x] Transform `sendCampaign` action in system/route.js — validate emails, force channel:'email', pass subject
+- [x] Update preview route `/api/admin/gateway/preview` for email (validateEmailAddress + prepareEmailPayload)
+- [x] Add subject + #RANDOM# support to preview route (this session)
 
-## Phase 3: UI Transformation (Admin Panel only — NOT user panel)
-- [ ] Update AdminPanel.jsx labels MMS→Email (keep styling/theme unchanged)
+## Phase 3: Admin Panel Transformation  ✅
+- [x] GatewayLookup → Email Providers / Recipient Domains / Deliverability Tips
+- [x] GatewayPreview → email + subject fields
+- [x] GatewayLogs → email/recipient fields
+- [x] PROVIDER_TEMPLATES → email senders (SES/SendGrid/Postmark/Mailgun)
+- [x] FreeSmsGuideTab → Bengali Email Setup Guide
+- [x] GatewayOverview/Config/Dashboard labels → email
+- [x] Legacy COUNTRY_CODES/CARRIER_DOMAINS marked as dead code
 
-## Phase 4: Build, Deploy, Verify
-- [ ] Build Next.js app
+## Phase 3b: User Panel Transformation  ✅
+- [x] SendTab → email + subject + #RANDOM# (20 changes)
+- [x] CountrySupportTab → Email Deliverability Tab
+- [x] DashboardTab coverage → email domain stats
+- [x] UserLogin stat → "Any Email Domain"
+- [x] InfoTab → email descriptions
+- [x] InboxAutoReplyTab → email auto-reply (this session)
+- [x] Tab labels → email (Send Email, Send Email Campaign)
+- [x] Scheduled sends: placeholder/labels check
+
+## Phase 4: Backend Cleanup (lightweight — keep legacy as dead code)
+- [x] Mark `prepareMms.js`, `hlrValidator.js` as legacy (keep, don't break imports)
+- [ ] Verify no live code path calls removed MMS functions
+
+## Phase 5: Build, Deploy, Verify
+- [x] `npm run build` — compiled successfully (17 routes, 0 errors)
+- [x] Fixed AdminPanel.jsx line 2544 syntax corruption (prior-edit dup-line)
+- [ ] Commit & push to GitHub (branch gmail-module-transform)
 - [ ] Deploy to Netlify (admin panel)
-- [ ] Verify live
-- [ ] Update SYSTEM-STATE.md
-- [ ] Commit & push to GitHub
+- [ ] Verify all 3 platforms (Vercel/Render auto-deploy, Netlify manual)
+- [ ] Respond in Bengali with summary

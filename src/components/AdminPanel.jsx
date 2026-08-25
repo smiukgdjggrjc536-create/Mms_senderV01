@@ -68,7 +68,7 @@ function IconByName({ name, size, className }) {
 }
 
 // ============================================================================
-// COUNTRY + CARRIER REFERENCE DATA (used across gateway + validator panels)
+// LEGACY COUNTRY + CARRIER REFERENCE DATA (kept for reference; Email Sending Module uses any email domain)
 // ============================================================================
 const COUNTRY_CODES = [
   { code: '+1', dial: '1', name: 'USA / Canada', flag: '🇺🇸', mms: true, note: 'AT&T, Verizon, T-Mobile, Sprint, US Cellular, Cricket, MetroPCS, Google Fi, Mint, Xfinity, Tracfone, Straight Talk' },
@@ -107,7 +107,7 @@ const COUNTRY_CODES = [
   { code: '+64', dial: '64', name: 'New Zealand', flag: '🇳🇿', mms: true, note: 'Spark, Vodafone, 2degrees, Skinny' },
 ];
 
-// Carrier MMS gateway domain map (mirrors src/lib/gateway/constants.js CARRIER_MMS_DOMAINS)
+// Legacy carrier MMS domain map (kept for reference — Email Sending Module sends to any email domain)
 const CARRIER_DOMAINS = [
   { carrier: 'AT&T', domain: 'mms.att.net', country: 'USA', aliases: 'att, at&t, cingular' },
   { carrier: 'Verizon', domain: 'vzwpix.com', country: 'USA', aliases: 'verizon, vzw, xfinity' },
@@ -134,7 +134,7 @@ const CARRIER_DOMAINS = [
   { carrier: 'Wind', domain: 'mms.windmobile.ca', country: 'Canada', aliases: 'wind' },
 ];
 
-// Email-to-MMS sender providers
+// Email sender provider types (weights for round-robin routing)
 const PROVIDER_TYPES = [
   { id: 'GMAIL_OAUTH', label: 'Gmail OAuth2', countries: 'Global', weight: 5, note: 'Best deliverability — OAuth2 refresh-token based, no password needed' },
   { id: 'GMAIL_APP_PASSWORD', label: 'Gmail App Password', countries: 'Global', weight: 5, note: 'Easiest — use a Gmail App Password (16 chars). No OAuth setup needed. Enable 2FA, generate app password at myaccount.google.com/apppasswords' },
@@ -352,7 +352,7 @@ function AdminDashboard({ user, onLogout, onRefresh }) {
     { id: 'database', label: 'Database', icon: <Icon.Database /> },
     { id: 'blacklist', label: 'Blacklist', icon: <Icon.Lock /> },
     { id: 'alerts', label: 'Alerts', icon: <Icon.Bell /> },
-    { id: 'sms-guide', label: 'Free SMS Guide', icon: <Icon.Send /> },
+    { id: 'sms-guide', label: 'Email Setup Guide', icon: <Icon.Mail /> },
     { id: 'logs', label: 'Activity Logs', icon: <Icon.Log /> },
     { id: 'security', label: 'Admin Security', icon: <Icon.Shield /> },
     { id: 'settings', label: 'Settings', icon: <Icon.Settings /> },
@@ -727,37 +727,44 @@ function ApiManagementTab() {
   const [inlineGeminiForm, setInlineGeminiForm] = useState({ name: '', apiKey: '', model: 'gemini-2.5-flash', limit: 1500, priority: 0 });
   const [geminiSuccess, setGeminiSuccess] = useState(null); // { name } — shown as confirmation banner
 
-  // Provider templates — auto-fill endpoint + fields when provider changes
+  // Provider templates — auto-fill endpoint + fields when provider changes (email-oriented)
   const PROVIDER_TEMPLATES = {
-    twilio: {
-      label: 'Twilio',
-      endpoint: 'https://api.twilio.com/2010-04-01',
+    ses: {
+      label: 'Amazon SES',
+      endpoint: 'https://email.us-east-1.amazonaws.com',
       needsSecret: true,
-      secretLabel: 'Auth Token',
-      keyLabel: 'Account SID',
-      help: 'apiKey = Account SID, apiSecret = Auth Token, senderId = Twilio phone number (e.g. +1234567890)',
+      secretLabel: 'SMTP Password',
+      keyLabel: 'SMTP Username (AKIA...)',
+      help: 'apiKey = SES SMTP Username, apiSecret = SES SMTP Password, senderId = verified from-email. Use smtp.amazonaws.com:587 for SMTP.',
     },
-    vonage: {
-      label: 'Vonage / Nexmo',
-      endpoint: 'https://api.nexmo.com',
-      needsSecret: true,
-      secretLabel: 'API Signature Secret',
-      keyLabel: 'API Key',
-      help: 'apiKey = API Key, apiSecret = API Secret. Vonage Messages API v0.1 is used automatically.',
-    },
-    messagebird: {
-      label: 'MessageBird',
-      endpoint: 'https://rest.messagebird.com',
+    sendgrid: {
+      label: 'SendGrid',
+      endpoint: 'https://api.sendgrid.com/v3/mail/send',
       needsSecret: false,
-      keyLabel: 'Access Key (live_...)',
-      help: 'apiKey = MessageBird Access Key. senderId = originator (e.g. +1234567890 or a text sender).',
+      keyLabel: 'API Key (SG....)',
+      help: 'apiKey = SendGrid API Key. senderId = verified sender email. REST API used automatically.',
+    },
+    postmark: {
+      label: 'Postmark',
+      endpoint: 'https://api.postmarkapp.com/email',
+      needsSecret: false,
+      keyLabel: 'Server API Token',
+      help: 'apiKey = Postmark Server Token. senderId = confirmed sender signature email.',
+    },
+    mailgun: {
+      label: 'Mailgun',
+      endpoint: 'https://api.mailgun.net/v3',
+      needsSecret: true,
+      secretLabel: 'API Key (key-...)',
+      keyLabel: 'Domain',
+      help: 'apiKey = sending domain (e.g. mg.yourdomain.com), apiSecret = Mailgun API Key. senderId = from-email.',
     },
     custom: {
-      label: 'Custom HTTP',
+      label: 'Custom HTTP / SMTP',
       endpoint: '',
       needsSecret: false,
       keyLabel: 'API Key / Bearer Token',
-      help: 'Any HTTP endpoint. Body sent as JSON: {to, from, message, apiKey, sender}. Bearer auth header.',
+      help: 'Any HTTP email endpoint. Body sent as JSON: {to, from, subject, html, text, apiKey}. Bearer auth header. Or use SMTP relay via Gateway Accounts.',
     },
   };
 
@@ -918,7 +925,7 @@ function ApiManagementTab() {
         {showSenderForm && (
           <form onSubmit={addSender} className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 mb-3 space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Name (e.g. Twilio Primary)" value={senderForm.name} onChange={e => setSenderForm({...senderForm, name: e.target.value})} required />
+              <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Name (e.g. SES Primary)" value={senderForm.name} onChange={e => setSenderForm({...senderForm, name: e.target.value})} required />
               {/* Provider selector dropdown */}
               <select className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={senderForm.provider} onChange={e => onProviderChange(e.target.value)}>
                 {Object.entries(PROVIDER_TEMPLATES).map(([k, v]) => (
@@ -957,7 +964,7 @@ function ApiManagementTab() {
                   </div>
                   <div className="flex items-center gap-2">
                     {/* Test Send button */}
-                    <button onClick={() => setTestModal({ api: a, number: '', message: 'Test from MMS Sender' })} className="flex items-center gap-1 bg-cyan-600/80 hover:bg-cyan-500 text-white text-xs px-2.5 py-1 rounded-lg transition">
+                    <button onClick={() => setTestModal({ api: a, number: '', message: 'Test from Gmail Mailer' })} className="flex items-center gap-1 bg-cyan-600/80 hover:bg-cyan-500 text-white text-xs px-2.5 py-1 rounded-lg transition">
                       <Icon.Send /> Test
                     </button>
                     <label className="flex items-center gap-1 text-xs text-gray-500"><input type="checkbox" checked={a.autoRoute} onChange={async (e) => { await api('setAutoRoute', { id: a._id, type: 'sender', autoRoute: e.target.checked }); load(); }} />Auto</label>
@@ -987,7 +994,7 @@ function ApiManagementTab() {
           {senderApis.length === 0 && (
             <div className="bg-slate-900/30 border border-dashed border-slate-700 rounded-xl p-8 text-center">
               <p className="text-gray-500 text-sm mb-2">No sender APIs configured.</p>
-              <p className="text-gray-600 text-xs">Add a Twilio, Vonage, MessageBird, or custom HTTP sender to start sending real MMS/SMS.</p>
+              <p className="text-gray-600 text-xs">Add an Amazon SES, SendGrid, Postmark, Mailgun, or custom HTTP email sender to start sending real emails. For Gmail/Outlook/SMTP accounts, use the Gateway → Accounts tab.</p>
             </div>
           )}
         </div>
@@ -999,8 +1006,8 @@ function ApiManagementTab() {
           <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md space-y-3" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-bold text-white">Test Send — {testModal.api.name}</h3>
             <p className="text-xs text-gray-500">Provider: {(PROVIDER_TEMPLATES[testModal.api.provider] || {}).label || testModal.api.provider}</p>
-            <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Test number (E.164, e.g. +1234567890)" value={testModal.number} onChange={e => setTestModal({ ...testModal, number: e.target.value })} />
-            <textarea className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm h-20" placeholder="Test message" value={testModal.message} onChange={e => setTestModal({ ...testModal, message: e.target.value })} />
+            <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Test recipient email (e.g. test@example.com)" value={testModal.number} onChange={e => setTestModal({ ...testModal, number: e.target.value })} />
+            <textarea className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm h-20" placeholder="Test email body" value={testModal.message} onChange={e => setTestModal({ ...testModal, message: e.target.value })} />
             <div className="flex gap-2">
               <button onClick={runTest} disabled={testing === testModal.api._id || !testModal.number} className="flex-1 bg-gradient-to-r from-cyan-600 to-sky-600 hover:from-cyan-500 hover:to-sky-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg transition flex items-center justify-center gap-1.5">
                 {testing === testModal.api._id ? <><BtnSpinner /> Sending…</> : <><Icon.Send /> Send Test</>}
@@ -1559,7 +1566,7 @@ function BlacklistTab() {
 // ALERTS TAB
 // ============================================================================
 function AlertsTab() {
-  const [settings, setSettings] = useState({ alertWhatsapp: '', alertWhatsappApiKey: '', alertEmail: '', alertEmailApiKey: '', alertEmailFrom: 'alerts@mms-sender.local', alertOnCrash: true, alertOnApiDown: true, alertOnError: true });
+  const [settings, setSettings] = useState({ alertWhatsapp: '', alertWhatsappApiKey: '', alertEmail: '', alertEmailApiKey: '', alertEmailFrom: 'alerts@gmail-mailer.local', alertOnCrash: true, alertOnApiDown: true, alertOnError: true });
   const [loading, setLoading] = useState(true);
   const [testResult, setTestResult] = useState(null);
   const [testing, setTesting] = useState(false);
@@ -1744,7 +1751,7 @@ function AlertsTab() {
         <h3 className="text-lg font-semibold text-white">⚡ Alert Triggers</h3>
         <div className="space-y-2">
           <label className="flex items-center gap-3 text-sm text-gray-300 cursor-pointer p-2 rounded-lg hover:bg-slate-800/50 transition"><input type="checkbox" checked={settings.alertOnCrash} onChange={e => setSettings({...settings, alertOnCrash: e.target.checked})} className="w-4 h-4 accent-blue-600" />Alert on server crash</label>
-          <label className="flex items-center gap-3 text-sm text-gray-300 cursor-pointer p-2 rounded-lg hover:bg-slate-800/50 transition"><input type="checkbox" checked={settings.alertOnApiDown} onChange={e => setSettings({...settings, alertOnApiDown: e.target.checked})} className="w-4 h-4 accent-blue-600" />Alert when SMS API goes down</label>
+          <label className="flex items-center gap-3 text-sm text-gray-300 cursor-pointer p-2 rounded-lg hover:bg-slate-800/50 transition"><input type="checkbox" checked={settings.alertOnApiDown} onChange={e => setSettings({...settings, alertOnApiDown: e.target.checked})} className="w-4 h-4 accent-blue-600" />Alert when Email API goes down</label>
           <label className="flex items-center gap-3 text-sm text-gray-300 cursor-pointer p-2 rounded-lg hover:bg-slate-800/50 transition"><input type="checkbox" checked={settings.alertOnError} onChange={e => setSettings({...settings, alertOnError: e.target.checked})} className="w-4 h-4 accent-blue-600" />Alert on errors / bugs</label>
         </div>
       </div>
@@ -1766,7 +1773,7 @@ function AlertsTab() {
 }
 
 // ============================================================================
-// FREE SMS GUIDE TAB — international + Bangladesh, full Bengali guide
+// FREE EMAIL SETUP GUIDE TAB — Gmail, Outlook, SMTP — full Bengali guide
 // ============================================================================
 function FreeSmsGuideTab() {
   const [copied, setCopied] = useState(null);
@@ -1775,138 +1782,131 @@ function FreeSmsGuideTab() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h2 className="text-2xl font-bold text-white">ফ্রি SMS সেন্ডিং API গাইড</h2>
-        <p className="text-sm text-gray-400 mt-1">যেকোনো দেশে ফ্রি SMS পাঠানোর সম্পূর্ণ গাইড। কোনো ক্রেডিট কার্ড লাগবে না। নিচে ৩টি অপশন দেওয়া আছে — আন্তর্জাতিক (Textbelt), নিজের ফোন দিয়ে (TextBee), এবং বাংলাদেশের জন্য (Alpha SMS)।</p>
+        <h2 className="text-2xl font-bold text-white">ফ্রি ইমেইল সেন্ডিং সেটআপ গাইড</h2>
+        <p className="text-sm text-gray-400 mt-1">Gmail, Outlook, এবং Custom SMTP দিয়ে ফ্রি ইমেইল পাঠানোর সম্পূর্ণ গাইড। কোনো ক্রেডিট কার্ড লাগবে না। নিচে ৩টি অপশন দেওয়া আছে — Gmail OAuth2 (সবচেয়ে ভালো), Gmail App Password (সহজ), এবং Outlook Graph API (এন্টারপ্রাইজ)।</p>
       </div>
 
-      {/* ── Option 1: Textbelt (International — 100+ countries) ── */}
+      {/* ── Option 1: Gmail OAuth2 (Best deliverability) ── */}
       <div className="bg-slate-900/50 border border-emerald-800/40 rounded-xl p-6 space-y-4">
         <div className="flex items-center gap-3">
-          <span className="text-2xl">🌍</span>
+          <span className="text-2xl">🔒</span>
           <div>
-            <h3 className="text-lg font-semibold text-white">অপশন ১: Textbelt (আন্তর্জাতিক — সবচেয়ে সহজ) <span className="text-xs bg-emerald-900/50 text-emerald-300 px-2 py-0.5 rounded-full ml-1">100+ দেশ</span></h3>
-            <p className="text-xs text-emerald-400">ফ্রি টিয়ার: প্রতিদিন ১টি SMS ফ্রি · কোনো কার্ড নেই · ১০০+ দেশে কাজ করে</p>
+            <h3 className="text-lg font-semibold text-white">অপশন ১: Gmail OAuth2 (সবচেয়ে ভালো — ৫০০ ইমেইল/দিন) <span className="text-xs bg-emerald-900/50 text-emerald-300 px-2 py-0.5 rounded-full ml-1">Recommended</span></h3>
+            <p className="text-xs text-emerald-400">ফ্রি: প্রতিদিন ৫০০ ইমেইল · কোনো পাসওয়ার্ড লাগে না · OAuth2 টোকেন অটো-রিফ্রেশ</p>
           </div>
         </div>
 
         <div className="bg-slate-950/60 border border-slate-700/50 rounded-lg p-4 space-y-3">
-          <p className="text-sm text-gray-300">Textbelt একটি সহজ SMS API। ফ্রি API key <code className="bg-slate-800 px-1 rounded text-emerald-300">textbelt</code> ব্যবহার করে প্রতিদিন ১টি SMS ফ্রি পাঠানো যায় — যেকোনো দেশে। আরও বেশি পাঠাতে চাইলে কয়েক ডলারে কেনা যায় (পেমেন্ট ঐচ্ছিক)।</p>
+          <p className="text-sm text-gray-300">Gmail OAuth2 হলো সবচেয়ে নিরাপদ ও ভালো ডেলিভারিবিলিটির পদ্ধতি। এতে আপনার Gmail পাসওয়ার্ড কখনো স্টোর হয় না — শুধু OAuth2 রিফ্রেশ টোকেন থাকে যা অটোমেটিক রিফ্রেশ হয়। প্রতিদিন ৫০০ ইমেইল ফ্রি পাঠানো যায়।</p>
 
           <p className="text-sm font-semibold text-white pt-1">ধাপে ধাপে সেটআপ:</p>
           <ol className="list-decimal list-inside space-y-2 text-xs text-gray-300">
-            <li>এই API টি তৈরি করতে কোনো অ্যাকাউন্ট খোলার দরকার নেই! ফ্রি কী হলো শুধু শব্দটি: <code className="bg-slate-800 px-1 rounded text-emerald-300">textbelt</code></li>
-            <li>আপনার সিস্টেমে যান: <strong className="text-sky-400">API Management</strong> → <strong className="text-white">Add Sender API</strong> → provider হিসেবে <strong className="text-white">Custom HTTP</strong> সিলেক্ট করুন।</li>
-            <li>Endpoint হিসেবে বসান:
-              <button onClick={() => copy('https://textbelt.com/text', 'tb1')} className="text-green-300 hover:underline font-mono text-[11px] ml-1">https://textbelt.com/text</button>
-              {copied === 'tb1' && <span className="text-emerald-400"> ✓</span>}
+            <li><a href="https://console.cloud.google.com" target="_blank" rel="noopener" className="text-sky-400 hover:underline">Google Cloud Console</a> এ যান, একটি নতুন প্রোজেক্ট তৈরি করুন (বা সিলেক্ট করুন)।</li>
+            <li><strong className="text-white">APIs & Services → Credentials</strong> এ যান, <strong className="text-white">Create Credentials → OAuth client ID</strong> সিলেক্ট করুন।</li>
+            <li>Application type <strong className="text-white">Web Application</strong> সিলেক্ট করুন। Authorized redirect URI হিসেবে বসান:
+              <button onClick={() => copy('https://mmsadminpanellogin.netlify.app/api/auth/gmail/callback', 'g1')} className="text-green-300 hover:underline font-mono text-[11px] ml-1 block mt-1">https://mmsadminpanellogin.netlify.app/api/auth/gmail/callback</button>
+              {copied === 'g1' && <span className="text-emerald-400"> ✓</span>}
             </li>
-            <li><strong className="text-white">API Key</strong> ঘরে বসান: <button onClick={() => copy('textbelt', 'tb2')} className="bg-slate-800 px-1 rounded text-emerald-300 font-mono">textbelt</button> {copied === 'tb2' && <span className="text-emerald-400"> ✓</span>} (এটিই ফ্রি কী)</li>
-            <li>ফোন নম্বর অবশ্যই <strong className="text-amber-300">E.164 ফরম্যাটে</strong> হতে হবে — অর্থাৎ কান্ট্রি কোড সহ। যেমন: বাংলাদেশ <code className="bg-slate-800 px-1 rounded">+88017XXXXXXXX</code>, ভারত <code className="bg-slate-800 px-1 rounded">+91XXXXXXXXXX</code>, যুক্তরাষ্ট্র <code className="bg-slate-800 px-1 rounded">+1XXXXXXXXXX</code></li>
-            <li>Limit হিসেবে <strong className="text-white">1</strong> দিন (কারণ ফ্রি টিয়ারে প্রতিদিন ১টি)। Save করুন।</li>
+            <li><strong className="text-white">Client ID</strong> এবং <strong className="text-white">Client Secret</strong> কপি করুন।</li>
+            <li>Gmail API এনেবল করুন: <strong className="text-sky-400">APIs & Services → Library → Gmail API → Enable</strong></li>
+            <li>এই অ্যাডমিন প্যানেলে যান: <strong className="text-sky-400">Gateway → Accounts</strong> ট্যাব → <strong className="text-white">+ Add Gmail OAuth2 Account</strong> বাটন।</li>
+            <li>Client ID ও Client Secret পেস্ট করুন, তারপর <strong className="text-white">Connect Gmail</strong> ক্লিক করুন — Google লগইন পপআপ আসবে। অনুমতি দিন।</li>
+            <li>ব্যস! অ্যাকাউন্ট যুক্ত হয়ে গেছে। এখন এই অ্যাকাউন্ট থেকে অটোমেটিক ইমেইল পাঠানো যাবে।</li>
+          </ol>
+
+          <div className="flex items-start gap-2 text-xs text-amber-300 bg-amber-950/20 border border-amber-800/30 rounded-md p-3">
+            <span>⚠️</span>
+            <p><strong>সীমাবদ্ধতা:</strong> ফ্রি Gmail অ্যাকাউন্টে প্রতিদিন ৫০০ ইমেইল। Google Workspace অ্যাকাউন্টে ২০০০/দিন। বাল্ক স্প্যাম পাঠালে অ্যাকাউন্ট সাসপেন্ড হতে পারে — ধীরে ধীরে ওয়ার্মআপ করুন।</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Option 2: Gmail App Password (Simpler) ── */}
+      <div className="bg-slate-900/50 border border-sky-800/40 rounded-xl p-6 space-y-4">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">🔑</span>
+          <div>
+            <h3 className="text-lg font-semibold text-white">অপশন ২: Gmail App Password (সহজ সেটআপ)</h3>
+            <p className="text-xs text-sky-400">ফ্রি · ৫০০ ইমেইল/দিন · ১৬-ক্যারেক্টার পাসওয়ার্ড · SMTP দিয়ে</p>
+          </div>
+        </div>
+
+        <div className="bg-slate-950/60 border border-slate-700/50 rounded-lg p-4 space-y-3">
+          <p className="text-sm text-gray-300">App Password হলো Gmail এর একটি ১৬-ক্যারেক্টার পাসওয়ার্ড যা ২-Factor Authentication চালু থাকলে তৈরি করা যায়। এটি দিয়ে SMTP এর মাধ্যমে ইমেইল পাঠানো যায়। OAuth2 এর চেয়ে সহজ কিন্তু কিছুটা কম নিরাপদ।</p>
+
+          <p className="text-sm font-semibold text-white pt-1">ধাপে ধাপে সেটআপ:</p>
+          <ol className="list-decimal list-inside space-y-2 text-xs text-gray-300">
+            <li>Gmail অ্যাকাউন্টে <strong className="text-amber-300">2-Step Verification</strong> চালু করুন: <a href="https://myaccount.google.com/security" target="_blank" rel="noopener" className="text-sky-400 hover:underline">myaccount.google.com/security</a></li>
+            <li>Security পেজে <strong className="text-white">App Passwords</strong> এ যান।</li>
+            <li>App name দিন (যেমন "Gmail Mailer") এবং <strong className="text-white">Create</strong> ক্লিক করুন।</li>
+            <li>১৬-ক্যারেক্টার পাসওয়ার্ড কপি করুন।</li>
+            <li>এই প্যানেলে যান: <strong className="text-sky-400">Gateway → Accounts</strong> → <strong className="text-white">+ Add Account</strong> → Provider <strong className="text-white">GMAIL_APP_PASSWORD</strong> সিলেক্ট করুন।</li>
+            <li>Email = আপনার Gmail ঠিকানা, App Password = ১৬-ক্যারেক্টার পাসওয়ার্ড। Save করুন।</li>
+            <li>SMTP সেটিংস (অটো-ফিল হবে): <button onClick={() => copy('smtp.gmail.com:465', 'g2')} className="text-green-300 hover:underline font-mono text-[11px]">smtp.gmail.com:465 (SSL)</button> {copied === 'g2' && <span className="text-emerald-400"> ✓</span>}</li>
           </ol>
 
           <div className="bg-slate-800/50 border border-slate-700/30 rounded-md p-3 mt-2">
-            <p className="text-[10px] text-slate-500 uppercase mb-1">API রিকোয়েস্ট ফরম্যাট (রেফারেন্স):</p>
-            <pre className="text-[11px] text-green-300 font-mono overflow-x-auto">{`POST https://textbelt.com/text
-Body (form-data or JSON):
-{
-  "phone": "+8801712345678",
-  "message": "আপনার মেসেজ এখানে",
-  "key": "textbelt"
-}`}</pre>
-          </div>
-
-          <div className="flex items-start gap-2 text-xs text-amber-300 bg-amber-950/20 border border-amber-800/30 rounded-md p-3">
-            <span>⚠️</span>
-            <p><strong>সীমাবদ্ধতা:</strong> ফ্রি টিয়ারে প্রতিদিন মাত্র ১টি SMS। আরও বেশি পাঠাতে চাইলে <a href="https://textbelt.com/purchase" target="_blank" rel="noopener" className="underline">textbelt.com/purchase</a> থেকে ক্রেডিট কিনুন (খুব সস্তা — প্রায় $0.01/SMS)। বাল্ক স্প্যাম পাঠানো নিষিদ্ধ।</p>
+            <p className="text-[10px] text-slate-500 uppercase mb-1">SMTP রেফারেন্স:</p>
+            <pre className="text-[11px] text-green-300 font-mono overflow-x-auto">{`Host: smtp.gmail.com
+Port: 465 (SSL) or 587 (STARTTLS)
+User: your-email@gmail.com
+Pass: 16-char App Password
+From: your-email@gmail.com`}</pre>
           </div>
         </div>
       </div>
 
-      {/* ── Option 2: TextBee (Your own Android phone) ── */}
+      {/* ── Option 3: Outlook Graph API (Enterprise) ── */}
       <div className="bg-slate-900/50 border border-sky-800/40 rounded-xl p-6 space-y-4">
         <div className="flex items-center gap-3">
-          <span className="text-2xl">📱</span>
+          <span className="text-2xl">📧</span>
           <div>
-            <h3 className="text-lg font-semibold text-white">অপশন ২: TextBee (নিজের ফোন + SIM দিয়ে)</h3>
-            <p className="text-xs text-sky-400">৩০০ SMS/মাস ফ্রি · যেকোনো দেশের SIM কাজ করে · কোনো কার্ড নেই</p>
+            <h3 className="text-lg font-semibold text-white">অপশন ৩: Outlook Graph API (এন্টারপ্রাইজ — ১০,০০০/দিন)</h3>
+            <p className="text-xs text-sky-400">উচ্চ লিমিট · Microsoft 365 অ্যাকাউন্ট · MSAL OAuth2</p>
           </div>
         </div>
 
         <div className="bg-slate-950/60 border border-slate-700/50 rounded-lg p-4 space-y-3">
-          <p className="text-sm text-gray-300">TextBee আপনার Android ফোনকে একটি SMS গেটওয়ে বানিয়ে দেয়। আপনার ফোনে একটি SIM থাকলে এবং ইন্টারনেট চালু থাকলে — API এর মাধ্যমে সেই ফোন থেকে SMS পাঠানো যায়। <strong className="text-amber-300">কোনো ক্রেডিট কার্ড লাগে না</strong> — আপনার SIM এর SMS প্যাকেজই ব্যবহার হয়।</p>
+          <p className="text-sm text-gray-300">Microsoft Graph API দিয়ে Outlook/Hotmail/Live অ্যাকাউন্ট থেকে ইমেইল পাঠানো যায়। Microsoft 365 অ্যাকাউন্টে প্রতিদিন ১০,০০০ ইমেইল পাঠানো যায় — বাল্ক সেন্ডিং এর জন্য সেরা।</p>
 
           <p className="text-sm font-semibold text-white pt-1">ধাপে ধাপে সেটআপ:</p>
           <ol className="list-decimal list-inside space-y-2 text-xs text-gray-300">
-            <li><a href="https://textbee.dev" target="_blank" rel="noopener" className="text-sky-400 hover:underline">textbee.dev</a> এ যান এবং একটি ফ্রি অ্যাকাউন্ট খোলুন (শুধু ইমেইল দিয়ে, কোনো কার্ড নেই)।</li>
-            <li>Google Play Store থেকে <strong className="text-white">TextBee Gateway</strong> অ্যাপ ডাউনলোড করুন — যে ফোনটি গেটওয়ে হিসেবে ব্যবহার করবেন সেই ফোনে।</li>
-            <li>অ্যাপ ওপেন করুন, আপনার TextBee অ্যাকাউন্ট দিয়ে লগইন করুন, SMS পারমিশন দিন। ফোনটি অন থাকতে হবে এবং ইন্টারনেট কানেক্টেড থাকতে হবে।</li>
-            <li>TextBee ওয়েবসাইটে ড্যাশবোর্ড থেকে আপনার <strong className="text-white">API Key</strong> এবং <strong className="text-white">Device ID</strong> নিন।</li>
-            <li>এই অ্যাডমিন প্যানেলে যান: <strong className="text-sky-400">API Management</strong> → Add Sender API → provider <strong className="text-white">Custom HTTP</strong>।</li>
-            <li>Endpoint বসান: <button onClick={() => copy('https://api.textbee.dev/api/v1/gateway/send-sms', 'tb3')} className="text-green-300 hover:underline font-mono text-[11px]">https://api.textbee.dev/api/v1/gateway/send-sms</button> {copied === 'tb3' && <span className="text-emerald-400"> ✓</span>}</li>
-            <li><strong className="text-white">apiKey</strong> = আপনার TextBee API key। <strong className="text-white">apiSecret</strong> = আপনার Device ID। Limit দিন ৩০০। Save করুন।</li>
-          </ol>
-
-          <div className="flex items-start gap-2 text-xs text-amber-300 bg-amber-950/20 border border-amber-800/30 rounded-md p-3">
-            <span>⚠️</span>
-            <p><strong>সীমাবদ্ধতা:</strong> গেটওয়ে ফোনটি অনলাইন থাকতে হবে। SMS আপনার SIM প্যাকেজ থেকে যায় (SMS বান্ডল থাকলে ফ্রি)। ফ্রি প্ল্যানে ৩০০ SMS/মাস।</p>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Option 3: Alpha SMS (Bangladesh) ── */}
-      <div className="bg-slate-900/50 border border-sky-800/40 rounded-xl p-6 space-y-4">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">🇧🇩</span>
-          <div>
-            <h3 className="text-lg font-semibold text-white">অপশন ৩: Alpha SMS (শুধু বাংলাদেশের জন্য)</h3>
-            <p className="text-xs text-sky-400">বাংলাদেশি প্রোভাইডার · ট্রায়াল ক্রেডিট · কল করে অ্যাক্টিভেট</p>
-          </div>
-        </div>
-
-        <div className="bg-slate-950/60 border border-slate-700/50 rounded-lg p-4 space-y-3">
-          <p className="text-xs text-gray-400">Alpha SMS বাংলাদেশের একটি বাল্ক SMS প্রোভাইডার। রেজিস্টার করলে ট্রায়াল ব্যালেন্স (ফ্রি ক্রেডিট) দেয়। আন্তর্জাতিক কার্ড লাগে না — পরে bKash দিয়ে রিচার্জ করা যায়।</p>
-
-          <p className="text-sm font-semibold text-white pt-1">ধাপে ধাপে সেটআপ:</p>
-          <ol className="list-decimal list-inside space-y-2 text-xs text-gray-300">
-            <li><a href="https://sms.net.bd" target="_blank" rel="noopener" className="text-sky-400 hover:underline">sms.net.bd</a> এ যান এবং বাংলাদেশি নম্বর দিয়ে রেজিস্টার করুন।</li>
-            <li><strong className="text-amber-300">তাদের সাপোর্টে কল করুন</strong>: <button onClick={() => copy('+88 09613 250 250', 'tb4')} className="text-green-300 hover:underline font-mono">+88 09613 250 250</button> {copied === 'tb4' && <span className="text-emerald-400"> ✓</span>} — ট্রায়াল ব্যালেন্সের জন্য বলুন। সাধারণত ফ্রি ক্রেডিট দেয়।</li>
-            <li>অনুমোদন পেলে ড্যাশবোর্ড থেকে <strong className="text-white">API Key</strong> নিন।</li>
-            <li>এই প্যানেলে: <strong className="text-sky-400">API Management</strong> → Add Sender API → <strong className="text-white">Custom HTTP</strong>।</li>
-            <li>Endpoint বসান: <button onClick={() => copy('https://api.sms.net.bd/sendsms', 'tb5')} className="text-green-300 hover:underline font-mono text-[11px]">https://api.sms.net.bd/sendsms</button> {copied === 'tb5' && <span className="text-emerald-400"> ✓</span>}</li>
-            <li><strong className="text-white">apiKey</strong> = আপনার Alpha SMS API key। Save করুন।</li>
+            <li><a href="https://entra.microsoft.com" target="_blank" rel="noopener" className="text-sky-400 hover:underline">Microsoft Entra (Azure AD)</a> এ যান, নতুন App Registration তৈরি করুন।</li>
+            <li>Platform <strong className="text-white">Web</strong> → Redirect URI বসান: <button onClick={() => copy('https://mmsadminpanellogin.netlify.app/api/auth/gmail/callback', 'g3')} className="text-green-300 hover:underline font-mono text-[11px]">https://mmsadminpanellogin.netlify.app/api/auth/gmail/callback</button> {copied === 'g3' && <span className="text-emerald-400"> ✓</span>}</li>
+            <li>API Permissions → <strong className="text-white">Mail.Send</strong> (Delegated) যোগ করুন এবং admin consent দিন।</li>
+            <li><strong className="text-white">Client ID</strong> ও <strong className="text-white">Client Secret</strong> কপি করুন।</li>
+            <li>এই প্যানেলে: <strong className="text-sky-400">Gateway → Accounts</strong> → <strong className="text-white">+ Add Account</strong> → Provider <strong className="text-white">OUTLOOK_GRAPH</strong>।</li>
+            <li>Client ID, Client Secret, Email বসান। Save করুন।</li>
           </ol>
         </div>
       </div>
 
-      {/* ── How to send to ANY country ── */}
+      {/* ── Email best practices ── */}
       <div className="bg-blue-950/20 border border-blue-800/40 rounded-xl p-6 space-y-3">
-        <h3 className="text-lg font-semibold text-white">🌐 যেকোনো দেশে SMS কিভাবে পাঠাবেন</h3>
-        <p className="text-xs text-gray-300 leading-relaxed">SMS পাঠানোর সময় ফোন নম্বর অবশ্যই <strong className="text-blue-300">E.164 ফরম্যাটে</strong> হতে হবে। এর মানে হলো: <code className="bg-slate-800 px-1 rounded text-blue-300">+</code> চিহ্ন + কান্ট্রি কোড + ফোন নম্বর (শূন্য ছাড়া)।</p>
+        <h3 className="text-lg font-semibold text-white">🌐 ইমেইল ডেলিভারিবিলিটি বেস্ট প্র্যাকটিস</h3>
+        <p className="text-xs text-gray-300 leading-relaxed">ইমেইল স্প্যাম ফোল্ডারে যাওয়া এড়াতে এই নিয়মগুলো মেনে চলুন। এগুলো এন্টারপ্রাইজ লেভেলের ডেলিভারিবিলিটি নিশ্চিত করবে।</p>
 
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-slate-700">
-                <th className="text-left py-2 px-3 text-slate-400 font-medium">দেশ</th>
-                <th className="text-left py-2 px-3 text-slate-400 font-medium">কান্ট্রি কোড</th>
-                <th className="text-left py-2 px-3 text-slate-400 font-medium">লোকাল নম্বর</th>
-                <th className="text-left py-2 px-3 text-slate-400 font-medium">E.164 ফরম্যাট</th>
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">প্রায়োরিটি</th>
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">টিপ</th>
               </tr>
             </thead>
             <tbody className="text-gray-300">
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3">🇧🇩 বাংলাদেশ</td><td className="py-2 px-3 text-blue-300">+880</td><td className="py-2 px-3 font-mono">01712345678</td><td className="py-2 px-3 font-mono text-green-300">+8801712345678</td></tr>
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3">🇮🇳 ভারত</td><td className="py-2 px-3 text-blue-300">+91</td><td className="py-2 px-3 font-mono">09876543210</td><td className="py-2 px-3 font-mono text-green-300">+919876543210</td></tr>
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3">🇺🇸 যুক্তরাষ্ট্র</td><td className="py-2 px-3 text-blue-300">+1</td><td className="py-2 px-3 font-mono">5551234567</td><td className="py-2 px-3 font-mono text-green-300">+15551234567</td></tr>
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3">🇬🇧 যুক্তরাজ্য</td><td className="py-2 px-3 text-blue-300">+44</td><td className="py-2 px-3 font-mono">07123456789</td><td className="py-2 px-3 font-mono text-green-300">+447123456789</td></tr>
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3">🇸🇦 সৌদি আরব</td><td className="py-2 px-3 text-blue-300">+966</td><td className="py-2 px-3 font-mono">0551234567</td><td className="py-2 px-3 font-mono text-green-300">+966551234567</td></tr>
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3">🇲🇾 মালয়েশিয়া</td><td className="py-2 px-3 text-blue-300">+60</td><td className="py-2 px-3 font-mono">0123456789</td><td className="py-2 px-3 font-mono text-green-300">+60123456789</td></tr>
-              <tr><td className="py-2 px-3">🇦🇪 আমিরাত</td><td className="py-2 px-3 text-blue-300">+971</td><td className="py-2 px-3 font-mono">0501234567</td><td className="py-2 px-3 font-mono text-green-300">+971501234567</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-rose-400 font-bold">CRITICAL</td><td className="py-2 px-3">প্রতিটি সেন্ডিং ডোমেইনে SPF, DKIM, DMARC DNS রেকর্ড সেট করুন।</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-rose-400 font-bold">CRITICAL</td><td className="py-2 px-3">নতুন অ্যাকাউন্ট ধীরে ওয়ার্মআপ করুন — প্রথম দিন ২০-৫০ ইমেইল, ২ সপ্তাহে বাড়ান।</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-amber-400 font-bold">HIGH</td><td className="py-2 px-3">সাবজেক্ট লাইনে #RANDOM# টোকেন ব্যবহার করুন — স্প্যাম ফিল্টার এড়ানো যাবে।</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-amber-400 font-bold">HIGH</td><td className="py-2 px-3">AI Polymorph চালু রাখুন — প্রতিটি ইমেইল বডি ইউনিক হবে।</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-amber-400 font-bold">HIGH</td><td className="py-2 px-3">ব্যাচ সাইজ ≤৫০ রাখুন, ব্যাচের মধ্যে ৬০-১২০ সেকেন্ড র‍্যান্ডম ডিলে দিন।</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-sky-400 font-bold">MEDIUM</td><td className="py-2 px-3">HTML এর সাথে plain-text alternative রাখুন — স্প্যাম স্কোর কমে।</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-sky-400 font-bold">MEDIUM</td><td className="py-2 px-3">স্প্যাম ট্রিগার শব্দ এড়ান: FREE, GUARANTEE, ACT NOW, ALL CAPS।</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-sky-400 font-bold">MEDIUM</td><td className="py-2 px-3">সবসময় unsubscribe link রাখুন — CAN-SPAM/GDPR কমপ্লায়েন্স।</td></tr>
+              <tr><td className="py-2 px-3 text-slate-400 font-bold">LOW</td><td className="py-2 px-3">Bounce rate ৩% এর নিচে রাখুন। ৫% এর বেশি হলে অ্যাকাউন্ট সাসপেন্ড করুন।</td></tr>
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-gray-400 mt-2">নিয়ম: লোকাল নম্বরের শুরুর <strong className="text-white">0</strong> বাদ দিন, তার আগে <strong className="text-white">+ এবং কান্ট্রি কোড</strong> বসান। এই সিস্টেম নম্বরগুলো আপনার ক্যাম্পেইনে এই ফরম্যাটে দিলেই হবে।</p>
-        <p className="text-xs text-emerald-300">✅ আরও কান্ট্রি কোড: <a href="https://countrycode.org" target="_blank" rel="noopener" className="underline">countrycode.org</a> থেকে যেকোনো দেশের কোড বের করুন।</p>
       </div>
 
       {/* ── Comparison ── */}
@@ -1917,18 +1917,18 @@ Body (form-data or JSON):
             <thead>
               <tr className="border-b border-slate-700">
                 <th className="text-left py-2 px-3 text-slate-400 font-medium">ফিচার</th>
-                <th className="text-left py-2 px-3 text-slate-400 font-medium">🌍 Textbelt</th>
-                <th className="text-left py-2 px-3 text-slate-400 font-medium">📱 TextBee</th>
-                <th className="text-left py-2 px-3 text-slate-400 font-medium">🇧🇩 Alpha SMS</th>
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">🔒 Gmail OAuth2</th>
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">🔑 App Password</th>
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">📧 Outlook Graph</th>
               </tr>
             </thead>
             <tbody className="text-gray-300">
               <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">কার্ড লাগে?</td><td className="py-2 px-3 text-emerald-400">❌ না</td><td className="py-2 px-3 text-emerald-400">❌ না</td><td className="py-2 px-3 text-emerald-400">❌ না</td></tr>
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">ফ্রি কোটা</td><td className="py-2 px-3">১ SMS/দিন</td><td className="py-2 px-3">৩০০ SMS/মাস</td><td className="py-2 px-3">ট্রায়াল ক্রেডিট</td></tr>
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">দেশ</td><td className="py-2 px-3 text-emerald-400">১০০+ দেশ</td><td className="py-2 px-3">যেকোনো (SIM অনুযায়ী)</td><td className="py-2 px-3">শুধু বাংলাদেশ</td></tr>
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">Android ফোন লাগে?</td><td className="py-2 px-3 text-emerald-400">❌ না</td><td className="py-2 px-3 text-amber-400">✅ হ্যাঁ</td><td className="py-2 px-3 text-emerald-400">❌ না</td></tr>
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">সেটআপ সময়</td><td className="py-2 px-3">২ মিনিট</td><td className="py-2 px-3">১০ মিনিট</td><td className="py-2 px-3">১ দিন (কলের জন্য)</td></tr>
-              <tr><td className="py-2 px-3 text-slate-500">ভালো কিসের জন্য</td><td className="py-2 px-3">দ্রুত টেস্ট, আন্তর্জাতিক</td><td className="py-2 px-3">ফ্রি বাল্ক, যেকোনো দেশ</td><td className="py-2 px-3">বাংলাদেশ প্রোডাকশন</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">ফ্রি কোটা</td><td className="py-2 px-3">৫০০/দিন</td><td className="py-2 px-3">৫০০/দিন</td><td className="py-2 px-3">১০,০০০/দিন</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">নিরাপত্তা</td><td className="py-2 px-3 text-emerald-400">সেরা</td><td className="py-2 px-3 text-amber-400">ভালো</td><td className="py-2 px-3 text-emerald-400">সেরা</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">সেটআপ সময়</td><td className="py-2 px-3">৫ মিনিট</td><td className="py-2 px-3">২ মিনিট</td><td className="py-2 px-3">১০ মিনিট</td></tr>
+              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">টোকেন রিফ্রেশ</td><td className="py-2 px-3 text-emerald-400">✅ অটো</td><td className="py-2 px-3 text-amber-400">না</td><td className="py-2 px-3 text-emerald-400">✅ অটো</td></tr>
+              <tr><td className="py-2 px-3 text-slate-500">ভালো কিসের জন্য</td><td className="py-2 px-3">ডেলিভারিবিলিটি</td><td className="py-2 px-3">দ্রুত সেটআপ</td><td className="py-2 px-3">বাল্ক/এন্টারপ্রাইজ</td></tr>
             </tbody>
           </table>
         </div>
@@ -1936,12 +1936,13 @@ Body (form-data or JSON):
 
       {/* ── How to add in this system ── */}
       <div className="bg-blue-950/20 border border-blue-800/40 rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-white mb-2">📌 এই সিস্টেমে কিভাবে API যোগ করবেন</h3>
-        <p className="text-xs text-gray-300 leading-relaxed">API key পাওয়ার পর: <strong className="text-sky-400">API Management</strong> ট্যাব → <strong className="text-white">Add Sender API</strong> → <strong className="text-white">Custom HTTP</strong> সিলেক্ট করুন → endpoint URL ও API key পেস্ট করুন → limit দিন → save করুন। সিস্টেম অটোমেটিক ক্যাম্পেইন ও অটো-রিপ্লাইতে এটি ব্যবহার করবে। টেস্ট করতে চাইলে API Management এ প্রতিটি API এর পাশে <strong className="text-white">Test</strong> বাটন আছে।</p>
+        <h3 className="text-lg font-semibold text-white mb-2">📌 এই সিস্টেমে কিভাবে অ্যাকাউন্ট যোগ করবেন</h3>
+        <p className="text-xs text-gray-300 leading-relaxed">অ্যাকাউন্ট সেটআপের পর: <strong className="text-sky-400">Gateway</strong> ট্যাব → <strong className="text-white">Accounts</strong> সাব-ট্যাব → <strong className="text-white">+ Add Account</strong> বাটন → Provider সিলেক্ট করুন → credentials পেস্ট করুন → Save। সিস্টেম অটোমেটিক ক্যাম্পেইন ও অটো-রিপ্লাইতে এই অ্যাকাউন্ট ব্যবহার করবে। টেস্ট করতে চাইলে Accounts এ প্রতিটি অ্যাকাউন্টের পাশে <strong className="text-white">Test</strong> বাটন আছে।</p>
       </div>
     </div>
   );
 }
+
 
 // ============================================================================
 // LOGS TAB
@@ -2117,7 +2118,7 @@ function SettingsTab() {
             </select>
           </div>
         </div>
-        <h3 className="text-lg font-semibold text-gray-300 pt-4">MMS Configuration</h3>
+        <h3 className="text-lg font-semibold text-gray-300 pt-4">Email Configuration</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="text-gray-400 text-sm font-medium block mb-1.5">Default User Limit</label>
@@ -2149,23 +2150,21 @@ function SettingsTab() {
 }
 
 // ============================================================================
-// GATEWAY ENGINE DASHBOARD TAB (Phase 4 UI — Email-to-MMS Gateway)
+// GATEWAY ENGINE DASHBOARD TAB (Email Gateway Engine)
 // ============================================================================
-// This component provides the admin UI for the Email-to-MMS Gateway engine
+// This component provides the admin UI for the Email Gateway engine
 // that was built across Phases 1-4. It calls the REST API endpoints under
 // /api/admin/gateway/* (and /api/admin/system/deploy-hook) to display:
 //
-//   • Overview  — live health metrics (account pool, throughput, carrier
-//                 cache, delivery pipeline, config summary)
+//   • Overview  — live health metrics (account pool, throughput, delivery
+//                 pipeline, config summary)
 //   • Config    — edit SystemConfig (routing delay, batch size, phishing
-//                 filter, Gemini key, carrier lookup key, Render deploy URL,
-//                 blocked keywords)
+//                 filter, Gemini key, Render deploy URL, blocked keywords)
 //   • Accounts  — email account pool management (add account, view health,
 //                 reset cooldown)
 //   • Logs      — unified live log feed (activity + delivery reports)
-//   • Preview   — dry-run MMS payload preview (safety filter + AI rewrite +
-//                 carrier lookup)
-//   • Deploy    — trigger Render.com deploy hook + clear carrier cache
+//   • Preview   — dry-run email payload preview (safety filter + AI rewrite)
+//   • Deploy    — trigger Render.com deploy hook + clear cache
 //
 // The gatewayApi() helper below calls the REST endpoints with credentials
 // (the JWT cookie is sent automatically via credentials: 'include').
@@ -2200,8 +2199,8 @@ function DashboardTab() {
   const gradeColor = grade === 'A' ? 'emerald' : grade === 'B' ? 'sky' : grade === 'C' ? 'amber' : 'rose';
   const liveUsers = s.activeUsers || 0;
   const totalUsers = s.totalUsers || 0;
-  const totalSms = s.totalSms || 0;
-  const todaySms = s.todaySms || 0;
+  const totalSms = s.totalEmails || s.totalSms || 0;
+  const todaySms = s.todayEmails || s.todaySms || 0;
   const successRate = s.successRate || 0;
   const apiKeys = s.totalApiKeys || 0;
   const activeCampaigns = s.activeCampaigns || 0;
@@ -2263,7 +2262,7 @@ function DashboardTab() {
           </div>
         </DetailBox>
 
-        <DetailBox title="Throughput" subtitle="Message delivery pipeline" icon="bolt" accent="amber">
+        <DetailBox title="Throughput" subtitle="Email delivery pipeline" icon="bolt" accent="amber">
           <div className="mt-3">
             <RadialGauge value={successRate} max={100} label="Success %" size={120} />
             <div className="grid grid-cols-2 gap-2 mt-3 text-center">
@@ -2541,10 +2540,10 @@ function GatewayDashboardTab() {
     { id: 'overview', label: 'Overview', icon: 'chart' },
     { id: 'config', label: 'Gateway Settings', icon: 'settings', primary: true },
     { id: 'accounts', label: 'Email Accounts', icon: 'mail' },
-    { id: 'validator', label: 'HLR Validator', icon: 'check' },
-    { id: 'lookup', label: 'Provider & Country', icon: 'globe' },
+    { id: 'validator', label: 'Email Validator', icon: 'check' },
+    { id: 'lookup', label: 'Providers & Limits', icon: 'globe' },
     { id: 'logs', label: 'Live Logs', icon: 'list' },
-    { id: 'preview', label: 'MMS Preview', icon: 'eye' },
+    { id: 'preview', label: 'Email Preview', icon: 'eye' },
     { id: 'deploy', label: 'Deploy', icon: 'rocket' },
   ];
   return (
@@ -2555,8 +2554,8 @@ function GatewayDashboardTab() {
           <IconByName name="bolt" size={20} className="text-violet-400" />
         </div>
         <div>
-          <p className="text-white font-bold text-sm flex items-center gap-2">Email-to-MMS Gateway <span className="text-[9px] px-2 py-0.5 rounded-full bg-violet-500/30 text-violet-200 uppercase tracking-wider font-bold">Primary</span></p>
-          <p className="text-xs text-slate-400">Core delivery engine — carrier routing, HLR validation, AI rewriting, proxy masking</p>
+          <p className="text-white font-bold text-sm flex items-center gap-2">Email Gateway Engine <span className="text-[9px] px-2 py-0.5 rounded-full bg-violet-500/30 text-violet-200 uppercase tracking-wider font-bold">Primary</span></p>
+          <p className="text-xs text-slate-400">Core email delivery engine — account pool routing, email validation, AI rewriting, proxy masking</p>
         </div>
       </div>
       {/* Sub-tab nav */}
@@ -2594,7 +2593,7 @@ function GatewayOverview() {
   const h = health || {};
   const pool = h.accountPool || {};
   const throughput = h.throughput || {};
-  const carrier = h.carrierCache || {};
+  const valCache = h.carrierCache || h.validationCache || {};
   const delivery = h.delivery24h || {};
 
   return (
@@ -2602,7 +2601,7 @@ function GatewayOverview() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Kpi label="Accounts Online" value={`${pool.active || 0}/${pool.total || 0}`} icon="mail" accent="emerald" sub={`${pool.cooldown || 0} cooling down`} />
         <Kpi label="Throughput /min" value={throughput.lastMinute || 0} icon="bolt" accent="amber" sub={`${throughput.lastHour || 0} / hour`} />
-        <Kpi label="Carrier Cache Hit" value={`${(carrier.hitRate || 0).toFixed(0)}%`} icon="database" accent="violet" sub={`${carrier.size || 0} entries`} />
+        <Kpi label="Validation Cache" value={`${(valCache.hitRate || 0).toFixed(0)}%`} icon="database" accent="violet" sub={`${valCache.size || 0} entries`} />
         <Kpi label="24h Delivery" value={`${(delivery.successRate || 0).toFixed(1)}%`} icon="check" accent="sky" sub={`${delivery.total || 0} sent`} />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -2794,8 +2793,8 @@ function GatewayConfig() {
               <input type="number" value={form.batchSizePerAccount} onChange={e => setForm({ ...form, batchSizePerAccount: Number(e.target.value) })} min="1" max="100" className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm" />
             </div>
             <div>
-              <label className="text-xs text-slate-400 font-semibold">Carrier Lookup API Key (HLR)</label>
-              <input value={form.carrierLookupApiKey} onChange={e => setForm({ ...form, carrierLookupApiKey: e.target.value })} placeholder="sk_..." type="password" className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
+              <label className="text-xs text-slate-400 font-semibold">Email Validation API Key (optional — Abstract/Hunter)</label>
+              <input value={form.carrierLookupApiKey} onChange={e => setForm({ ...form, carrierLookupApiKey: e.target.value })} placeholder="sk_... (optional)" type="password" className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
             </div>
             <div>
               <label className="text-xs text-slate-400 font-semibold">Render Deploy Webhook URL</label>
@@ -3006,7 +3005,7 @@ function GatewayAccounts() {
           action: 'sendTestEmail',
           accountId: testEmailModal.account._id,
           toEmail,
-          subject: testEmailModal.subject || 'MMS Gateway — Test Email ✉️',
+          subject: testEmailModal.subject || 'Gmail Mailer — Test Email ✉️',
           message: testEmailModal.message || '',
         }),
       });
@@ -3232,7 +3231,7 @@ function GatewayAccounts() {
               </div>
               <div>
                 <label className="text-xs text-slate-400 font-semibold">Subject (optional)</label>
-                <input value={testEmailModal.subject || ''} onChange={e => setTestEmailModal({ ...testEmailModal, subject: e.target.value })} placeholder="MMS Gateway — Test Email ✉️" className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm" />
+                <input value={testEmailModal.subject || ''} onChange={e => setTestEmailModal({ ...testEmailModal, subject: e.target.value })} placeholder="Gmail Mailer — Test Email ✉️" className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm" />
               </div>
               <div>
                 <label className="text-xs text-slate-400 font-semibold">Message (optional)</label>
@@ -3259,39 +3258,47 @@ function GatewayAccounts() {
   );
 }
 
-// ── HLR Validator (test number → carrier resolution) ─────────────────────
+// ── Email Validator (test email → validation + AI rewrite) ─────────────────────
 function GatewayValidator() {
-  const [number, setNumber] = useState('');
+  const [email, setEmail] = useState('');
   const [text, setText] = useState('');
   const [result, setResult] = useState(null);
   const [testing, setTesting] = useState(false);
   const [error, setError] = useState('');
 
-  const country = resolveCountryFromNumber(number);
   const run = async () => {
-    if (!number.trim()) { setError('Enter a phone number'); return; }
+    if (!email.trim()) { setError('Enter an email address'); return; }
     setTesting(true); setError(''); setResult(null);
     try {
-      const d = await gatewayApi('/admin/gateway/preview', { method: 'POST', body: JSON.stringify({ phoneNumber: number, text: text || 'Test MMS message from validator' }) });
+      const d = await gatewayApi('/admin/gateway/preview', { method: 'POST', body: JSON.stringify({ email, text: text || 'Test email message from validator' }) });
       if (d.success || d.ok) setResult(d);
       else setError(d.error || d.message || 'Validation failed');
     } catch (e) { setError(e.message); }
     setTesting(false);
   };
 
+  // Quick client-side email syntax preview (the backend does the full check)
+  const emailPreview = (() => {
+    const v = email.trim();
+    if (!v) return null;
+    const m = v.match(/^[^\s@]+@([^\s@]+\.[^\s@]+)$/i);
+    if (!m) return { valid: false, domain: '—', reason: 'Invalid syntax' };
+    return { valid: true, domain: m[1].toLowerCase() };
+  })();
+
   return (
     <div className="space-y-4">
-      <DetailBox title="HLR Carrier Validator" subtitle="Test any number → carrier, MMS domain, E.164, line type, AI rewrite" icon="check" accent="emerald" live>
+      <DetailBox title="Email Validator" subtitle="Test any email → validation, domain extraction, AI rewrite, safety check" icon="check" accent="emerald" live>
         <div className="mt-3 space-y-3">
           <div>
-            <label className="text-xs text-slate-400 font-semibold">Phone Number</label>
-            <input value={number} onChange={e => setNumber(e.target.value)} placeholder="+1 555 123 4567" className="w-full mt-1 px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white text-lg font-mono" />
-            {country && number.length > 3 && (
+            <label className="text-xs text-slate-400 font-semibold">Email Address</label>
+            <input value={email} onChange={e => setEmail(e.target.value)} placeholder="recipient@example.com" className="w-full mt-1 px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white text-lg font-mono" />
+            {emailPreview && email.length > 3 && (
               <div className="mt-2 flex items-center gap-2 text-sm bg-white/5 rounded-lg px-3 py-2">
-                <span className="text-2xl">{country.flag}</span>
+                <span className="text-2xl">📧</span>
                 <div>
-                  <p className="text-white font-bold">{country.name}</p>
-                  <p className="text-xs text-slate-500">Code: +{country.dial} • MMS: {country.mms ? '✓ supported' : '⚠ check carrier'}</p>
+                  <p className="text-white font-bold">{emailPreview.domain}</p>
+                  <p className="text-xs text-slate-500">{emailPreview.valid ? '✓ Valid syntax — domain extracted' : '⚠ ' + emailPreview.reason}</p>
                 </div>
               </div>
             )}
@@ -3301,7 +3308,7 @@ function GatewayValidator() {
             <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Enter a test message to also see AI rewriting + safety check" rows={2} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm" />
           </div>
           <button onClick={run} disabled={testing} className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold disabled:opacity-50 flex items-center justify-center gap-2">
-            {testing ? <><BtnSpinner /> Validating via HLR...</> : <><IconByName name="check" size={18} /> Validate Number + Resolve Carrier</>}
+            {testing ? <><BtnSpinner /> Validating email…</> : <><IconByName name="check" size={18} /> Validate Email + Preview Payload</>}
           </button>
         </div>
       </DetailBox>
@@ -3309,33 +3316,35 @@ function GatewayValidator() {
       {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4 text-rose-300 text-sm"><IconByName name="alert" size={16} className="inline mr-2" />{error}</div>}
 
       {result && (
-        <DetailBox title="Validation Result" subtitle="Full carrier resolution pipeline" icon="info" accent="violet">
+        <DetailBox title="Validation Result" subtitle="Full email preparation pipeline (dry run)" icon="info" accent="violet">
           <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {[
-              ['Status', result.ok ? '✓ Valid' : '✗ Blocked', result.ok ? 'emerald' : 'rose'],
-              ['E.164 Format', result.e164 || '—', 'sky'],
-              ['MMS Address', result.mmsAddress || '—', 'violet'],
-              ['Carrier Name', result.carrierName || '—', 'amber'],
-              ['Carrier Domain', result.carrierDomain || '—', 'cyan'],
-              ['Line Type', result.lineType || '—', 'indigo'],
-              ['Carrier Source', result.carrierSource || '—', 'slate'],
-              ['AI Source', result.aiSource || '—', 'violet'],
-            ].map(([label, val, color]) => (
-              <div key={label} className="bg-white/5 rounded-lg p-3">
-                <p className="text-[10px] uppercase text-slate-500 font-semibold">{label}</p>
-                <p className="text-white text-sm font-mono mt-0.5 break-all">{val}</p>
-              </div>
-            ))}
+            {(() => {
+              const p = result.payload || result;
+              return [
+                ['Status', result.success !== false ? '✓ Valid' : '✗ Blocked', result.success !== false ? 'emerald' : 'rose'],
+                ['Recipient', p.to || p.email || email, 'sky'],
+                ['Domain', p.domain || (emailPreview && emailPreview.domain) || '—', 'violet'],
+                ['Safe', p.safe === false ? '⚠ Blocked' : '✓ Passed', p.safe === false ? 'rose' : 'emerald'],
+                ['AI Rewritten', p.rewritten ? '✓ Yes' : 'No (original kept)', 'amber'],
+                ['Original Len', (p.originalText || '').length + ' chars', 'slate'],
+              ].map(([label, val, color]) => (
+                <div key={label} className="bg-white/5 rounded-lg p-3">
+                  <p className="text-[10px] uppercase text-slate-500 font-semibold">{label}</p>
+                  <p className="text-white text-sm font-mono mt-0.5 break-all">{val}</p>
+                </div>
+              ));
+            })()}
           </div>
-          {result.rewrittenText && result.rewrittenText !== result.originalText && (
+          {result.payload && result.payload.text && result.payload.text !== result.payload.originalText && (
             <div className="mt-3 bg-violet-500/10 border border-violet-500/30 rounded-xl p-3">
               <p className="text-xs text-violet-300 font-semibold mb-1">AI Rewritten Message</p>
-              <p className="text-white text-sm">{result.rewrittenText}</p>
+              <p className="text-white text-sm">{result.payload.text}</p>
             </div>
           )}
-          {result.safetyCheck && (
-            <div className="mt-2 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
-              <p className="text-xs text-amber-300 font-semibold">Safety Check: {typeof result.safetyCheck === 'string' ? result.safetyCheck : JSON.stringify(result.safetyCheck)}</p>
+          {result.payload && result.payload.originalText && (
+            <div className="mt-2 bg-slate-900/40 border border-white/10 rounded-xl p-3">
+              <p className="text-xs text-slate-400 font-semibold mb-1">Original Message</p>
+              <p className="text-slate-300 text-sm">{result.payload.originalText}</p>
             </div>
           )}
         </DetailBox>
@@ -3344,37 +3353,69 @@ function GatewayValidator() {
   );
 }
 
-// ── Provider & Country Lookup ─────────────────────────────────────────────
+// ── Providers & Limits Lookup ────────────────────────────────────────────────
 function GatewayLookup() {
   const [query, setQuery] = useState('');
-  const [tab, setTab] = useState('carriers');
+  const [tab, setTab] = useState('providers');
 
-  const filteredCarriers = CARRIER_DOMAINS.filter(c =>
-    !query || c.carrier.toLowerCase().includes(query.toLowerCase()) || c.domain.toLowerCase().includes(query.toLowerCase())
+  const EMAIL_PROVIDERS = [
+    { name: 'Gmail OAuth2', type: 'GMAIL_OAUTH', auth: 'OAuth2 Refresh Token', dailyLimit: 500, note: 'Best deliverability, no app password needed' },
+    { name: 'Gmail App Password', type: 'GMAIL_APP_PASSWORD', auth: '16-char App Password', dailyLimit: 500, note: 'Simpler setup, SMTP-based' },
+    { name: 'Google Workspace', type: 'GMAIL_OAUTH', auth: 'OAuth2 (Workspace Admin)', dailyLimit: 2000, note: 'Higher limits for paid accounts' },
+    { name: 'Outlook Graph API', type: 'OUTLOOK_GRAPH', auth: 'MSAL OAuth2', dailyLimit: 10000, note: 'Enterprise-grade, high throughput' },
+    { name: 'Outlook SMTP', type: 'CUSTOM_SMTP', auth: 'App Password / OAuth', dailyLimit: 300, note: 'smtp.office365.com:587' },
+    { name: 'Yahoo Mail', type: 'CUSTOM_SMTP', auth: 'App Password', dailyLimit: 100, note: 'smtp.mail.yahoo.com:587' },
+    { name: 'AOL Mail', type: 'CUSTOM_SMTP', auth: 'App Password', dailyLimit: 100, note: 'smtp.aol.com:587' },
+    { name: 'Amazon SES', type: 'CUSTOM_SMTP', auth: 'IAM SMTP Credentials', dailyLimit: 14000, note: 'Production bulk — requires warmup' },
+    { name: 'Postmark', type: 'CUSTOM_SMTP', auth: 'API Token / SMTP', dailyLimit: 10000, note: 'Transaction-focused, high rep' },
+    { name: 'SendGrid', type: 'CUSTOM_SMTP', auth: 'API Key / SMTP', dailyLimit: 10000, note: 'Marketing bulk, dedicated IP' },
+    { name: 'Zoho Mail', type: 'CUSTOM_SMTP', auth: 'App Password', dailyLimit: 250, note: 'smtp.zoho.com:587' },
+    { name: 'Custom SMTP', type: 'CUSTOM_SMTP', auth: 'User/Pass', dailyLimit: 0, note: 'Any SMTP relay — configurable' },
+  ];
+
+  const RECIPIENT_DOMAINS = [
+    { domain: 'gmail.com', provider: 'Google', note: 'Largest mailbox provider' },
+    { domain: 'yahoo.com', provider: 'Yahoo', note: 'Aggressive spam filtering' },
+    { domain: 'yahoo.co.in', provider: 'Yahoo', note: 'India regional' },
+    { domain: 'outlook.com', provider: 'Microsoft', note: 'O365 consumer' },
+    { domain: 'hotmail.com', provider: 'Microsoft', note: 'Legacy MSN' },
+    { domain: 'live.com', provider: 'Microsoft', note: 'Legacy MS' },
+    { domain: 'icloud.com', provider: 'Apple', note: 'iCloud Mail' },
+    { domain: 'aol.com', provider: 'Yahoo/AOL', note: 'Legacy AOL' },
+    { domain: 'proton.me', provider: 'ProtonMail', note: 'Privacy-focused, strict DKIM' },
+    { domain: 'zoho.com', provider: 'Zoho', note: 'Business mail' },
+    { domain: 'mail.ru', provider: 'Mail.ru', note: 'Russia/CIS — strict' },
+    { domain: 'rediffmail.com', provider: 'Rediff', note: 'India legacy' },
+  ];
+
+  const DELIVERABILITY_TIPS = [
+    { priority: 'CRITICAL', tip: 'Set SPF, DKIM, and DMARC DNS records for every sending domain.' },
+    { priority: 'CRITICAL', tip: 'Warm up new Gmail accounts gradually — start with 20-50 emails/day, ramp over 2 weeks.' },
+    { priority: 'HIGH', tip: 'Use #RANDOM# tokens in subject lines to avoid exact-match spam filtering across bulk sends.' },
+    { priority: 'HIGH', tip: 'Enable AI Polymorph (message rewriting) to ensure each email body is unique.' },
+    { priority: 'HIGH', tip: 'Keep batch size ≤50 per account and add 60-120s random delay between batches.' },
+    { priority: 'MEDIUM', tip: 'Personalize content with recipient name and relevant context — avoid "Dear Customer".' },
+    { priority: 'MEDIUM', tip: 'Include a plain-text alternative alongside HTML to reduce spam scoring.' },
+    { priority: 'MEDIUM', tip: 'Avoid spam-trigger words: FREE, GUARANTEE, ACT NOW, limited time, ALL CAPS.' },
+    { priority: 'MEDIUM', tip: 'Always include a visible unsubscribe link — CAN-SPAM/GDPR compliance.' },
+    { priority: 'LOW', tip: 'Monitor bounce rate; keep it under 3%. Suspend accounts exceeding 5%.' },
+  ];
+
+  const filteredProviders = EMAIL_PROVIDERS.filter(p =>
+    !query || p.name.toLowerCase().includes(query.toLowerCase()) || p.type.toLowerCase().includes(query.toLowerCase())
   );
-  const filteredCountries = COUNTRY_CODES.filter(c =>
-    !query || c.name.toLowerCase().includes(query.toLowerCase()) || c.code.toLowerCase().includes(query.toLowerCase()) || String(c.dial).includes(query)
+  const filteredDomains = RECIPIENT_DOMAINS.filter(d =>
+    !query || d.domain.toLowerCase().includes(query.toLowerCase()) || d.provider.toLowerCase().includes(query.toLowerCase())
   );
-  const supportedCountries = COUNTRY_CODES.filter(c => c.mms);
 
   return (
     <div className="space-y-4">
-      {/* Quick lookup by number */}
-      <DetailBox title="Number → Country Lookup" subtitle="Enter any number to detect country, dial code, and MMS support" icon="phone" accent="sky">
+      {/* Quick search */}
+      <DetailBox title="Provider & Domain Search" subtitle="Search sending providers or recipient mailbox domains" icon="mail" accent="sky">
         <div className="mt-3">
-          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="+1 555 123 4567  OR  country name  OR  carrier name" className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white text-lg font-mono" />
-          {query && resolveCountryFromNumber(query) && (
-            <div className="mt-3 bg-sky-500/10 border border-sky-500/30 rounded-xl p-4 flex items-center gap-4">
-              <span className="text-4xl">{resolveCountryFromNumber(query).flag}</span>
-              <div className="flex-1">
-                <p className="text-white text-lg font-bold">{resolveCountryFromNumber(query).name}</p>
-                <div className="flex items-center gap-3 text-sm mt-1">
-                  <span className="text-sky-300 font-mono">+{resolveCountryFromNumber(query).dial}</span>
-                  <span className={resolveCountryFromNumber(query).mms ? 'text-emerald-400' : 'text-amber-400'}>{resolveCountryFromNumber(query).mms ? '✓ MMS supported' : '⚠ Limited MMS'}</span>
-                  {resolveCountryFromNumber(query).note && <span className="text-slate-500 text-xs">{resolveCountryFromNumber(query).note}</span>}
-                </div>
-              </div>
-            </div>
+          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="e.g. Gmail  OR  oauth  OR  gmail.com  OR  microsoft" className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white text-lg font-mono" />
+          {query && (
+            <p className="mt-2 text-xs text-slate-500">{filteredProviders.length} providers · {filteredDomains.length} domains match</p>
           )}
         </div>
       </DetailBox>
@@ -3382,26 +3423,28 @@ function GatewayLookup() {
       {/* Sub-tab switch */}
       <div className="flex gap-1">
         {[
-          { id: 'carriers', label: `Carrier Domains (${CARRIER_DOMAINS.length})` },
-          { id: 'countries', label: `Country Codes (${COUNTRY_CODES.length})` },
-          { id: 'supported', label: `MMS Supported (${supportedCountries.length})` },
+          { id: 'providers', label: `Sending Providers (${EMAIL_PROVIDERS.length})` },
+          { id: 'domains', label: `Recipient Domains (${RECIPIENT_DOMAINS.length})` },
+          { id: 'tips', label: `Deliverability Tips (${DELIVERABILITY_TIPS.length})` },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} className={`px-3 py-2 rounded-lg text-xs font-semibold ${tab === t.id ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white'}`}>{t.label}</button>
         ))}
       </div>
 
-      {/* Carrier domains table */}
-      {tab === 'carriers' && (
-        <DetailBox title="Carrier → MMS Domain Mapping" subtitle="Used for email-to-MMS routing" icon="mail" accent="violet">
+      {/* Sending providers table */}
+      {tab === 'providers' && (
+        <DetailBox title="Email Sending Providers" subtitle="Supported outbound providers with daily sending limits" icon="send" accent="violet">
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="text-left text-xs uppercase text-slate-500 border-b border-white/10"><th className="py-2 pr-4">Carrier</th><th className="py-2 pr-4">MMS Gateway Domain</th><th className="py-2">Note</th></tr></thead>
+              <thead><tr className="text-left text-xs uppercase text-slate-500 border-b border-white/10"><th className="py-2 pr-4">Provider</th><th className="py-2 pr-4">Type</th><th className="py-2 pr-4">Auth Method</th><th className="py-2 pr-4">Daily Limit</th><th className="py-2">Note</th></tr></thead>
               <tbody>
-                {filteredCarriers.map(c => (
-                  <tr key={c.carrier} className="border-b border-white/5 hover:bg-white/5">
-                    <td className="py-2 pr-4 text-white font-semibold">{c.carrier}</td>
-                    <td className="py-2 pr-4 text-cyan-300 font-mono">{c.domain}</td>
-                    <td className="py-2 text-slate-500 text-xs">{c.note}</td>
+                {filteredProviders.map(p => (
+                  <tr key={p.type + p.name} className="border-b border-white/5 hover:bg-white/5">
+                    <td className="py-2 pr-4 text-white font-semibold">{p.name}</td>
+                    <td className="py-2 pr-4 text-cyan-300 font-mono text-xs">{p.type}</td>
+                    <td className="py-2 pr-4 text-slate-300 text-xs">{p.auth}</td>
+                    <td className="py-2 pr-4 text-amber-300 font-mono">{p.dailyLimit > 0 ? p.dailyLimit.toLocaleString() : 'Custom'}</td>
+                    <td className="py-2 text-slate-500 text-xs">{p.note}</td>
                   </tr>
                 ))}
               </tbody>
@@ -3410,34 +3453,32 @@ function GatewayLookup() {
         </DetailBox>
       )}
 
-      {/* Country codes grid */}
-      {tab === 'countries' && (
-        <DetailBox title="Country Dial Codes" subtitle="All supported country codes with MMS gateway support flags" icon="globe" accent="emerald">
+      {/* Recipient domains grid */}
+      {tab === 'domains' && (
+        <DetailBox title="Recipient Mailbox Domains" subtitle="Common destination domains and their filtering behavior" icon="globe" accent="emerald">
           <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-            {filteredCountries.map(c => (
-              <div key={c.code} className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10">
-                <span className="text-2xl">{c.flag}</span>
+            {filteredDomains.map(d => (
+              <div key={d.domain} className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10">
+                <span className="text-2xl">📧</span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-white text-sm font-bold truncate">{c.name}</p>
-                  <p className="text-xs text-slate-500 font-mono">+{c.dial}</p>
+                  <p className="text-white text-sm font-bold truncate font-mono">{d.domain}</p>
+                  <p className="text-xs text-slate-400">{d.provider}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">{d.note}</p>
                 </div>
-                <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${c.mms ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>{c.mms ? 'MMS ✓' : 'Limited'}</span>
               </div>
             ))}
           </div>
         </DetailBox>
       )}
 
-      {/* MMS supported countries only */}
-      {tab === 'supported' && (
-        <DetailBox title="Countries with Full MMS Support" subtitle="These countries have confirmed email-to-MMS gateway coverage" icon="check" accent="emerald">
-          <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-            {supportedCountries.map(c => (
-              <div key={c.code} className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-center">
-                <span className="text-3xl block">{c.flag}</span>
-                <p className="text-white text-xs font-bold mt-1">{c.name}</p>
-                <p className="text-emerald-300 text-xs font-mono">+{c.dial}</p>
-                {c.note && <p className="text-[9px] text-slate-500 mt-1">{c.note}</p>}
+      {/* Deliverability tips */}
+      {tab === 'tips' && (
+        <DetailBox title="Email Deliverability Best Practices" subtitle="Enterprise-grade tips to maximize inbox placement" icon="shield" accent="emerald">
+          <div className="mt-3 space-y-2">
+            {DELIVERABILITY_TIPS.map((t, i) => (
+              <div key={i} className={`flex items-start gap-3 p-3 rounded-xl border ${t.priority === 'CRITICAL' ? 'bg-rose-500/10 border-rose-500/20' : t.priority === 'HIGH' ? 'bg-amber-500/10 border-amber-500/20' : 'bg-sky-500/10 border-sky-500/20'}`}>
+                <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold flex-shrink-0 ${t.priority === 'CRITICAL' ? 'bg-rose-500/20 text-rose-300' : t.priority === 'HIGH' ? 'bg-amber-500/20 text-amber-300' : 'bg-sky-500/20 text-sky-300'}`}>{t.priority}</span>
+                <p className="text-slate-200 text-sm">{t.tip}</p>
               </div>
             ))}
           </div>
@@ -3487,8 +3528,9 @@ function GatewayLogs() {
               <div className="flex-1 min-w-0">
                 <p className="text-slate-200 truncate">{e.message || e.action || e.text || '—'}</p>
                 <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-0.5">
-                  {e.phoneNumber && <span className="font-mono">{e.phoneNumber}</span>}
-                  {e.carrier && <span>{e.carrier}</span>}
+                  {e.email && <span className="font-mono">{e.email}</span>}
+                  {e.recipient && <span className="font-mono">{e.recipient}</span>}
+                  {e.provider && <span className="font-mono">{e.provider}</span>}
                   {e.provider && <span className="font-mono">{e.provider}</span>}
                   <span>{e.time || (e.createdAt && new Date(e.createdAt).toLocaleTimeString())}</span>
                 </div>
@@ -3510,19 +3552,20 @@ function GatewayLogs() {
   );
 }
 
-// ── MMS Preview (dry-run payload builder) ─────────────────────────────────
+// ── Email Preview (dry-run payload builder) ─────────────────────────────────
 function GatewayPreview() {
-  const [number, setNumber] = useState('');
+  const [email, setEmail] = useState('');
+  const [subject, setSubject] = useState('');
   const [text, setText] = useState('');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const run = async () => {
-    if (!number.trim()) { setError('Enter a phone number'); return; }
+    if (!email.trim()) { setError('Enter a recipient email address'); return; }
     setLoading(true); setError(''); setResult(null);
     try {
-      const d = await gatewayApi('/admin/gateway/preview', { method: 'POST', body: JSON.stringify({ phoneNumber: number, text }) });
+      const d = await gatewayApi('/admin/gateway/preview', { method: 'POST', body: JSON.stringify({ email, subject, text }) });
       if (d.success || d.ok) setResult(d); else setError(d.error || 'Preview failed');
     } catch (e) { setError(e.message); }
     setLoading(false);
@@ -3530,10 +3573,11 @@ function GatewayPreview() {
 
   return (
     <div className="space-y-4">
-      <DetailBox title="MMS Payload Preview" subtitle="Dry-run the full pipeline without sending — see E.164, carrier domain, AI rewrite" icon="eye" accent="cyan">
+      <DetailBox title="Email Payload Preview" subtitle="Dry-run the full pipeline without sending — see validation, safety filter, AI rewrite" icon="eye" accent="cyan">
         <div className="mt-3 space-y-3">
-          <input value={number} onChange={e => setNumber(e.target.value)} placeholder="+1 555 123 4567" className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white text-lg font-mono" />
-          <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Message text to preview..." rows={4} className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm" />
+          <input value={email} onChange={e => setEmail(e.target.value)} placeholder="recipient@example.com" className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white text-lg font-mono" />
+          <input value={subject} onChange={e => setSubject(e.target.value)} placeholder="Subject line (supports #RANDOM# rotation)" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm" />
+          <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Email body text to preview..." rows={4} className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm" />
           <button onClick={run} disabled={loading} className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-bold disabled:opacity-50 flex items-center justify-center gap-2">
             {loading ? <><BtnSpinner /> Building payload...</> : <><IconByName name="eye" size={18} /> Generate Preview</>}
           </button>

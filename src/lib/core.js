@@ -491,9 +491,9 @@ deliveryReportSchema.index({ providerMsgId: 1 }, { sparse: true });
 
 // --- AppSettings Schema (platform configuration) ---
 const appSettingsSchema = new mongoose.Schema({
-  platformName: { type: String, default: 'MMS Sender' },
+  platformName: { type: String, default: 'Gmail Mailer' },
   logoUrl: { type: String, default: '' },
-  description: { type: String, default: 'Professional MMS Sending Platform' },
+  description: { type: String, default: 'Enterprise Gmail Email Sending Module' },
   whatsapp: { type: String, default: '' },
   email: { type: String, default: '' },
   language: { type: String, enum: ['bn', 'en', 'syl'], default: 'en' },
@@ -1979,7 +1979,7 @@ async function sendAlert(type, message) {
           body: JSON.stringify({
             from: settings.alertEmailFrom || 'alerts@mms-sender.local',
             to: [settings.alertEmail],
-            subject: `[MMS Sender Alert] ${type}`,
+            subject: `[Gmail Mailer Alert] ${type}`,
             text: message,
           }),
         }).catch((e) => ({ error: e.message }));

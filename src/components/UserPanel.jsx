@@ -121,7 +121,7 @@ function UserLogin({ onLoginSuccess }) {
     setLoading(false);
   };
 
-  const platformName = settings?.platformName || 'MMS Sender';
+  const platformName = settings?.platformName || 'Gmail Mailer';
   const countryStats = getCountryStats();
 
   return (
@@ -143,13 +143,13 @@ function UserLogin({ onLoginSuccess }) {
               {settings?.logoUrl ? <img src={settings.logoUrl} alt="logo" className="w-full h-full object-cover" /> : <Icon.Send className="w-10 h-10 text-white" />}
             </div>
             <h1 className="text-2xl font-bold text-white tracking-tight">{platformName}</h1>
-            <p className="text-sm text-gray-400 mt-1">{settings?.description || 'Enterprise Email-to-MMS Gateway Platform'}</p>
+            <p className="text-sm text-gray-400 mt-1">{settings?.description || 'Enterprise Gmail Email Sending Module'}</p>
           </div>
 
           {/* Trust indicators */}
           <div className="flex items-center justify-center gap-4 mb-6 text-xs text-gray-400">
             <span className="flex items-center gap-1"><Icon.Shield className="w-3.5 h-3.5 text-green-400" /> Spam-Free</span>
-            <span className="flex items-center gap-1"><Icon.Globe className="w-3.5 h-3.5 text-blue-400" /> {countryStats.totalCountries} Countries</span>
+            <span className="flex items-center gap-1"><Icon.Mail className="w-3.5 h-3.5 text-blue-400" /> Any Email Domain</span>
             <span className="flex items-center gap-1"><Icon.Bolt className="w-3.5 h-3.5 text-purple-400" /> AI-Powered</span>
           </div>
 
@@ -341,14 +341,14 @@ function UserDashboard({ user, onLogout, onRefresh }) {
     } catch {}
   }, []);
 
-  const platformName = settings?.platformName || 'MMS Sender';
+  const platformName = settings?.platformName || 'Gmail Mailer';
   const logoUrl = settings?.logoUrl || '';
   const language = settings?.language || 'en';
 
   const tabs = [
     { k: 'dashboard', l: 'Dashboard', I: Icon.Dashboard },
-    { k: 'send', l: 'Send MMS', I: Icon.Send },
-    { k: 'countries', l: 'Country Support', I: Icon.Globe },
+    { k: 'send', l: 'Send Email', I: Icon.Send },
+    { k: 'countries', l: 'Deliverability', I: Icon.Shield },
     { k: 'inbox', l: 'Inbox & Auto-Reply', I: Icon.Inbox },
     { k: 'reports', l: 'Reports', I: Icon.Report },
     { k: 'info', l: 'App Info', I: Icon.Info },
@@ -454,8 +454,8 @@ function UserDashboard({ user, onLogout, onRefresh }) {
             <div>
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white tracking-tight">
                 {activeTab === 'dashboard' && 'Dashboard'}
-                {activeTab === 'send' && 'Send MMS Campaign'}
-                {activeTab === 'countries' && 'Country Support'}
+                {activeTab === 'send' && 'Send Email Campaign'}
+                {activeTab === 'countries' && 'Deliverability'}
                 {activeTab === 'inbox' && 'Inbox & Auto-Reply'}
                 {activeTab === 'reports' && 'Delivery Reports'}
                 {activeTab === 'info' && 'App Information'}
@@ -613,18 +613,19 @@ function DashboardTab({ stats, loading, now, language }) {
             </div>
             <div>
               <h3 className="text-sm font-bold text-white">Global Coverage</h3>
-              <p className="text-xs text-gray-500">Email-to-MMS gateway supported countries</p>
+              <p className="text-xs text-gray-500">Global email deliverability — any email domain, worldwide</p>
             </div>
           </div>
           <div className="flex gap-4 text-center">
-            <div><div className="text-xl font-bold text-blue-400">{countryStats.totalCountries}</div><div className="text-[10px] text-gray-500">Countries</div></div>
-            <div><div className="text-xl font-bold text-purple-400">{countryStats.totalCarriers}</div><div className="text-[10px] text-gray-500">Carriers</div></div>
+            <div><div className="text-xl font-bold text-blue-400">Any</div><div className="text-[10px] text-gray-500">Domain</div></div>
+            <div><div className="text-xl font-bold text-purple-400">∞</div><div className="text-[10px] text-gray-500">Recipients</div></div>
+            <div><div className="text-xl font-bold text-green-400">24/7</div><div className="text-[10px] text-gray-500">Sending</div></div>
           </div>
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {countryStats.allCountries.map((c, i) => (
-            <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/5 border border-white/5 text-xs text-gray-300 hover:bg-white/10 transition" title={`${c.name} (${c.code}) — ${c.carriers.length} carrier(s)`}>
-              <span>{c.flag}</span> {c.name}
+          {['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'icloud.com', 'aol.com', 'proton.me', 'zoho.com', 'mail.ru', 'qq.com', 'yahoo.co.jp', 'rediffmail.com'].map((d, i) => (
+            <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/5 border border-white/5 text-xs text-cyan-300 font-mono hover:bg-white/10 transition">
+              @{d}
             </span>
           ))}
         </div>
@@ -656,7 +657,7 @@ function DashboardTab({ stats, loading, now, language }) {
         ) : (
           <div className="text-center py-8 text-gray-500">
             <Icon.Send className="w-12 h-12 mx-auto mb-2 opacity-20" />
-            <p className="text-sm">No campaigns yet. Head to the Send MMS tab to start your first campaign.</p>
+            <p className="text-sm">No campaigns yet. Head to the Send Email tab to start your first campaign.</p>
           </div>
         )}
       </div>
@@ -724,6 +725,7 @@ function StepIndicator({ current, steps }) {
 function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, language }) {
   const [step, setStep] = useState(0);
   const [message, setMessage] = useState('');
+  const [subject, setSubject] = useState('');
   const [numbersText, setNumbersText] = useState('');
   const [sendType, setSendType] = useState('manual');
   const [templateUsed, setTemplateUsed] = useState(null);
@@ -746,7 +748,7 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
 
   const remaining = stats ? Math.max((stats.limit || 0) - (stats.sent || 0), 0) : 0;
   const steps = ['Compose', 'Recipients', 'Review', 'Send'];
-  const parsedNumbers = numbersText.split(/[\n,\s]/).map(n => n.trim()).filter(Boolean);
+  const parsedEmails = numbersText.split(/[\n,\s]/).map(n => n.trim()).filter(Boolean);
 
   const handleTemplateSelect = (tmpl) => {
     setSelectedTemplate(tmpl);
@@ -785,7 +787,7 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
         body: JSON.stringify({
           action: 'aiChat', language,
-          message: `I need an effective, spam-free MMS marketing message in ${language === 'bn' ? 'Bengali' : 'English'}. ${message ? 'Improve this draft: ' + message : 'Create a new one'}. Keep it under 160 chars. Just the message text.`,
+          message: `I need an effective, spam-free email marketing message in ${language === 'bn' ? 'Bengali' : 'English'}. ${message ? 'Improve this draft: ' + message : 'Create a new one'}. Keep the subject under 60 chars and body under 500 chars. Return as: SUBJECT|||BODY format.`,
         }),
       });
       const data = await res.json();
@@ -796,7 +798,12 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
   };
 
   const handleApplyAi = () => {
-    if (aiSuggestion) { setMessage(aiSuggestion); setSendType('ai'); setAiSuggestion(''); }
+    if (aiSuggestion) {
+      const parts = aiSuggestion.split('|||');
+      if (parts.length >= 2) { setSubject(parts[0].trim()); setMessage(parts.slice(1).join('|||').trim()); }
+      else { setMessage(aiSuggestion); }
+      setSendType('ai'); setAiSuggestion('');
+    }
   };
 
   const handleBulkImport = async (e) => {
@@ -808,7 +815,7 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
         body: JSON.stringify({ action: 'bulkImport', csvData: text }),
       });
       const data = await res.json();
-      if (data.success) { setNumbersText(data.numbers.join('\n')); onSent(`Imported ${data.count} numbers`, 'success'); }
+      if (data.success) { setNumbersText(data.numbers.join('\n')); onSent(`Imported ${data.count} emails`, 'success'); }
       else onSent(data.error || 'Import failed', 'error');
     } catch { onSent('Import error', 'error'); }
     e.target.value = '';
@@ -838,15 +845,15 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
   useEffect(() => () => { if (progressTimer) clearInterval(progressTimer); }, [progressTimer]);
 
   const handleSend = async () => {
-    if (!message.trim()) { onSent('Please enter a message', 'error'); return; }
-    if (parsedNumbers.length === 0) { onSent('No valid numbers', 'error'); return; }
-    const nums = parsedNumbers.slice(0, remaining);
+    if (!message.trim()) { onSent('Please enter an email body', 'error'); return; }
+    if (parsedEmails.length === 0) { onSent('No valid email addresses', 'error'); return; }
+    const nums = parsedEmails.slice(0, remaining);
     setLoading(true); setResult(null); setProgress(null);
     try {
       const res = await fetch('/api/system', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
         body: JSON.stringify({
-          action: 'sendCampaign', message, numbers: nums, sendType, templateUsed,
+          action: 'sendCampaign', message, subject, numbers: nums, sendType, templateUsed,
           options: { batchSize, delayMs, jitterPct, humanize, polymorph, dripMode },
         }),
       });
@@ -875,7 +882,7 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
 
   const canProceed = () => {
     if (step === 0) return message.trim().length > 0;
-    if (step === 1) return parsedNumbers.length > 0;
+    if (step === 1) return parsedEmails.length > 0;
     if (step === 2) return true;
     return false;
   };
@@ -887,13 +894,13 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
         <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center flex-shrink-0">
           <Icon.Bolt className="w-5 h-5 text-purple-300" />
         </div>
-        <span>You have <span className="font-bold text-white text-base">{remaining}</span> sends remaining · Enterprise anti-spam mode active</span>
+        <span>You have <span className="font-bold text-white text-base">{remaining}</span> emails remaining · Enterprise anti-spam mode active</span>
       </div>
 
       {/* Wizard card */}
       <div className="bg-slate-900/50 backdrop-blur border border-white/5 rounded-2xl p-6">
         <h3 className="text-sm font-bold text-white mb-5 flex items-center gap-2">
-          <Icon.Send className="w-4 h-4 text-purple-400" /> Bulk Send Wizard
+          <Icon.Send className="w-4 h-4 text-purple-400" /> Bulk Email Wizard
         </h3>
         <StepIndicator current={step} steps={steps} />
 
@@ -928,13 +935,19 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
             )}
 
             <div>
-              <label className="block text-sm text-gray-300 mb-1.5">Message Content</label>
+              <label className="block text-sm text-gray-300 mb-1.5">Subject Line <span className="text-purple-400 text-xs">(supports #RANDOM# for unique subjects)</span></label>
+              <input value={subject} onChange={(e) => setSubject(e.target.value)}
+                placeholder="Enter subject line… use #RANDOM# to auto-generate unique subjects per email"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm mb-3"
+                maxLength={120} />
+              <p className="text-xs text-gray-500 mb-3">{subject.length}/120 {subject.includes('#RANDOM#') && <span className="text-purple-300">· #RANDOM# active — unique subject per email</span>}</p>
+              <label className="block text-sm text-gray-300 mb-1.5">Email Body</label>
               <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={4}
-                placeholder="Type your MMS message, or use a template / AI suggestion…"
+                placeholder="Type your email body, or use a template / AI suggestion…"
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none text-sm"
-                maxLength={500} />
+                maxLength={2000} />
               <div className="flex justify-between items-center mt-2">
-                <p className="text-xs text-gray-500">{message.length}/500</p>
+                <p className="text-xs text-gray-500">{message.length}/2000</p>
                 {spamChecking && <p className="text-xs text-gray-500 animate-pulse flex items-center gap-1"><Spinner size={12} /> AI analyzing spam risk…</p>}
                 {spamPreview && !spamChecking && (
                   <p className={`text-xs font-semibold flex items-center gap-1 ${spamPreview.level === 'high' ? 'text-red-400' : spamPreview.level === 'moderate' ? 'text-amber-400' : 'text-green-400'}`}>
@@ -969,17 +982,17 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
           <div className="space-y-4">
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-sm text-gray-300">Recipient Numbers <span className="text-gray-600">(comma, newline, or space separated)</span></label>
+                <label className="block text-sm text-gray-300">Recipient Emails <span className="text-gray-600">(comma, newline, or space separated)</span></label>
                 <label className="flex items-center gap-1.5 text-xs text-purple-300 cursor-pointer hover:text-purple-200 bg-purple-500/10 px-3 py-1.5 rounded-lg transition">
                   <Icon.Upload className="w-4 h-4" /> CSV Import
                   <input type="file" accept=".csv,.txt" onChange={handleBulkImport} className="hidden" />
                 </label>
               </div>
               <textarea value={numbersText} onChange={(e) => setNumbersText(e.target.value)} rows={5}
-                placeholder="+1234567890&#10;+9876543210&#10;…"
+                placeholder="user1@gmail.com&#10;user2@yahoo.com&#10;…"
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none text-sm font-mono" />
               <p className="text-xs text-gray-500 mt-1.5">
-                {parsedNumbers.length} numbers detected · {Math.min(parsedNumbers.length, remaining)} will be sent (quota: {remaining})
+                {parsedEmails.length} emails detected · {Math.min(parsedEmails.length, remaining)} will be sent (quota: {remaining})
               </p>
             </div>
             <div className="flex justify-between">
@@ -1042,13 +1055,13 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
             <div className="bg-white/5 rounded-xl p-5 border border-white/5">
               <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">Campaign Summary</p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div><p className="text-xs text-gray-500">Recipients</p><p className="text-xl font-bold text-white">{Math.min(parsedNumbers.length, remaining)}</p></div>
+                <div><p className="text-xs text-gray-500">Recipients</p><p className="text-xl font-bold text-white">{Math.min(parsedEmails.length, remaining)}</p></div>
                 <div><p className="text-xs text-gray-500">Batch Size</p><p className="text-xl font-bold text-cyan-400">{batchSize}</p></div>
                 <div><p className="text-xs text-gray-500">Delay</p><p className="text-xl font-bold text-cyan-400">{(delayMs / 1000).toFixed(1)}s ±{jitterPct}%</p></div>
-                <div><p className="text-xs text-gray-500">Est. Time</p><p className="text-xl font-bold text-purple-400">{Math.ceil(Math.min(parsedNumbers.length, remaining) / batchSize) * (delayMs / 1000 / 60)}m</p></div>
+                <div><p className="text-xs text-gray-500">Est. Time</p><p className="text-xl font-bold text-purple-400">{Math.ceil(Math.min(parsedEmails.length, remaining) / batchSize) * (delayMs / 1000 / 60)}m</p></div>
               </div>
               <div className="mt-3 p-3 bg-slate-900/50 rounded-lg text-xs text-gray-400">
-                <p className="text-gray-500 mb-1">Message preview:</p>
+                <p className="text-gray-500 mb-1">Email body preview:</p>
                 {message.substring(0, 120)}{message.length > 120 ? '…' : ''}
               </div>
               {/* Anti-spam badges */}
@@ -1121,7 +1134,7 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
                     {result && result.campaignId && (
                       <button onClick={() => onCampaignClick(result.campaignId)} className="flex-1 px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-sm font-medium transition">View Delivery Details</button>
                     )}
-                    <button onClick={() => { setStep(0); setMessage(''); setNumbersText(''); setResult(null); setProgress(null); setSpamPreview(null); }}
+                    <button onClick={() => { setStep(0); setMessage(''); setSubject(''); setNumbersText(''); setResult(null); setProgress(null); setSpamPreview(null); }}
                       className="flex-1 px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-medium transition">New Campaign</button>
                   </div>
                 )}
@@ -1146,7 +1159,7 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
 
       {result && result.invalidNumbers && result.invalidNumbers.length > 0 && step !== 3 && (
         <div className="bg-slate-900/50 rounded-2xl p-5 border border-white/5">
-          <p className="text-xs text-red-400 font-medium mb-1.5">Invalid numbers rejected:</p>
+          <p className="text-xs text-red-400 font-medium mb-1.5">Invalid emails rejected:</p>
           <div className="flex flex-wrap gap-1.5">
             {result.invalidNumbers.map((inv, i) => (
               <span key={i} className="text-xs bg-red-500/10 border border-red-500/20 px-2 py-1 rounded-lg text-red-300">
@@ -1182,43 +1195,86 @@ function ToggleRow({ label, desc, value, onChange }) {
 }
 
 // ================================================================
-// COUNTRY SUPPORT TAB — visual showcase of supported countries
+// EMAIL DELIVERABILITY TAB — recipient domains, tips, best practices
 // ================================================================
 function CountrySupportTab() {
   const [search, setSearch] = useState('');
   const [expandedRegion, setExpandedRegion] = useState(null);
-  const stats = getCountryStats();
 
-  const filtered = COUNTRY_SUPPORT.map(region => ({
+  const MAILBOX_PROVIDERS = [
+    { region: 'North America', flag: '🌎', providers: [
+      { name: 'Gmail', domain: 'gmail.com', note: 'Largest provider — 1.5B+ users', volume: '~27%' },
+      { name: 'Google Workspace', domain: 'yourcompany.com (Google)', note: 'Business Gmail', volume: '—' },
+      { name: 'Outlook.com', domain: 'outlook.com', note: 'Microsoft consumer', volume: '~7%' },
+      { name: 'Yahoo Mail', domain: 'yahoo.com', note: 'Aggressive spam filter', volume: '~5%' },
+      { name: 'AOL Mail', domain: 'aol.com', note: 'Legacy (Yahoo-owned)', volume: '~1%' },
+      { name: 'iCloud Mail', domain: 'icloud.com', note: 'Apple — strict DKIM', volume: '~4%' },
+    ]},
+    { region: 'Asia Pacific', flag: '🌏', providers: [
+      { name: 'Yahoo Japan', domain: 'yahoo.co.jp', note: 'Japan #1 — very strict', volume: '~15% JP' },
+      { name: 'Naver', domain: 'naver.com', note: 'South Korea — strict auth', volume: '~10% KR' },
+      { name: 'QQ Mail', domain: 'qq.com', note: 'China — Tencent', volume: '~20% CN' },
+      { name: '163 Mail', domain: '163.com', note: 'China — NetEase', volume: '~15% CN' },
+      { name: 'Rediffmail', domain: 'rediffmail.com', note: 'India legacy', volume: '~2% IN' },
+      { name: 'Zoho Mail', domain: 'zoho.com', note: 'India-based business', volume: '—' },
+    ]},
+    { region: 'Europe & MENA', flag: '🌍', providers: [
+      { name: 'Mail.ru', domain: 'mail.ru', note: 'Russia/CIS — strict filtering', volume: '~15% RU' },
+      { name: 'Yandex Mail', domain: 'yandex.com', note: 'Russia — strict DKIM/SPF', volume: '~10% RU' },
+      { name: 'GMX', domain: 'gmx.com', note: 'Germany/EU', volume: '~2% EU' },
+      { name: 'Web.de', domain: 'web.de', note: 'Germany — 1&1', volume: '~2% DE' },
+      { name: 'ProtonMail', domain: 'proton.me', note: 'Privacy-focused, very strict', volume: '—' },
+      { name: 'Orange', domain: 'orange.fr', note: 'France telecom', volume: '~5% FR' },
+    ]},
+  ];
+
+  const DELIVERABILITY_TIPS = [
+    { icon: '🔐', priority: 'CRITICAL', title: 'DNS Authentication (SPF + DKIM + DMARC)', desc: 'Set all three DNS records for your sending domain. Without these, most providers will mark your emails as spam or reject them entirely.' },
+    { icon: '📈', priority: 'CRITICAL', title: 'Warm Up New Accounts', desc: 'Start with 20-50 emails/day per account and gradually increase over 2 weeks. Sudden bulk sends from new accounts trigger immediate spam flags.' },
+    { icon: '🎲', priority: 'HIGH', title: 'Use #RANDOM# in Subject Lines', desc: 'The #RANDOM# token generates a unique string per email, preventing exact-match spam detection across bulk sends. Essential for high-volume campaigns.' },
+    { icon: '✨', priority: 'HIGH', title: 'Enable AI Polymorph', desc: 'AI rewrites each email body uniquely, so no two emails are identical. This dramatically reduces spam-filter triggering from duplicate content.' },
+    { icon: '⏱️', priority: 'HIGH', title: 'Batch + Delay Strategy', desc: 'Keep batch size ≤50 per account. Add 60-120 second random delays between batches. Use Jitter to randomize timing and avoid pattern detection.' },
+    { icon: '👤', priority: 'MEDIUM', title: 'Personalize Content', desc: 'Use recipient name and relevant context. Avoid generic "Dear Customer" — personalization improves open rates and reduces spam scoring.' },
+    { icon: '📝', priority: 'MEDIUM', title: 'Include Plain-Text Alternative', desc: 'Always provide a text/plain version alongside HTML. Many spam filters penalize HTML-only emails as suspicious.' },
+    { icon: '🚫', priority: 'MEDIUM', title: 'Avoid Spam Trigger Words', desc: 'Avoid: FREE, GUARANTEE, ACT NOW, LIMITED TIME, ALL CAPS, excessive exclamation marks (!!), and red text. These are classic spam signals.' },
+    { icon: '📤', priority: 'MEDIUM', title: 'Always Include Unsubscribe Link', desc: 'CAN-SPAM (US) and GDPR (EU) require a visible, working unsubscribe link. Compliance improves sender reputation.' },
+    { icon: '📊', priority: 'LOW', title: 'Monitor Bounce Rate', desc: 'Keep bounce rate under 3%. Suspend accounts exceeding 5% bounces. High bounce rates damage domain reputation permanently.' },
+  ];
+
+  const filtered = MAILBOX_PROVIDERS.map(region => ({
     ...region,
-    countries: region.countries.filter(c =>
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.code.includes(search) ||
-      c.carriers.some(car => car.name.toLowerCase().includes(search.toLowerCase()))
+    providers: region.providers.filter(p =>
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      p.domain.toLowerCase().includes(search.toLowerCase()) ||
+      p.note.toLowerCase().includes(search.toLowerCase())
     ),
-  })).filter(r => r.countries.length > 0);
+  })).filter(r => r.providers.length > 0);
+
+  const filteredTips = DELIVERABILITY_TIPS.filter(t =>
+    !search || t.title.toLowerCase().includes(search.toLowerCase()) || t.desc.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <div className="space-y-6">
       {/* Hero stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <StatCard icon={Icon.Globe} label="Total Countries" value={stats.totalCountries} color="blue" />
-        <StatCard icon={Icon.Phone} label="Total Carriers" value={stats.totalCarriers} color="purple" />
-        <StatCard icon={Icon.Layers} label="Regions" value={stats.regions} color="cyan" />
-        <StatCard icon={Icon.Shield} label="Coverage" value="Global" sub="Worldwide" color="green" />
+        <StatCard icon={Icon.Mail} label="Mailbox Providers" value="18+" color="blue" />
+        <StatCard icon={Icon.Globe} label="Regions" value={MAILBOX_PROVIDERS.length} color="purple" />
+        <StatCard icon={Icon.Shield} label="Deliverability Tips" value={DELIVERABILITY_TIPS.length} color="cyan" />
+        <StatCard icon={Icon.Send} label="Coverage" value="Global" sub="Any email domain" color="green" />
       </div>
 
       {/* Info banner */}
       <div className="bg-gradient-to-r from-blue-600/10 to-indigo-600/10 border border-blue-500/20 rounded-2xl p-5 flex items-start gap-4">
         <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center flex-shrink-0">
-          <Icon.Globe className="w-6 h-6 text-blue-400" />
+          <Icon.Mail className="w-6 h-6 text-blue-400" />
         </div>
         <div>
-          <h3 className="text-sm font-bold text-white">Email-to-MMS Gateway — Supported Countries</h3>
+          <h3 className="text-sm font-bold text-white">Email Deliverability — Global Mailbox Providers</h3>
           <p className="text-xs text-gray-400 mt-1 leading-relaxed">
-            Our gateway converts emails into MMS/SMS messages delivered directly to mobile carriers worldwide.
-            The United States &amp; Canada have direct carrier MMS gateway domains (highest deliverability).
-            All other countries route through SMS gateway providers. Numbers must be in E.164 format (e.g. +1XXXXXXXXXX).
+            Our Gmail Mailer sends directly to any email address worldwide. Below are the major mailbox providers and their filtering behavior.
+            Unlike MMS gateways (which required carrier-specific domains), email sending works universally — just enter recipient email addresses.
+            Follow the deliverability tips below to maximize inbox placement and avoid spam folders.
           </p>
         </div>
       </div>
@@ -1230,12 +1286,12 @@ function CountrySupportTab() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by country, code, or carrier name…"
+          placeholder="Search by provider name, domain, or tip…"
           className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
         />
       </div>
 
-      {/* Region cards */}
+      {/* Mailbox provider cards */}
       <div className="space-y-4">
         {filtered.map((region, ri) => (
           <div key={ri} className="bg-slate-900/40 border border-white/5 rounded-2xl overflow-hidden">
@@ -1247,7 +1303,7 @@ function CountrySupportTab() {
                 <span className="text-2xl">{region.flag}</span>
                 <div className="text-left">
                   <h3 className="text-sm font-bold text-white">{region.region}</h3>
-                  <p className="text-xs text-gray-500">{region.countries.length} countries · {region.countries.reduce((sum, c) => sum + c.carriers.length, 0)} carriers</p>
+                  <p className="text-xs text-gray-500">{region.providers.length} mailbox providers</p>
                 </div>
               </div>
               <Icon.Plus className={`w-5 h-5 text-gray-500 transition-transform ${expandedRegion === ri ? 'rotate-45' : ''}`} />
@@ -1255,45 +1311,51 @@ function CountrySupportTab() {
 
             {expandedRegion === ri && (
               <div className="px-5 pb-5 space-y-3 animate-[fadeIn_0.2s_ease-out]">
-                {region.countries.map((country, ci) => (
+                {region.providers.map((provider, ci) => (
                   <div key={ci} className="bg-white/5 rounded-xl p-4 border border-white/5">
-                    <div className="flex items-center gap-3 mb-3">
-                      <span className="text-2xl">{country.flag}</span>
+                    <div className="flex items-center gap-3 mb-2">
+                      <Icon.Mail className="w-5 h-5 text-purple-400 flex-shrink-0" />
                       <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-sm font-bold text-white">{country.name}</h4>
-                          <span className="text-xs px-2 py-0.5 rounded-lg bg-blue-500/20 text-blue-300 font-mono font-bold">{country.code}</span>
-                        </div>
+                        <h4 className="text-sm font-bold text-white">{provider.name}</h4>
                       </div>
-                      <span className="text-xs text-gray-500">{country.carriers.length} carrier{country.carriers.length !== 1 ? 's' : ''}</span>
+                      <span className="text-xs px-2 py-0.5 rounded-lg bg-blue-500/20 text-blue-300 font-mono font-bold">{provider.volume}</span>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {country.carriers.map((carrier, ki) => (
-                        <div key={ki} className="flex items-center gap-2 px-3 py-2 bg-slate-900/50 rounded-lg">
-                          <Icon.Phone className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
-                          <div className="min-w-0">
-                            <p className="text-xs text-gray-200 truncate">{carrier.name}</p>
-                            <p className="text-[10px] text-gray-500 font-mono truncate">@{carrier.domain}</p>
-                          </div>
-                        </div>
-                      ))}
+                    <div className="flex items-center gap-2 ml-8">
+                      <p className="text-xs text-cyan-300 font-mono truncate">{provider.domain}</p>
                     </div>
+                    <p className="text-xs text-gray-500 mt-1 ml-8">{provider.note}</p>
                   </div>
                 ))}
               </div>
             )}
           </div>
         ))}
-        {filtered.length === 0 && (
-          <div className="text-center py-12 text-gray-500">
-            <Icon.Globe className="w-12 h-12 mx-auto mb-3 opacity-20" />
-            <p className="text-sm">No countries match "{search}".</p>
-          </div>
-        )}
+      </div>
+
+      {/* Deliverability tips */}
+      <div className="bg-slate-900/40 border border-white/5 rounded-2xl p-5">
+        <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+          <Icon.Shield className="w-4 h-4 text-green-400" /> Email Deliverability Best Practices
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {filteredTips.map((tip, i) => (
+            <div key={i} className={`flex items-start gap-3 p-4 rounded-xl border ${tip.priority === 'CRITICAL' ? 'bg-red-500/5 border-red-500/20' : tip.priority === 'HIGH' ? 'bg-amber-500/5 border-amber-500/20' : 'bg-blue-500/5 border-blue-500/20'}`}>
+              <span className="text-xl flex-shrink-0">{tip.icon}</span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <h4 className="text-xs font-bold text-white">{tip.title}</h4>
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold flex-shrink-0 ${tip.priority === 'CRITICAL' ? 'bg-red-500/20 text-red-300' : tip.priority === 'HIGH' ? 'bg-amber-500/20 text-amber-300' : 'bg-blue-500/20 text-blue-300'}`}>{tip.priority}</span>
+                </div>
+                <p className="text-[11px] text-gray-400 leading-relaxed">{tip.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
 }
+
 
 // ================================================================
 // REPORTS TAB — campaigns + delivery reports
@@ -1358,7 +1420,7 @@ function ReportsTab({ campaigns, deliveryReports, onCampaignClick }) {
         {campaigns.length === 0 ? (
           <div className="text-center py-10 text-gray-500">
             <Icon.Report className="w-12 h-12 mx-auto mb-3 opacity-20" />
-            <p className="text-sm">No campaigns yet. Send your first campaign from the Send MMS tab.</p>
+            <p className="text-sm">No campaigns yet. Send your first campaign from the Send Email tab.</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -1427,9 +1489,9 @@ function InfoTab({ settings }) {
   const features = [
     { icon: Icon.Sparkle, label: 'AI-powered message suggestions', desc: 'Gemini AI helps you write spam-free messages' },
     { icon: Icon.Shield, label: 'Enterprise spam protection', desc: 'Multi-layer anti-spam: heuristic + AI + country rules' },
-    { icon: Icon.Globe, label: 'Global country support', desc: `${getCountryStats().totalCountries} countries with carrier routing` },
+    { icon: Icon.Globe, label: 'Global email reach', desc: 'Send to any email address worldwide — no carrier restrictions' },
     { icon: Icon.Bolt, label: 'Auto-routing sender APIs', desc: 'Intelligent load-balancing across multiple providers' },
-    { icon: Icon.Inbox, label: 'Inbox & auto-reply', desc: 'Multi-language automatic SMS reply system' },
+    { icon: Icon.Inbox, label: 'Inbox & auto-reply', desc: 'Multi-language automatic email auto-responder' },
     { icon: Icon.Clock, label: 'Scheduled sends', desc: 'Plan campaigns for optimal delivery times' },
     { icon: Icon.Activity, label: 'Live progress tracking', desc: 'Real-time campaign delivery monitoring' },
     { icon: Icon.Target, label: 'Delivery reports', desc: 'Per-recipient delivery status tracking' },
@@ -1443,13 +1505,13 @@ function InfoTab({ settings }) {
             {settings?.logoUrl ? <img src={settings.logoUrl} alt="logo" className="w-full h-full object-cover" /> : <Icon.Send className="w-8 h-8 text-white" />}
           </div>
           <div>
-            <h2 className="text-xl font-bold text-white">{settings?.platformName || 'MMS Sender'}</h2>
+            <h2 className="text-xl font-bold text-white">{settings?.platformName || 'Gmail Mailer'}</h2>
             <p className="text-xs text-purple-400/70 mt-0.5">{settings?.language === 'bn' ? 'Language: Bangla' : 'Language: English'}</p>
           </div>
         </div>
 
         <p className="text-sm text-gray-400 mb-5 leading-relaxed">
-          {settings?.description || 'Enterprise Email-to-MMS Gateway Platform — send campaigns with AI-powered spam protection and auto-routing.'}
+          {settings?.description || 'Enterprise Gmail Email Sending Module — send campaigns with AI-powered spam protection and auto-routing.'}
         </p>
 
         <div className="space-y-3">
@@ -1535,11 +1597,11 @@ function InboxAutoReplyTab({ language, onToast, loginId }) {
           <Icon.Inbox className="w-6 h-6 text-purple-300" />
         </div>
         <div>
-          <h3 className="text-sm font-bold text-white">How SMS Auto-Reply Works</h3>
+          <h3 className="text-sm font-bold text-white">How Email Auto-Reply Works</h3>
           <p className="text-xs text-gray-400 mt-1 leading-relaxed">
-            When someone sends an SMS to your number, the system automatically replies with a language selection prompt.
+            When someone emails one of your connected inboxes (Gmail, Outlook, etc.), the system automatically replies with a language selection prompt.
             The sender chooses <span className="text-purple-300">1 (Bangla)</span>, <span className="text-purple-300">2 (English)</span>, or <span className="text-purple-300">3 (Sylheti)</span>,
-            and then receives your pre-written reply in their chosen language.
+            and then receives your pre-written reply in their chosen language \u2014 ideal for out-of-office, lead capture, or support acknowledgements.
           </p>
         </div>
       </div>
@@ -1548,7 +1610,7 @@ function InboxAutoReplyTab({ language, onToast, loginId }) {
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-sm font-bold text-white">Auto-Reply Status</h3>
-            <p className="text-xs text-gray-500 mt-0.5">Enable to automatically respond to incoming SMS with language selection</p>
+            <p className="text-xs text-gray-500 mt-0.5">Enable to automatically respond to incoming emails with language selection</p>
           </div>
           <button onClick={() => setConfig({ ...config, enabled: !config.enabled })}
             className={`relative w-14 h-7 rounded-full transition ${config.enabled ? 'bg-green-500' : 'bg-slate-700'}`}>
@@ -1556,23 +1618,23 @@ function InboxAutoReplyTab({ language, onToast, loginId }) {
           </button>
         </div>
         <div className="mt-4 p-4 bg-white/5 rounded-xl border border-white/5">
-          <p className="text-xs text-gray-500 mb-2">Webhook URL (configure this in your SMS provider's inbound webhook setting):</p>
+          <p className="text-xs text-gray-500 mb-2">Inbound Webhook URL (configure this in your email provider's inbound / IMAP-to-webhook forwarding):</p>
           <div className="flex items-center gap-2">
             <code className="flex-1 text-xs text-purple-300 bg-slate-900 px-3 py-2 rounded-lg font-mono break-all">{webhookUrl}</code>
             <button onClick={() => { navigator.clipboard?.writeText(webhookUrl); onToast('Webhook URL copied', 'success'); }}
               className="px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded-lg flex-shrink-0 transition">Copy</button>
           </div>
-          <p className="text-[10px] text-gray-600 mt-2">POST inbound SMS to this URL with fields: {`{ action: 'smsInbound', From, Body, userEmail: '${loginId || 'YOUR_ID'}' }`}</p>
+          <p className="text-[10px] text-gray-600 mt-2">POST inbound emails to this URL with fields: {`{ action: 'emailInbound', From, Subject, Body, userEmail: '${loginId || 'YOUR_ID'}' }`}</p>
         </div>
       </div>
 
       <div className="bg-slate-900/50 border border-white/5 rounded-2xl p-6">
         <h3 className="text-sm font-bold text-white mb-1">Step 1: Language Selection Prompt</h3>
-        <p className="text-xs text-gray-500 mb-4">This message is sent first when an SMS is received. It asks the sender to choose a language.</p>
+        <p className="text-xs text-gray-500 mb-4">This email body is sent first when a message is received. It asks the sender to reply with a language choice.</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {[
-            { key: 'en', label: 'English Prompt', flag: '🇬🇧' },
-            { key: 'bn', label: 'Bangla Prompt', flag: '🇧🇩' },
+            { key: 'en', label: 'English Prompt', flag: '\ud83c\uddec\ud83c\udde7' },
+            { key: 'bn', label: 'Bangla Prompt', flag: '\ud83c\udde7\ud83c\udde9' },
             { key: 'syl', label: 'Sylheti Prompt', flag: ' Sylheti' },
           ].map(({ key, label, flag }) => (
             <div key={key}>
@@ -1590,11 +1652,11 @@ function InboxAutoReplyTab({ language, onToast, loginId }) {
 
       <div className="bg-slate-900/50 border border-white/5 rounded-2xl p-6">
         <h3 className="text-sm font-bold text-white mb-1">Step 2: Auto-Reply Messages</h3>
-        <p className="text-xs text-gray-500 mb-4">After the sender picks a language (1/2/3), this is the reply they receive in that language.</p>
+        <p className="text-xs text-gray-500 mb-4">After the sender replies with their language choice (1/2/3), this is the email they receive in that language.</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {[
-            { key: 'bn', label: 'Bangla Reply (Option 1)', flag: '🇧🇩' },
-            { key: 'en', label: 'English Reply (Option 2)', flag: '🇬🇧' },
+            { key: 'bn', label: 'Bangla Reply (Option 1)', flag: '\ud83c\udde7\ud83c\udde9' },
+            { key: 'en', label: 'English Reply (Option 2)', flag: '\ud83c\uddec\ud83c\udde7' },
             { key: 'syl', label: 'Sylheti Reply (Option 3)', flag: ' Sylheti' },
           ].map(({ key, label, flag }) => (
             <div key={key}>
@@ -1614,30 +1676,30 @@ function InboxAutoReplyTab({ language, onToast, loginId }) {
         <button onClick={save} disabled={saving}
           className="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white text-sm rounded-xl font-medium transition flex items-center gap-2 shadow-lg shadow-purple-600/30">
           {saving ? <Spinner size={14} /> : <Icon.Check className="w-4 h-4" />}
-          {saving ? 'Saving…' : 'Save Auto-Reply Settings'}
+          {saving ? 'Saving\u2026' : 'Save Auto-Reply Settings'}
         </button>
       </div>
 
       <div className="bg-slate-900/50 border border-white/5 rounded-2xl p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-bold text-white">Recent Inbound Messages</h3>
+          <h3 className="text-sm font-bold text-white">Recent Inbound Emails</h3>
           <button onClick={load} className="text-xs text-purple-300 hover:text-purple-200 flex items-center gap-1"><Icon.Refresh className="w-3.5 h-3.5" />Refresh</button>
         </div>
         {messages.length === 0 ? (
           <div className="text-center py-10 text-gray-500">
             <Icon.Inbox className="w-12 h-12 mx-auto mb-3 opacity-20" />
-            <p className="text-sm">No inbound messages yet. Once your SMS provider webhook is configured, received messages will appear here.</p>
+            <p className="text-sm">No inbound emails yet. Once your email provider webhook is configured, received messages will appear here.</p>
           </div>
         ) : (
           <div className="space-y-2 max-h-80 overflow-y-auto">
             {messages.map((m, i) => (
               <div key={i} className="flex items-start gap-3 p-3 bg-white/5 rounded-xl border border-white/5">
                 <div className="w-9 h-9 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0">
-                  <Icon.Phone className="w-4 h-4 text-purple-300" />
+                  <Icon.Mail className="w-4 h-4 text-purple-300" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-medium text-white">{m.fromNumber}</span>
+                    <span className="text-xs font-medium text-white">{m.fromNumber || m.fromEmail || 'Unknown sender'}</span>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full ${
                       m.state === 'replied' ? 'bg-green-500/20 text-green-300' :
                       m.state === 'awaiting_language' ? 'bg-amber-500/20 text-amber-300' :
@@ -1647,7 +1709,7 @@ function InboxAutoReplyTab({ language, onToast, loginId }) {
                     </span>
                   </div>
                   <p className="text-xs text-gray-300 mt-1">Incoming: {m.incomingMessage || '(empty)'}</p>
-                  {m.replySent && <p className="text-xs text-gray-500 mt-0.5">Reply: {m.replySent.slice(0, 80)}…</p>}
+                  {m.replySent && <p className="text-xs text-gray-500 mt-0.5">Reply: {m.replySent.slice(0, 80)}\u2026</p>}
                   <p className="text-[10px] text-gray-600 mt-1">{new Date(m.receivedAt).toLocaleString()}</p>
                 </div>
               </div>
@@ -1719,10 +1781,10 @@ function ScheduledSection({ language, onToast }) {
       {showForm && (
         <form onSubmit={handleSchedule} className="space-y-3 mb-4 p-4 bg-white/5 rounded-xl border border-white/5">
           <input type="text" value={sMessage} onChange={(e) => setSMessage(e.target.value)}
-            placeholder="Message content"
+            placeholder="Email body content"
             className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm" />
           <input type="text" value={sNumbers} onChange={(e) => setSNumbers(e.target.value)}
-            placeholder="Numbers (comma separated)"
+            placeholder="Recipient emails (comma or newline separated)"
             className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm" />
           <input type="datetime-local" value={sTime} onChange={(e) => setSTime(e.target.value)}
             className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm" />
@@ -1741,7 +1803,7 @@ function ScheduledSection({ language, onToast }) {
             <div key={s._id} className="bg-white/5 rounded-xl p-4 border border-white/5">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-blue-300 font-medium text-xs flex items-center gap-1.5"><Icon.Calendar className="w-3.5 h-3.5" /> {new Date(s.scheduledAt).toLocaleString()}</span>
-                <span className="text-gray-500 text-xs">{s.numbers?.length || 0} numbers</span>
+                <span className="text-gray-500 text-xs">{s.numbers?.length || 0} recipients</span>
               </div>
               <p className="text-xs text-gray-300">{s.message}</p>
             </div>

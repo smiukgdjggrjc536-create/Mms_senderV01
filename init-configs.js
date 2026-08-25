@@ -20,8 +20,11 @@ const geminiConfig = `export const GEMINI_CONFIG = {
 };
 `;
 
-const sendingConfig = `export const SMS_CONFIG = {
-  apiKey: 'YOUR_SMS_API_KEY_HERE',
+const sendingConfig = `// Email Sending Module — sender credentials are managed per-account via the
+// Admin Panel Gateway Accounts (Gmail OAuth2 / App Password / SMTP). This file
+// is kept for backward compatibility with legacy config-key refresh logic.
+export const SMS_CONFIG = {
+  apiKey: 'YOUR_LEGACY_SMS_API_KEY_HERE',
   provider: 'twilio',
   endpoint: 'https://api.twilio.com/2010-04-01/Accounts/',
 };

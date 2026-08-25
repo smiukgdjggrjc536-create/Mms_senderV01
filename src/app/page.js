@@ -23,7 +23,7 @@ export default function Home() {
     return (
       <main style={{ minHeight: '100vh', background: '#0a0a0a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace' }}>
         <div style={{ textAlign: 'center', color: '#555' }}>
-          <h1 style={{ fontSize: '1.5rem', margin: 0, fontWeight: 400 }}>Headless MMS Gateway Engine</h1>
+          <h1 style={{ fontSize: '1.5rem', margin: 0, fontWeight: 400 }}>Headless Email Gateway Engine</h1>
           <p style={{ fontSize: '0.8rem', marginTop: '8px', color: '#444' }}>Backend API only — no UI served on this host.</p>
           <p style={{ fontSize: '0.7rem', marginTop: '4px', color: '#333' }}>Endpoints: /api/admin/gateway/* · /api/system</p>
         </div>
