@@ -11,8 +11,10 @@
   # Admin Panel mode — Netlify shows ONLY the admin panel
   NEXT_PUBLIC_PANEL_MODE = "admin"
 
-# Next.js runtime plugin is auto-installed by Netlify when it detects Next.js.
-# The @netlify/plugin-nextjs plugin handles SSR/ISR/API routes automatically.
+# Next.js runtime plugin — handles SSR/ISR/API routes as Netlify Functions.
+# Required for CLI deploys (auto-install only works on Netlify's own CI).
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
 
 # Redirect API routes to Netlify Functions (handled by plugin automatically)
 # No manual redirects needed — the plugin reads .next/manifests.
