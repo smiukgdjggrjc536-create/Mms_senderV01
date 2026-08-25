@@ -81,6 +81,18 @@ const emailAccountSchema = new mongoose.Schema({
     default: '',
   },
 
+  // Multi-tenant ownership (BM2 Ultra enterprise upgrade):
+  // When a USER connects their own Gmail via the user-panel credentials.json
+  // OAuth flow, this stores their User._id so listSenders only returns accounts
+  // they own. Admin-connected accounts have ownerId = null (shared pool).
+  // Sparse index so null values don't conflict (shared pool stays unique-free).
+  ownerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+    index: { unique: false, sparse: true },
+  },
+
   // Tracks the most recent send for ordering and rotation logic.
   lastUsedAt: {
     type: Date,

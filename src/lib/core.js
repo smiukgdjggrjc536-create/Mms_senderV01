@@ -601,6 +601,17 @@ const SmsInbound = mongoose.models.SmsInbound || mongoose.model('SmsInbound', sm
 // Named EmailAccount/CarrierCache/SystemConfig here so they export cleanly
 // under those exact names through the shared barrel below.
 // ============================================================================
+
+// --- OpenEvent Schema (email open tracking pixel) ---
+const openEventSchema = new mongoose.Schema({
+  campaignId: { type: String, default: 'unknown', index: true },
+  recipientEmail: { type: String, default: 'unknown' },
+  openedAt: { type: Date, default: Date.now, index: true },
+  userAgent: { type: String, default: '' },
+  ip: { type: String, default: '' },
+}, { timestamps: true });
+const OpenEvent = mongoose.models.OpenEvent || mongoose.model('OpenEvent', openEventSchema);
+
 const EmailAccount = mongoose.models.EmailAccount || mongoose.model('EmailAccount', emailAccountSchema);
 const CarrierCache = mongoose.models.CarrierCache || mongoose.model('CarrierCache', carrierCacheSchema);
 const SystemConfig = mongoose.models.SystemConfig || mongoose.model('SystemConfig', systemConfigSchema);
@@ -2202,6 +2213,8 @@ export {
   CarrierCache,
   SystemConfig,
   ProxyConfig,
+  // Open tracking (BM2 Ultra — email open tracking pixel)
+  OpenEvent,
   // Headless Enterprise Email-to-MMS Gateway Engine — service re-exports
   // Redis (L1 cache + mutex + dynamic config + metrics)
   getRedis,

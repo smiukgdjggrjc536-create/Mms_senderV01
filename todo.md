@@ -1,47 +1,35 @@
-# MMS→Email Module Transformation Plan
+# MMS→Email Module Transformation Plan — BM2 Ultra Enterprise Upgrade
 
-## Phase 1: Core Validation & Engine Transformation  ✅
-- [x] Explore codebase
-- [x] Add `validateEmailAddress()` + `isCommonEmailDomain()` to core.js
-- [x] Create `services/prepareEmail.js` (safety + AI rewrite, NO carrier lookup)
-- [x] Transform `services/bulkSendEmailMms.js` → email-direct bulk engine (subject + #RANDOM#)
-- [x] Update `bulkSendEngine` in core.js to route to email engine
+## Phase 1: UX Fixes (Sidebar + No-Scroll)  ✅
+- [x] Sidebar collapse layout bug → flex layout (no fixed+margin hack)
+- [x] Page scroll → h-screen flex, internal scroll only
+- [x] Header + mobile tab bar = flex-shrink-0
 
-## Phase 2: API & Constants Transformation  ✅
-- [x] Transform `sendCampaign` action in system/route.js — validate emails, force channel:'email', pass subject
-- [x] Update preview route `/api/admin/gateway/preview` for email (validateEmailAddress + prepareEmailPayload)
-- [x] Add subject + #RANDOM# support to preview route (this session)
+## Phase 2: BM2 Ultra Config UI (SendTab)  ✅
+- [x] From Name field + From Name Variants (rotation)
+- [x] Auto-change Name / Auto-change Subject toggles
+- [x] Subject Variants textarea (one per line)
+- [x] Track Pixel toggle (open tracking)
+- [x] Embed ALL content type option
+- [x] Speed ALL/SLOW/SAFE modes
+- [x] Sender rotation dropdown (credentials.json list)
+- [x] Config chips in action bar (Track, Auto-Name, Auto-Subject, fromName)
 
-## Phase 3: Admin Panel Transformation  ✅
-- [x] GatewayLookup → Email Providers / Recipient Domains / Deliverability Tips
-- [x] GatewayPreview → email + subject fields
-- [x] GatewayLogs → email/recipient fields
-- [x] PROVIDER_TEMPLATES → email senders (SES/SendGrid/Postmark/Mailgun)
-- [x] FreeSmsGuideTab → Bengali Email Setup Guide
-- [x] GatewayOverview/Config/Dashboard labels → email
-- [x] Legacy COUNTRY_CODES/CARRIER_DOMAINS marked as dead code
+## Phase 3: Backend Support  ✅
+- [x] Auto name/subject rotation in bulkSendEmailMms engine
+- [x] Track pixel endpoint /api/track/open (1x1 GIF + OpenEvent log)
+- [x] OpenEvent schema + model in core.js + exported in barrel
+- [x] From Name injection in email MIME (buildMime → sendViaGmail → queueRouter → bulk)
+- [x] HTML content auto-detection in buildMime
+- [x] ownerId field added to EmailAccount schema (multi-tenant isolation)
+- [x] credentials.json upload endpoint (/api/user/gmail/connect) — initiate OAuth
+- [x] credentials.json callback endpoint (/api/user/gmail/connect/callback)
+- [x] "Connect Gmail" UI in SendTab (file upload → OAuth popup → result message)
+- [x] listSenders action filter by ownerId (user sees own + shared pool)
 
-## Phase 3b: User Panel Transformation  ✅
-- [x] SendTab → email + subject + #RANDOM# (20 changes)
-- [x] CountrySupportTab → Email Deliverability Tab
-- [x] DashboardTab coverage → email domain stats
-- [x] UserLogin stat → "Any Email Domain"
-- [x] InfoTab → email descriptions
-- [x] InboxAutoReplyTab → email auto-reply (this session)
-- [x] Tab labels → email (Send Email, Send Email Campaign)
-- [x] Scheduled sends: placeholder/labels check
-
-## Phase 4: Backend Cleanup (lightweight — keep legacy as dead code)
-- [x] Mark `prepareMms.js`, `hlrValidator.js` as legacy (keep, don't break imports)
-- [ ] Verify no live code path calls removed MMS functions
-
-## Phase 5: Build, Deploy, Verify  ✅
-- [x] `npm run build` — compiled successfully (17 routes, 0 errors)
-- [x] Fixed AdminPanel.jsx line 2544 syntax corruption (prior-edit dup-line)
-- [x] Commit & push to GitHub (main + gmail-module-transform branches)
-- [x] Deploy to Netlify (admin panel) — production live
-- [x] Verify all 3 platforms:
-  - Render (Gateway API): https://mms-gateway-engine.onrender.com — LIVE (commit 1eb0e59)
-  - Vercel (User Panel): https://mms-sender-v01.vercel.app — LIVE (HTTP 200, "Gmail Mailer")
-  - Netlify (Admin Panel): https://mmsadminpanellogin.netlify.app — LIVE (HTTP 200, "Gmail Mailer")
-- [x] Respond in Bengali with summary
+## Phase 4: Build + Deploy (IN PROGRESS)
+- [x] Build test — compiled successfully (17 routes, 0 errors)
+- [ ] Git push → Vercel auto-deploy (user panel)
+- [ ] Render auto-deploy (API gateway)
+- [ ] Netlify manual deploy (admin panel)
+- [ ] Verify all 3 URLs live + report

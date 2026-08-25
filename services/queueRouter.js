@@ -147,7 +147,7 @@ function pickNextAccount(accounts) {
 //   Any provider error is wrapped by withBounceHandling BEFORE it reaches
 //   the caller, so sentToday / consecutiveBounces are updated.
 // ---------------------------------------------------------------------------
-export async function sendMMS(targetCarrierEmail, subject, body, attachment) {
+export async function sendMMS(targetCarrierEmail, subject, body, attachment, extraOpts = {}) {
   await connectDB();
   const config = await getSystemConfig();
 
@@ -177,6 +177,7 @@ export async function sendMMS(targetCarrierEmail, subject, body, attachment) {
         subject,
         body,
         attachment,
+        fromName: extraOpts.fromName || '',
       }),
     carrierEmail: targetCarrierEmail,
   });

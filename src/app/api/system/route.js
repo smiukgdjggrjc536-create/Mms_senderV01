@@ -1306,7 +1306,14 @@ export async function POST(req) {
       try {
         await connectDB();
         const now = new Date();
-        const accounts = await EmailAccount.find({}).sort({ createdAt: 1 }).lean();
+        // Multi-tenant isolation (BM2 Ultra enterprise):
+        //   - Admin/superadmin → sees ALL accounts (admin pool + every user's accounts)
+        //   - User → sees their OWN accounts (ownerId = their userId) + shared admin pool (ownerId = null)
+        const isStaff = auth.decoded.role === 'admin' || auth.decoded.role === 'superadmin';
+        const filter = isStaff
+          ? {}
+          : { $or: [{ ownerId: auth.decoded.userId }, { ownerId: null }] };
+        const accounts = await EmailAccount.find(filter).sort({ createdAt: 1 }).lean();
         const senders = accounts.map(a => {
           // Recompute live status: cooldown expired -> ACTIVE
           let liveStatus = a.status || 'ACTIVE';

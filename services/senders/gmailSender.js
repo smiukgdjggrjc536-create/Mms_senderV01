@@ -117,18 +117,26 @@ function base64url(input) {
 // ---------------------------------------------------------------------------
 // Build a minimal RFC-2822 MIME message. If an attachment is supplied
 // ({ filename, contentType, content: Buffer|string }) we emit a
-// multipart/mixed message; otherwise a simple text/plain message.
+// multipart/mixed message; otherwise a simple message.
+//
+// If fromName is provided, the From header becomes "Display Name <email>".
+// If the body contains HTML tags, we emit text/html; otherwise text/plain.
 // ---------------------------------------------------------------------------
-function buildMime({ from, to, subject, body, attachment }) {
+function buildMime({ from, to, subject, body, attachment, fromName }) {
+  const fromHeader = fromName
+    ? `${fromName.replace(/[\r\n<>]/g, '').trim()} <${from}>`
+    : from;
+  const isHtml = body && /<[a-z][\s\S]*>/i.test(body);
+  const contentType = isHtml ? 'text/html' : 'text/plain';
   const headers = [
-    `From: ${from}`,
+    `From: ${fromHeader}`,
     `To: ${to}`,
     `Subject: ${subject || ''}`,
     'MIME-Version: 1.0',
   ];
 
   if (!attachment) {
-    headers.push('Content-Type: text/plain; charset=UTF-8');
+    headers.push(`Content-Type: ${contentType}; charset=UTF-8`);
     headers.push('Content-Transfer-Encoding: 7bit');
     return headers.join('\r\n') + '\r\n\r\n' + body + '\r\n';
   }
@@ -200,7 +208,7 @@ function classifyGmailError(status, errText) {
 // Throws an Error with `.bounceType` (HARD_BOUNCE / RATE_LIMIT / AUTH /
 // TRANSIENT) and `.status` on failure so the bounceHandler can react.
 // ---------------------------------------------------------------------------
-export async function sendViaGmail({ account, to, subject, body, attachment }) {
+export async function sendViaGmail({ account, to, subject, body, attachment, fromName }) {
   const credsRaw = account.credentials || {};
   // Normalize so both camelCase and snake_case work
   const creds = normalizeCreds(credsRaw);
@@ -226,6 +234,7 @@ export async function sendViaGmail({ account, to, subject, body, attachment }) {
     subject,
     body,
     attachment,
+    fromName: fromName || '',
   });
 
   let resp;

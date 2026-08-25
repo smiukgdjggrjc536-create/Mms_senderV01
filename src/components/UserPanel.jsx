@@ -378,7 +378,7 @@ function UserDashboard({ user, onLogout, onRefresh }) {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-950 relative overflow-hidden">
+    <div className="h-screen bg-slate-950 relative overflow-hidden flex flex-col">
       {/* Ambient background glow */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-0 left-1/3 w-[500px] h-[500px] bg-purple-600/5 rounded-full blur-[150px]" />
@@ -397,43 +397,52 @@ function UserDashboard({ user, onLogout, onRefresh }) {
         </div>
       )}
 
-      <div className="flex relative z-10">
-        {/* Sidebar — desktop (collapsible) */}
-        <aside className={`bg-slate-900/60 backdrop-blur-xl border-r border-white/5 p-4 hidden lg:flex flex-col gap-1.5 fixed top-0 left-0 bottom-0 transition-all duration-300 z-30 ${sidebarCollapsed ? 'w-0 p-0 overflow-hidden border-r-0' : 'w-64'}`}>
-          <div className={`flex items-center gap-3 px-2 py-4 mb-2 ${sidebarCollapsed ? 'opacity-0' : 'opacity-100'} transition-opacity`}>
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center overflow-hidden shadow-lg shadow-purple-500/20 flex-shrink-0">
-              {logoUrl ? <img src={logoUrl} alt="logo" className="w-full h-full object-cover" /> : <Icon.Send className="w-6 h-6 text-white" />}
+      {/* ── Desktop flex row: sidebar (flex child, width collapses) + main (fills rest) ── */}
+      <div className="flex-1 flex relative z-10 min-h-0">
+        {/* Sidebar — desktop (flex child, collapses width — NO fixed/margin hack) */}
+        <aside
+          style={{ width: sidebarCollapsed ? 0 : 256 }}
+          className="hidden lg:flex flex-col gap-1.5 bg-slate-900/60 backdrop-blur-xl border-r border-white/5 overflow-hidden transition-[width] duration-300 ease-in-out flex-shrink-0 relative z-30"
+        >
+          {/* Inner content wrapper keeps padding stable so collapse animates width only */}
+          <div className={`w-64 h-full p-4 flex flex-col gap-1.5 transition-opacity duration-200 ${sidebarCollapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+            <div className="flex items-center gap-3 px-2 py-4 mb-2 flex-shrink-0">
+              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center overflow-hidden shadow-lg shadow-purple-500/20 flex-shrink-0">
+                {logoUrl ? <img src={logoUrl} alt="logo" className="w-full h-full object-cover" /> : <Icon.Send className="w-6 h-6 text-white" />}
+              </div>
+              <div className="min-w-0">
+                <div className="text-sm font-bold text-white truncate">{platformName}</div>
+                <div className="text-[10px] text-purple-400/70 flex items-center gap-1"><span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" /> User Panel</div>
+              </div>
             </div>
-            <div className="min-w-0">
-              <div className="text-sm font-bold text-white truncate">{platformName}</div>
-              <div className="text-[10px] text-purple-400/70 flex items-center gap-1"><span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" /> User Panel</div>
+
+            <div className="flex-1 overflow-y-auto -mr-2 pr-2">
+              {tabs.map(({ k, l, I }) => (
+                <TabBtn key={k} icon={I} label={l} active={activeTab === k} onClick={() => setActiveTab(k)} />
+              ))}
             </div>
-          </div>
 
-          {tabs.map(({ k, l, I }) => (
-            <TabBtn key={k} icon={I} label={l} active={activeTab === k} onClick={() => setActiveTab(k)} />
-          ))}
-
-          <div className="mt-auto pt-4 border-t border-white/5 flex flex-col gap-1.5">
-            <button
-              onClick={() => { onRefresh ? onRefresh() : fetchAll(); show('Panel refreshed', 'success'); }}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs text-gray-400 hover:text-white hover:bg-white/5 transition"
-            >
-              <Icon.Refresh className="w-4 h-4" /> Refresh Data
-            </button>
-            <button
-              onClick={onLogout}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 transition"
-            >
-              <Icon.Logout className="w-4 h-4" /> Logout
-            </button>
+            <div className="pt-4 border-t border-white/5 flex flex-col gap-1.5 flex-shrink-0">
+              <button
+                onClick={() => { onRefresh ? onRefresh() : fetchAll(); show('Panel refreshed', 'success'); }}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs text-gray-400 hover:text-white hover:bg-white/5 transition"
+              >
+                <Icon.Refresh className="w-4 h-4" /> Refresh Data
+              </button>
+              <button
+                onClick={onLogout}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 transition"
+              >
+                <Icon.Logout className="w-4 h-4" /> Logout
+              </button>
+            </div>
           </div>
         </aside>
 
-        {/* Sidebar collapse/expand toggle button (desktop) */}
+        {/* Sidebar collapse/expand toggle — sits at the sidebar edge, moves with it */}
         <button
           onClick={() => setSidebarCollapsed(c => !c)}
-          className={`hidden lg:flex fixed top-1/2 -translate-y-1/2 z-40 w-6 h-12 items-center justify-center bg-slate-800/90 hover:bg-violet-600 border border-white/10 text-gray-300 hover:text-white rounded-r-lg transition-all duration-300 shadow-lg ${sidebarCollapsed ? 'left-0' : 'left-64'}`}
+          className="hidden lg:flex items-center justify-center w-5 h-14 my-auto bg-slate-800/90 hover:bg-violet-600 border border-l-0 border-white/10 text-gray-300 hover:text-white rounded-r-lg transition-colors duration-200 flex-shrink-0 z-40"
           title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           {sidebarCollapsed ? <Icon.ChevronRight className="w-4 h-4" /> : <Icon.ChevronLeft className="w-4 h-4" />}
@@ -479,12 +488,12 @@ function UserDashboard({ user, onLogout, onRefresh }) {
           <button onClick={onLogout} className="text-red-400"><Icon.Logout className="w-5 h-5" /></button>
         </div>
 
-        {/* Main content */}
-        <main className={`flex-1 p-4 sm:p-5 lg:p-6 mt-16 lg:mt-0 min-h-screen transition-all duration-300 ${sidebarCollapsed ? 'lg:ml-0' : 'lg:ml-64'}`}>
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white tracking-tight">
+        {/* Main content — flex-1 fills rest, h-full with internal scroll, NO min-h-screen */}
+        <main className="flex-1 min-w-0 flex flex-col h-full pt-14 lg:pt-0 overflow-hidden">
+          {/* Header (fixed height, no scroll) */}
+          <div className="flex items-center justify-between px-4 sm:px-5 lg:px-6 py-3 lg:py-4 border-b border-white/5 flex-shrink-0">
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white tracking-tight truncate">
                 {activeTab === 'dashboard' && 'Dashboard'}
                 {activeTab === 'send' && 'Send Email Campaign'}
                 {activeTab === 'countries' && 'Deliverability'}
@@ -492,20 +501,20 @@ function UserDashboard({ user, onLogout, onRefresh }) {
                 {activeTab === 'reports' && 'Delivery Reports'}
                 {activeTab === 'info' && 'App Information'}
               </h1>
-              <p className="text-gray-400 text-xs mt-1">
+              <p className="text-gray-400 text-xs mt-1 truncate">
                 Welcome, <span className="text-purple-300 font-medium">{stats?.loginId || user?.loginId || stats?.email || user?.email}</span> · <span className="text-gray-500">{new Date(now).toLocaleString()}</span>
               </p>
             </div>
             <button
               onClick={() => { onRefresh ? onRefresh() : fetchAll(); show('Panel refreshed', 'success'); }}
-              className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 transition text-xs"
+              className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 transition text-xs flex-shrink-0"
             >
               <Icon.Refresh className="w-4 h-4" /> Refresh
             </button>
           </div>
 
-          {/* Mobile tab bar */}
-          <div className="lg:hidden flex gap-1.5 mb-4 overflow-x-auto pb-2">
+          {/* Mobile tab bar (fixed height, horizontal scroll) */}
+          <div className="lg:hidden flex gap-1.5 px-4 py-2 overflow-x-auto border-b border-white/5 flex-shrink-0">
             {tabs.map(({ k, l, I }) => (
               <button
                 key={k}
@@ -519,8 +528,8 @@ function UserDashboard({ user, onLogout, onRefresh }) {
             ))}
           </div>
 
-          {/* Content */}
-          <div className="animate-[fadeIn_0.3s_ease-out]">
+          {/* Content — flex-1 fills remaining height, internal scroll only */}
+          <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-5 lg:px-6 py-4 lg:py-5 animate-[fadeIn_0.3s_ease-out]">
             {activeTab === 'dashboard' && <DashboardTab stats={stats} loading={loadingStats} now={now} language={language} />}
             {activeTab === 'send' && (
               <>
@@ -815,6 +824,17 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
   const [taskLog, setTaskLog] = useState([]);
   const [senderAccounts, setSenderAccounts] = useState([]);
   const [activeSenderIdx, setActiveSenderIdx] = useState(0);
+  // BM2 Ultra "succeded" — credentials.json Gmail OAuth Desktop connect flow
+  const [connectingGmail, setConnectingGmail] = useState(false);
+  const [gmailConnectMsg, setGmailConnectMsg] = useState(null); // { type: 'success'|'error', text }
+  // ── BM2 Ultra extras: From Name, Track Pixel, auto-rotate name/subject ──
+  const [fromName, setFromName] = useState('');
+  const [fromNameVariants, setFromNameVariants] = useState(''); // comma-separated alternate names for rotation
+  const [trackPixel, setTrackPixel] = useState(false);
+  const [autoChangeName, setAutoChangeName] = useState(false);
+  const [autoChangeSubject, setAutoChangeSubject] = useState(false);
+  const [subjectVariants, setSubjectVariants] = useState(''); // alternate subjects (one per line) for rotation
+  const [embedAll, setEmbedAll] = useState(false);
 
   const remaining = stats ? Math.max((stats.limit || 0) - (stats.sent || 0), 0) : 0;
   const parsedEmails = numbersText.split(/[\n,\s]/).map(n => n.trim()).filter(Boolean);
@@ -863,6 +883,87 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
       } catch {}
     })();
     return () => { active = false; };
+  }, []);
+
+  // ── BM2 Ultra: Connect Gmail via credentials.json (Desktop OAuth flow) ──
+  // User picks a credentials.json file → we POST its contents to /api/user/gmail/connect
+  // → backend returns the Google consent URL → we open it in a popup → Google
+  // redirects to /api/user/gmail/connect/callback → callback saves the EmailAccount
+  // (tagged with ownerId) → popup posts a result message back → we refresh senders.
+  const connectGmailInputRef = useRef(null);
+  const pendingCredsJsonRef = useRef('');
+  const pendingCredsLabelRef = useRef('');
+
+  const handleConnectGmailFile = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (!file.name.endsWith('.json')) {
+      setGmailConnectMsg({ type: 'error', text: 'Please select a credentials.json file from Google Cloud Console.' });
+      e.target.value = '';
+      return;
+    }
+    setGmailConnectMsg(null);
+    try {
+      const text = await file.text();
+      pendingCredsJsonRef.current = text;
+      // Auto-suggest a label from the filename
+      const suggestedLabel = file.name.replace(/\.json$/i, '').replace(/credentials/i, '').replace(/^[-_\s]+|[-_\s]+$/g, '') || file.name;
+      pendingCredsLabelRef.current = suggestedLabel;
+      setConnectingGmail(true);
+      const res = await fetch('/api/user/gmail/connect', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ credentialsJson: text, label: suggestedLabel }),
+      });
+      const data = await res.json();
+      if (!data.success || !data.authUrl) {
+        setGmailConnectMsg({ type: 'error', text: data.error || 'Failed to start Gmail OAuth flow.' });
+        setConnectingGmail(false);
+        e.target.value = '';
+        return;
+      }
+      // Open Google consent screen in a popup so the user stays in the panel
+      const popup = window.open(data.authUrl, 'gmail-oauth', 'width=520,height=720,left=200,top=100');
+      if (!popup) {
+        // Popup blocked — fall back to full redirect in same tab
+        window.location.href = data.authUrl;
+        return;
+      }
+      setGmailConnectMsg({ type: 'success', text: 'Google permission page opened in a popup. Grant access to connect your Gmail.' });
+    } catch (err) {
+      setGmailConnectMsg({ type: 'error', text: err.message || 'Could not read the credentials.json file.' });
+    }
+    setConnectingGmail(false);
+    e.target.value = '';
+  };
+
+  // Listen for the popup callback result message
+  useEffect(() => {
+    const handler = (ev) => {
+      if (ev.data && ev.data.type === 'user-gmail-oauth-result') {
+        if (ev.data.success) {
+          setGmailConnectMsg({ type: 'success', text: ev.data.message || 'Gmail connected successfully!' });
+          // Refresh the sender accounts list so the new account appears in the dropdown
+          (async () => {
+            try {
+              const res = await fetch('/api/system', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+                body: JSON.stringify({ action: 'listSenders' }),
+              });
+              const data = await res.json();
+              if (data.success && Array.isArray(data.senders)) {
+                setSenderAccounts(data.senders);
+                // Auto-select the newly connected account (last one)
+                if (data.senders.length > 0) setActiveSenderIdx(data.senders.length - 1);
+              }
+            } catch {}
+          })();
+        } else {
+          setGmailConnectMsg({ type: 'error', text: ev.data.message || 'Gmail connection failed.' });
+        }
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
   }, []);
 
   const handleTemplateSelect = (tmpl) => {
@@ -1025,6 +1126,11 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
             autoSave, autoReply, autoSend, importFlag, randomHtml, randomTest,
             speedMode, changeAfterStart, useName, sendQuestion, confirmedShipping, prioritySend,
             scheduledTask, senderMail,
+            // BM2 Ultra extras
+            fromName, fromNameVariants: fromNameVariants.split(',').map(s => s.trim()).filter(Boolean),
+            autoChangeName, autoChangeSubject,
+            subjectVariants: subjectVariants.split('\n').map(s => s.trim()).filter(Boolean),
+            trackPixel, embedAll,
           },
         }),
       });
@@ -1075,6 +1181,7 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
     { key: 'htmlfile', label: 'To HTML', icon: 'FileCode' },
     { key: 'ppt', label: 'PPT', icon: 'Layers' },
     { key: 'randomcolor', label: 'Random Color', icon: 'Palette' },
+    { key: 'embedall', label: 'Embed ALL', icon: 'Layers' },
   ];
 
   const pageColors = [
@@ -1255,7 +1362,7 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
           ADD TASK — SINGLE PAGE (no steps, all options visible at once, BM2 Ultra style)
       ════════════════════════════════════════════════════════════════════════════ */}
       {topTab === 'addTask' && (
-        <div className="flex flex-col gap-2.5 h-[calc(100vh-130px)] lg:h-[calc(100vh-150px)]">
+        <div className="flex flex-col gap-2.5 h-[calc(100vh-220px)] min-h-[400px]">
           {/* ── Compact status bar (fixed) ── */}
           <div className="relative overflow-hidden rounded-xl border border-white/5 bg-gradient-to-r from-violet-600/20 via-indigo-600/10 to-transparent p-2.5 flex-shrink-0">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,0.15),transparent_60%)]" />
@@ -1336,6 +1443,83 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
                         )}
                       </div>
                     </div>
+                  </div>
+                </div>
+
+                {/* Connect Gmail via credentials.json (BM2 Ultra "succeded" flow) */}
+                <div className="bg-gradient-to-br from-violet-500/10 to-cyan-500/5 border border-violet-500/20 rounded-xl p-2.5">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-7 h-7 rounded-lg bg-violet-500/20 border border-violet-500/30 flex items-center justify-center flex-shrink-0">
+                        <Icon.Mail className="w-3.5 h-3.5 text-violet-300" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[11px] text-gray-200 font-semibold flex items-center gap-1">Connect Gmail <span className="text-[9px] px-1 py-0.5 rounded bg-violet-500/20 text-violet-300 border border-violet-500/30">credentials.json</span></p>
+                        <p className="text-[9px] text-gray-500 mt-0.5">Upload Google Cloud Desktop OAuth client → grant permission → connect</p>
+                      </div>
+                    </div>
+                    <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium cursor-pointer transition flex-shrink-0 ${connectingGmail ? 'bg-slate-700 text-gray-400' : 'bg-violet-600 hover:bg-violet-500 text-white'}`}>
+                      <Icon.Upload className="w-3.5 h-3.5" />
+                      {connectingGmail ? 'Opening Google…' : 'Upload & Connect'}
+                      <input ref={connectGmailInputRef} type="file" accept=".json,application/json" onChange={handleConnectGmailFile} className="hidden" disabled={connectingGmail} />
+                    </label>
+                  </div>
+                  {gmailConnectMsg && (
+                    <div className={`mt-2 px-2.5 py-1.5 rounded-lg text-[10px] flex items-start gap-1.5 ${gmailConnectMsg.type === 'success' ? 'bg-green-500/10 text-green-300 border border-green-500/20' : 'bg-red-500/10 text-red-300 border border-red-500/20'}`}>
+                      <span className="flex-shrink-0">{gmailConnectMsg.type === 'success' ? '✓' : '✕'}</span>
+                      <span className="leading-snug" dangerouslySetInnerHTML={{ __html: gmailConnectMsg.text }} />
+                    </div>
+                  )}
+                  {senderAccounts.length > 0 && (
+                    <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                      {senderAccounts.slice(0, 6).map((s, i) => (
+                        <span key={i} className={`text-[9px] px-1.5 py-0.5 rounded-md border flex items-center gap-1 ${s.status === 'ACTIVE' ? 'bg-green-500/10 text-green-300 border-green-500/20' : 'bg-amber-500/10 text-amber-300 border-amber-500/20'}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${s.status === 'ACTIVE' ? 'bg-green-400' : 'bg-amber-400'}`} />
+                          {s.email.length > 22 ? s.email.slice(0, 20) + '…' : s.email}
+                        </span>
+                      ))}
+                      {senderAccounts.length > 6 && <span className="text-[9px] text-gray-500">+{senderAccounts.length - 6} more</span>}
+                    </div>
+                  )}
+                </div>
+
+                {/* From Name + Track Pixel + Auto-rotate name/subject (BM2 Ultra) */}
+                <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5">
+                  <div className="grid sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] text-gray-300 mb-1 flex items-center gap-1"><Icon.User className="w-3 h-3 text-green-400" /> From Name <span className="text-gray-600 text-[9px]">(display name)</span></label>
+                      <input value={fromName} onChange={(e) => setFromName(e.target.value)}
+                        placeholder="e.g. Support Team (empty = sender email)"
+                        className="w-full px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-green-500 text-[11px]" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-gray-300 mb-1 flex items-center gap-1"><Icon.User className="w-3 h-3 text-green-400" /> From Name Variants <span className="text-gray-600 text-[9px]">(comma-sep, rotate per email)</span></label>
+                      <input value={fromNameVariants} onChange={(e) => setFromNameVariants(e.target.value)}
+                        placeholder="Support, Sales, Billing, No-Reply"
+                        className="w-full px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-green-500 text-[11px]" />
+                    </div>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-1.5 mt-2">
+                    <MiniToggle label="Auto-change Name" value={autoChangeName} onChange={setAutoChangeName} icon="User" accent="green" />
+                    <MiniToggle label="Auto-change Subject" value={autoChangeSubject} onChange={setAutoChangeSubject} icon="Mail" accent="green" />
+                  </div>
+                  {autoChangeSubject && (
+                    <div className="mt-2">
+                      <label className="block text-[11px] text-gray-300 mb-1 flex items-center gap-1"><Icon.Mail className="w-3 h-3 text-green-400" /> Subject Variants <span className="text-gray-600 text-[9px]">(one per line, rotates per recipient)</span></label>
+                      <textarea value={subjectVariants} onChange={(e) => setSubjectVariants(e.target.value)} rows={2}
+                        placeholder={"Important Update #RANDOM#\nYour Account Status\nAction Required #RANDOM_NUMBER#"}
+                        className="w-full px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-green-500 text-[11px] resize-none" />
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/5">
+                    <div>
+                      <p className="text-[11px] text-gray-300 font-semibold flex items-center gap-1"><Icon.Eye className="w-3 h-3 text-cyan-400" /> Track Pixel</p>
+                      <p className="text-[9px] text-gray-500 mt-0.5">Inject open-tracking pixel per email</p>
+                    </div>
+                    <button onClick={() => setTrackPixel(!trackPixel)}
+                      className={`relative w-10 h-5 rounded-full transition flex-shrink-0 ${trackPixel ? 'bg-cyan-500' : 'bg-slate-700'}`}>
+                      <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition ${trackPixel ? 'left-5' : 'left-0.5'}`} />
+                    </button>
                   </div>
                 </div>
 
@@ -1686,6 +1870,10 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
                   {senderRotate && <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-violet-500/10 text-violet-300 border border-violet-500/20 flex items-center gap-0.5"><Icon.Refresh className="w-2.5 h-2.5" /> Rotate</span>}
                   {humanize && <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-green-500/10 text-green-300 border border-green-500/20 flex items-center gap-0.5"><Icon.Shield className="w-2.5 h-2.5" /> Humanized</span>}
                   {dripMode && <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-blue-500/10 text-blue-300 border border-blue-500/20 flex items-center gap-0.5"><Icon.Clock className="w-2.5 h-2.5" /> Drip</span>}
+                  {trackPixel && <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 flex items-center gap-0.5"><Icon.Eye className="w-2.5 h-2.5" /> Track</span>}
+                  {autoChangeName && <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-green-500/10 text-green-300 border border-green-500/20">Auto-Name</span>}
+                  {autoChangeSubject && <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-green-500/10 text-green-300 border border-green-500/20">Auto-Subject</span>}
+                  {fromName && <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-green-500/10 text-green-300 border border-green-500/20 truncate max-w-[80px]">{fromName}</span>}
                 </div>
                 {/* Action buttons */}
                 <div className="flex flex-wrap items-center gap-1.5">

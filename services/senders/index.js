@@ -17,7 +17,7 @@ import { sendViaSmtp } from './smtpSender.js';
 // 16-char app password. The account.credentials stores { appPassword } and
 // the account.email is the Gmail address. We adapt it to SMTP format here.
 // ---------------------------------------------------------------------------
-async function sendViaGmailAppPassword({ account, to, subject, body, attachment }) {
+async function sendViaGmailAppPassword({ account, to, subject, body, attachment, fromName }) {
   const cred = account.credentials || {};
   const pass = String(cred.appPassword || cred.password || '').replace(/\s/g, '');
   if (!pass) {
@@ -36,11 +36,15 @@ async function sendViaGmailAppPassword({ account, to, subject, body, attachment 
     socketTimeout: 30000,
   });
 
+  const fromHeader = fromName
+    ? `${fromName.replace(/[\r\n<>]/g, '').trim()} <${account.email}>`
+    : account.email;
+  const isHtml = body && /<[a-z][\s\S]*>/i.test(body);
   const mailOptions = {
-    from: account.email,
+    from: fromHeader,
     to,
     subject: subject || '',
-    text: body || '',
+    [isHtml ? 'html' : 'text']: body || '',
   };
 
   // If an attachment is supplied, attach it
@@ -70,10 +74,12 @@ const SENDER_MAP = {
 };
 
 // ---------------------------------------------------------------------------
-// sendByProvider({ account, to, subject, body, attachment })
+// sendByProvider({ account, to, subject, body, attachment, fromName })
 // Dispatches to the correct sender. Throws if the provider is unknown.
+// fromName is optional — when provided, it's used as the display name in the
+// From header (e.g. "Support Team <sender@gmail.com>").
 // ---------------------------------------------------------------------------
-export async function sendByProvider({ account, to, subject, body, attachment }) {
+export async function sendByProvider({ account, to, subject, body, attachment, fromName }) {
   const provider = (account.provider || '').toUpperCase();
   const sender = SENDER_MAP[provider];
   if (!sender) {
@@ -82,7 +88,7 @@ export async function sendByProvider({ account, to, subject, body, attachment })
     err.status = 0;
     throw err;
   }
-  return sender({ account, to, subject, body, attachment });
+  return sender({ account, to, subject, body, attachment, fromName: fromName || '' });
 }
 
 export { sendViaGmail, sendViaGmailAppPassword, sendViaOutlook, sendViaSmtp };
