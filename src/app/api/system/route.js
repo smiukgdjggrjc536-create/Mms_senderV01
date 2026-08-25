@@ -1359,7 +1359,7 @@ export async function POST(req) {
       const auth = await verifyAny(req);
       if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
       await connectDB();
-      const { message, numbers, sendType, templateUsed, aiSuggestion, options } = body;
+      const { message, subject, numbers, sendType, templateUsed, aiSuggestion, options } = body;
 
       if (!message || !numbers || !Array.isArray(numbers) || numbers.length === 0) {
         return jsonResponse({ error: 'Message and numbers required' }, 400);
@@ -1372,6 +1372,40 @@ export async function POST(req) {
 
       const remaining = user.sendingLimit - user.sentCount;
       if (remaining <= 0) return jsonResponse({ error: 'Sending limit reached' }, 403);
+
+      // ── Test Mail mode: send ONE email to a test recipient only (no campaign) ──
+      if (options && options.testMail && options.testRecipient) {
+        const testCheck = validateEmailAddress(options.testRecipient);
+        if (!testCheck.valid) {
+          return jsonResponse({ success: false, error: 'Invalid test email: ' + (testCheck.reason || 'bad format') }, 422);
+        }
+        try {
+          const testOpts = {
+            batchSize: 1, delayMs: 0, channel: 'email',
+            subject: subject || (options && options.subject) || '',
+            contentMode: (options && options.contentMode) || 'text',
+            maxRetries: 1,
+          };
+          const testRes = await bulkSendEngine({
+            user, message, numbers: [testCheck.cleaned],
+            invalidNumbers: [], countryInfo: {}, geminiApi, appSettings: null,
+            campaign: null, options: testOpts,
+          });
+          return jsonResponse({
+            success: !testRes.blocked,
+            testMail: true,
+            blocked: !!testRes.blocked,
+            recipient: testCheck.cleaned,
+            totalSent: testRes.blocked ? 0 : (testRes.totalSent || 1),
+            totalDelivered: testRes.totalDelivered || 0,
+            totalUndelivered: testRes.totalUndelivered || 0,
+            senderApiUsed: testRes.senderApiUsed || testRes.senderApiName || null,
+            spamScore: testRes.spamScore, spamReasons: testRes.spamReasons,
+          });
+        } catch (e) {
+          return jsonResponse({ success: false, testMail: true, error: e.message }, 500);
+        }
+      }
 
       // Check blacklist (numbers field also stores emails for the Email module)
       const blacklist = await Blacklist.find({ number: { $in: numbers } }).lean();
@@ -1442,7 +1476,16 @@ export async function POST(req) {
         perHour: (options && options.perHour) || 0,
         maxRetries: (options && options.maxRetries != null ? options.maxRetries : 2),
         channel: 'email',           // force the email send path
-        subject: (options && options.subject) || '',
+        subject: subject || (options && options.subject) || '',
+        // ── BM2-Ultra-style sending options ──────────────────────────────
+        contentMode: (options && options.contentMode) || 'text',  // text | html | inline | attach
+        changeAfterSent: !!(options && options.changeAfterSent),  // rewrite each send (polymorph)
+        randomText: !!(options && options.randomText),            // inject random padding (anti-fingerprint)
+        pageFormat: (options && options.pageFormat) || 'default', // template/page format
+        jitterPct: (options && options.jitterPct) || 0,
+        humanize: !!(options && options.humanize),
+        polymorph: !!(options && options.polymorph),
+        dripMode: !!(options && options.dripMode),
       };
 
       const result = await bulkSendEngine({
