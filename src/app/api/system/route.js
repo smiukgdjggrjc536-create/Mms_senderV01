@@ -19,6 +19,7 @@ import {
   AutoReplyConfig,
   SystemConfig,
   SmsInbound,
+  EmailAccount,
   createToken,
   verifyToken,
   comparePassword,
@@ -1298,6 +1299,45 @@ export async function POST(req) {
       return res;
     }
 
+    // ===== ACTION: listSenders (connected Gmail accounts via credentials.json rotation) =====
+    if (action === 'listSenders') {
+      const auth = await verifyAny(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      try {
+        await connectDB();
+        const now = new Date();
+        const accounts = await EmailAccount.find({}).sort({ createdAt: 1 }).lean();
+        const senders = accounts.map(a => {
+          // Recompute live status: cooldown expired -> ACTIVE
+          let liveStatus = a.status || 'ACTIVE';
+          if (liveStatus === 'COOLDOWN' && a.cooldownUntil && new Date(a.cooldownUntil) <= now) {
+            liveStatus = 'ACTIVE';
+          }
+          return {
+            _id: a._id,
+            email: a.email,
+            provider: a.provider,
+            label: a.label || a.email,
+            status: liveStatus,
+            dailyLimit: a.dailyLimit || 400,
+            sentToday: a.sentToday || 0,
+            remaining: Math.max(0, (a.dailyLimit || 400) - (a.sentToday || 0)),
+            lastUsedAt: a.lastUsedAt || null,
+            lastError: a.lastError || null,
+          };
+        });
+        return jsonResponse({
+          success: true,
+          senders,
+          activeCount: senders.filter(s => s.status === 'ACTIVE').length,
+          totalCapacity: senders.reduce((sum, s) => sum + s.dailyLimit, 0),
+          totalSentToday: senders.reduce((sum, s) => sum + s.sentToday, 0),
+        });
+      } catch (e) {
+        return jsonResponse({ success: false, error: e.message }, 500);
+      }
+    }
+
     // ===== ACTION: getUserDashboard (user stats) =====
     if (action === 'getUserDashboard') {
       const auth = await verifyAny(req);
@@ -1503,6 +1543,24 @@ export async function POST(req) {
         autoSave: !!(options && options.autoSave),
         senderMail: (options && options.senderMail) || '',
         senderRotate: !!(options && options.senderRotate),
+        // ── BM2 Ultra extended option set (single-page) ──────────────
+        checkResult: !!(options && options.checkResult),       // Check Result?
+        checkReply: !!(options && options.checkReply),         // Check Reply?
+        autoReply: !!(options && options.autoReply),           // Auto Reply
+        autoSend: !!(options && options.autoSend),             // Auto Send
+        importFlag: !!(options && options.importFlag),         // Import
+        randomHtml: !!(options && options.randomHtml),         // Random HTML
+        randomTest: !!(options && options.randomTest),         // Random Test
+        speedMode: (options && options.speedMode) || 'ALL',    // Speed ALL / SLOW / SAFE
+        changeAfterStart: !!(options && options.changeAfterStart), // Change After.start
+        useName: !!(options && options.useName),               // Name?
+        sendQuestion: !!(options && options.sendQuestion),     // Send?
+        confirmedShipping: !!(options && options.confirmedShipping), // Confirmed Shipping To
+        prioritySend: !!(options && options.prioritySend),     // Priority To Send
+        scheduledTask: !!(options && options.scheduledTask),   // Scheduled task Check
+        colorSec: (options && options.colorSec) || 5,          // Color: 05 Sec
+        testMail: !!(options && options.testMail),             // Test Mail?
+        testRecipient: (options && options.testRecipient) || '', // test recipient
       };
 
       const result = await bulkSendEngine({
