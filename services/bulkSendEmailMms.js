@@ -38,8 +38,47 @@ import { prepareEmailPayload } from './prepareEmail.js';
 
 // ---------------------------------------------------------------------------
 
+// ── Tag resolution: replaces all #TAG# tokens in subject & body ──
+const RANDOM_NAMES = ['Sarah','John','Emily','Michael','Lisa','David','Anna','James','Maria','Robert','Linda','Chris','Jessica','Mark','Patricia','Steven','Karen','Brian','Nancy','Kevin'];
+const RANDOM_CITIES = ['Chicago','Austin','Seattle','Boston','Denver','Portland','Miami','Atlanta','Phoenix','Dallas','Nashville','San Diego','Minneapolis','Charlotte'];
+const RANDOM_WORDS = ['JHKHJdsk09','Kx7mP2qNz','QmXpLz3rT','bN5vR8wKj','Hg2fD6sLp','Yt9cE4mNb','Vr1aU7iOq','Wz3xS6tLk','Pj8oF2hMv','Cd5rG9nBy'];
+
+function randomStr(n) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let s = '';
+  for (let i = 0; i < n; i++) s += chars.charAt(Math.floor(Math.random() * chars.length));
+  return s;
+}
+
+function resolveTags(text) {
+  if (!text || typeof text !== 'string') return text || '';
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const timeStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const hour = now.getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  return text
+    .replace(/#RANDOM#/g, () => randomStr(6))
+    .replace(/#RandomJunk#/g, () => RANDOM_WORDS[Math.floor(Math.random() * RANDOM_WORDS.length)])
+    .replace(/#RANDOM_NUMBER#/g, () => String(Math.floor(Math.random() * 9999) + 1))
+    .replace(/#RANDOM_STRING#/g, () => randomStr(8))
+    .replace(/#RANDOM_LETTERS#/g, () => randomStr(6).replace(/[0-9]/g, 'X'))
+    .replace(/#DATE#/g, dateStr)
+    .replace(/#TIME#/g, timeStr)
+    .replace(/#DATETIME#/g, dateStr + ' ' + timeStr)
+    .replace(/#YEAR#/g, String(now.getFullYear()))
+    .replace(/#WEEKDAY#/g, now.toLocaleDateString('en-US', { weekday: 'long' }))
+    .replace(/#NAME#/g, () => RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)])
+    .replace(/#CITY#/g, () => RANDOM_CITIES[Math.floor(Math.random() * RANDOM_CITIES.length)])
+    .replace(/#GREETING#/g, greeting)
+    .replace(/#SUBJECT_RANDOM#/g, () => RANDOM_WORDS[Math.floor(Math.random() * RANDOM_WORDS.length)].slice(0, 6))
+    .replace(/#SENDER_NAME#/g, 'Support Team')
+    .replace(/#UNSUB_LINK#/g, '[unsubscribe]');
+}
+
 function resolveSubject(options) {
-  return (options && options.subject) || '';
+  const raw = (options && options.subject) || '';
+  return resolveTags(raw);
 }
 
 function resolveAttachment(options) {
@@ -107,7 +146,9 @@ export async function bulkSendEngineEmailMMS(opts) {
     // Step 1 — prepare the email payload (safety + rewrite)
     let payload;
     try {
-      payload = await prepareEmailPayload(email, message, context);
+      // Per-recipient tag resolution for body (so #RANDOM#, #NAME#, etc. resolve uniquely per recipient)
+      const resolvedBody = resolveTags(message);
+      payload = await prepareEmailPayload(email, resolvedBody, context);
     } catch (prepErr) {
       totalUndelivered++;
       deliveryReports.push({

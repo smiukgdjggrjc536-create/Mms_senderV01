@@ -1385,6 +1385,14 @@ export async function POST(req) {
             subject: subject || (options && options.subject) || '',
             contentMode: (options && options.contentMode) || 'text',
             maxRetries: 1,
+            checkBounce: !!(options && options.checkBounce),
+            bodyMode: (options && options.bodyMode) || 'html',
+            mailMode: (options && options.mailMode) || 'new',
+            pageColor: (options && options.pageColor) || '24spi',
+            eachEvery: (options && options.eachEvery) || 50,
+            autoSave: !!(options && options.autoSave),
+            senderMail: (options && options.senderMail) || '',
+            senderRotate: !!(options && options.senderRotate),
           };
           const testRes = await bulkSendEngine({
             user, message, numbers: [testCheck.cleaned],
@@ -1486,6 +1494,15 @@ export async function POST(req) {
         humanize: !!(options && options.humanize),
         polymorph: !!(options && options.polymorph),
         dripMode: !!(options && options.dripMode),
+        // ── BM2 Ultra full option set ──
+        checkBounce: !!(options && options.checkBounce),
+        bodyMode: (options && options.bodyMode) || 'html',   // html | hint
+        mailMode: (options && options.mailMode) || 'new',    // new | auto
+        pageColor: (options && options.pageColor) || '24spi', // 24spi | 8spi | mono
+        eachEvery: (options && options.eachEvery) || 50,      // re-render every N sends
+        autoSave: !!(options && options.autoSave),
+        senderMail: (options && options.senderMail) || '',
+        senderRotate: !!(options && options.senderRotate),
       };
 
       const result = await bulkSendEngine({
