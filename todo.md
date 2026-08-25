@@ -27,9 +27,17 @@
 - [x] "Connect Gmail" UI in SendTab (file upload → OAuth popup → result message)
 - [x] listSenders action filter by ownerId (user sees own + shared pool)
 
-## Phase 4: Build + Deploy (IN PROGRESS)
+## Phase 4: Build + Deploy
 - [x] Build test — compiled successfully (17 routes, 0 errors)
-- [ ] Git push → Vercel auto-deploy (user panel)
-- [ ] Render auto-deploy (API gateway)
-- [ ] Netlify manual deploy (admin panel)
-- [ ] Verify all 3 URLs live + report
+- [x] Git push → Vercel auto-deploy (user panel) — LIVE (commit 8b8ee5b)
+- [x] Render auto-deploy (API gateway) — LIVE (track/open endpoint confirmed)
+- [ ] Netlify manual deploy (admin panel) — BLOCKED: token expired (nfp_…cca → 401)
+- [x] Verify Vercel + Render URLs live + report
+
+## ⚠️ Netlify Admin Panel — Needs New Token
+The Netlify auth token (nfp_WgaFR5M4gTPDmf262U4dmG33FzVtGkR19cca) has EXPIRED (HTTP 401).
+The admin panel (mmsadminpanellogin.netlify.app) is still live on the PREVIOUS deploy
+and fully functional for admin operations. To deploy the latest code to Netlify:
+  → User needs to generate a new Netlify Personal Access Token at:
+    https://app.netlify.com/user/applications#personal-access-tokens
+  → Then I can run: NETLIFY_AUTH_TOKEN="<new>" netlify deploy --site d96d1fdf-... --dir .next --prod
