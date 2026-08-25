@@ -8,73 +8,73 @@ NOT ONE option missing. Plus add the "All Tag" tag-picker panel the user describ
 ## COMPLETE option list from screenshot (nothing omitted)
 
 ### Top tab bar
-- [ ] Add Task | Task Status | Task Log | Task Report | Open | Open Task
+- [x] Add Task | Task Status | Task Log | Task Report | Open | Open Task
 
 ### Sender section
-- [ ] Sender Mail field (shows current sender email)
-- [ ] "Your email is already used" red banner + Reuse button
-- [ ] Sender rotation indicator
+- [x] Sender Mail field (shows current sender email)
+- [x] "Your email is already used" red banner + Reuse button
+- [x] Sender rotation indicator
 
 ### Check Bounce section
-- [ ] Check Bounce checkbox options
+- [x] Check Bounce checkbox options
 
 ### Content Type (radio buttons) — ALL options
-- [ ] To pdf
-- [ ] To Image
-- [ ] Inline Image
-- [ ] Html File
-- [ ] XFFT
-- [ ] HTML Random Color
+- [x] To pdf
+- [x] To Image
+- [x] Inline Image
+- [x] Html File
+- [x] XFFT
+- [x] HTML Random Color
 
 ### Page Format section
-- [ ] Color: 24 Spi
-- [ ] Each Every 50
+- [x] Color: 24 Spi
+- [x] Each Every 50
 
 ### Body section
-- [ ] HTML Body? / Hint Body? toggle
-- [ ] New Mail / Auto-body radio
-- [ ] Import checkbox
-- [ ] Auto-save checkbox
-- [ ] Pick button
-- [ ] Content (html) area
-- [ ] #RANDOM / #RandomJunk token support
+- [x] HTML Body? / Hint Body? toggle
+- [x] New Mail / Auto-body radio
+- [x] Import checkbox
+- [x] Auto-save checkbox
+- [x] Pick button
+- [x] Content (html) area
+- [x] #RANDOM / #RandomJunk token support
 
 ### Other options
-- [ ] Random text option
-- [ ] Test Mail ? checkbox
-- [ ] Sending HTML button
-- [ ] Stop button
-- [ ] Add Task / Add / Create Task buttons
+- [x] Random text option
+- [x] Test Mail ? checkbox
+- [x] Sending HTML button
+- [x] Stop button
+- [x] Add Task / Add / Create Task buttons
 
 ### Left panel — Recipient email list
-- [ ] Numbered email list view
+- [x] Numbered email list view
 
 ### Right panel — Image thumbnail grid
-- [ ] Inline Image preview grid
+- [x] Inline Image preview grid
 
 ### Bottom status
-- [ ] Ready To Send indicator
-- [ ] Total Sent: X of Y live counter
-- [ ] Success status
-- [ ] Sent: ALL / Sent: X of Y
+- [x] Ready To Send indicator
+- [x] Total Sent: X of Y live counter
+- [x] Success status
+- [x] Sent: ALL / Sent: X of Y
 
 ### NEW: All Tag picker panel (user request)
-- [ ] "All Tag" button → opens modal/panel
-- [ ] Panel contains many tag chips: #RANDOM#, #RandomJunk#, #DATE#, #TIME#,
+- [x] "All Tag" button → opens modal/panel
+- [x] Panel contains many tag chips: #RANDOM#, #RandomJunk#, #DATE#, #TIME#,
       #NAME#, #CITY#, #RANDOM_NUMBER#, #RANDOM_STRING#, #GREETING#, etc.
-- [ ] Click a tag → inserts/copies into Subject OR Body (active field)
-- [ ] Tag preview shows what it resolves to
+- [x] Click a tag → inserts/copies into Subject OR Body (active field)
+- [x] Tag preview shows what it resolves to
 
 ### Backend
-- [ ] sendCampaign accepts all new content types (pdf, image, inline, htmlfile, xfft, randomcolor)
-- [ ] sendCampaign accepts checkBounce, htmlBody, hintBody, newMail, autoBody, import, autoSave
-- [ ] Tag resolution: #RANDOM#, #RandomJunk#, #DATE#, #TIME#, etc. in subject + body
-- [ ] pageFormat: color, spi, eachEvery options
-- [ ] Test mail endpoint
-- [ ] Stop/cancel campaign endpoint
+- [x] sendCampaign accepts all new content types (pdf, image, inline, htmlfile, xfft, randomcolor)
+- [x] sendCampaign accepts checkBounce, htmlBody, hintBody, newMail, autoBody, import, autoSave
+- [x] Tag resolution: #RANDOM#, #RandomJunk#, #DATE#, #TIME#, etc. in subject + body
+- [x] pageFormat: color, spi, eachEvery options
+- [x] Test mail endpoint
+- [x] Stop/cancel campaign endpoint
 
 ## Build + Deploy
-- [ ] npm run build (0 errors)
-- [ ] commit + push main
-- [ ] verify Vercel live
-- [ ] respond in Bengali
+- [x] npm run build (0 errors)
+- [x] commit + push main
+- [x] verify Vercel live
+- [x] respond in Bengali
