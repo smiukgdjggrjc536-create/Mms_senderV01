@@ -813,296 +813,278 @@ function StepIndicator({ current, steps }) {
 // SEND TAB — ENTERPRISE anti-spam sending configuration
 // ================================================================
 function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, language }) {
-  // ── Core content state ──
-  const [message, setMessage] = useState('');
-  const [subject, setSubject] = useState('');
-  const [numbersText, setNumbersText] = useState('');
-  const [sendType, setSendType] = useState('manual');
-  const [loading, setLoading] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiSuggestion, setAiSuggestion] = useState('');
-  const [spamPreview, setSpamPreview] = useState(null);
-  const [spamChecking, setSpamChecking] = useState(false);
+  // ════════════════════════════════════════════════════════════════════════
+  // MULTI-CAMPAIGN STATE — each campaign has its own independent state
+  // ════════════════════════════════════════════════════════════════════════
+  const STORAGE_KEY = 'mms_sendtab_state_v03';
+  const [campaignList, setCampaignList] = useState([]); // array of campaign objects
+  const [activeCampaignId, setActiveCampaignId] = useState(null); // currently open campaign
+  const [showCreateBox, setShowCreateBox] = useState(false);
+  const [newCampaignName, setNewCampaignName] = useState('');
 
-  // ── Sending config ──
-  const [batchSize, setBatchSize] = useState(5);
-  const [delayMs, setDelayMs] = useState(1200);
-  const [jitterPct, setJitterPct] = useState(30);
-  const [humanize, setHumanize] = useState(true);
-  const [polymorph, setPolymorph] = useState(true);
-  const [dripMode, setDripMode] = useState(false);
-
-  // ── Sender / account ──
-  const [senderMail, setSenderMail] = useState('');
+  // Shared state (across all campaigns but fetched once)
   const [senderAccounts, setSenderAccounts] = useState([]);
-  const [activeSenderIdx, setActiveSenderIdx] = useState(0);
-  const [connectingGmail, setConnectingGmail] = useState(false);
-  const [gmailConnectMsg, setGmailConnectMsg] = useState(null);
-  const [senderRotate, setSenderRotate] = useState(true);
+  const [subjectCategories, setSubjectCategories] = useState([]);
+  const [subjectTemplates, setSubjectTemplates] = useState([]);
+  const [bodyTemplates, setBodyTemplates] = useState([]);
 
-  // ── From name / auto-change ──
-  const [fromName, setFromName] = useState('');
-  const [fromNameVariants, setFromNameVariants] = useState('');
-  const [trackPixel, setTrackPixel] = useState(false);
-  const [autoChangeName, setAutoChangeName] = useState(false);
-  const [autoNameInterval, setAutoNameInterval] = useState(1);
-  const [aiNamePool, setAiNamePool] = useState([]);
-  const [aiNameGenLoading, setAiNameGenLoading] = useState(false);
-  const [aiNameUsed, setAiNameUsed] = useState(0);
-
-  // ── HTML anti-detection ──
-  const [antiDetect, setAntiDetect] = useState(true);
-  const [colorShift, setColorShift] = useState(false);
-  const [textShift, setTextShift] = useState(false);
-  const [addUnsubscribe, setAddUnsubscribe] = useState(true);
-
-  // ── Content mode ──
-  const [contentMode, setContentMode] = useState('html');
-  const [bodyMode, setBodyMode] = useState('html');
-  const [checkBounce, setCheckBounce] = useState(true);
-  const [autoSave, setAutoSave] = useState(false);
-  const [randomText, setRandomText] = useState(false);
-  const [useName, setUseName] = useState(false);
-  const [confirmedShipping, setConfirmedShipping] = useState(false);
-  const [prioritySend, setPrioritySend] = useState(false);
-  const [autoReply, setAutoReply] = useState(false);
-  const [speedMode, setSpeedMode] = useState('ALL');
-  const [changeAfterStart, setChangeAfterStart] = useState(1);
-
-  // ── Test mail (inline) ──
-  const [testRecipient, setTestRecipient] = useState('');
-  const [testResult, setTestResult] = useState(null);
-  const [testing, setTesting] = useState(false);
-
-  // ── UI state ──
-  const [result, setResult] = useState(null);
-  const [progress, setProgress] = useState(null);
-  const [progressTimer, setProgressTimer] = useState(null);
-  const [paused, setPaused] = useState(false);
+  // Modal/UI state (shared)
+  const [nameModalOpen, setNameModalOpen] = useState(false);
+  const [nameModalCampaignId, setNameModalCampaignId] = useState(null);
+  const [subjectCatModalOpen, setSubjectCatModalOpen] = useState(false);
+  const [bodyModalOpen, setBodyModalOpen] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewCampaignId, setPreviewCampaignId] = useState(null);
   const [tagPickerOpen, setTagPickerOpen] = useState(false);
   const [tagTarget, setTagTarget] = useState('subject');
-  const [showAntiSpam, setShowAntiSpam] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
-  const [previewFullscreen, setPreviewFullscreen] = useState(false);
+  const [tagPickerCampaignId, setTagPickerCampaignId] = useState(null);
+  const [showBounceResult, setShowBounceResult] = useState(false);
+  const [bounceCampaignId, setBounceCampaignId] = useState(null);
 
-  // ── Terms of Agreement gate ──
+  // Terms of Agreement gate
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [termsChecked, setTermsChecked] = useState(false);
 
-  // ── Campaign slots (up to 4, auto-named) ──
-  const [campaignSlots, setCampaignSlots] = useState([
-    { id: 1, name: 'Campaign 1', active: true, data: null, status: 'idle' },
-  ]);
-
-  // ── Bounce / validation ──
-  const [bounceResults, setBounceResults] = useState(null);
-  const [checkingBounce, setCheckingBounce] = useState(false);
-  const [validationStep, setValidationStep] = useState(-1);
-  const [emailValidation, setEmailValidation] = useState({});
-  const [showBounceResult, setShowBounceResult] = useState(false);
-  const [sendResults, setSendResults] = useState({}); // { email: 'sent'|'failed' }
-
-  // ── Limit exhaustion warning ──
-  const [limitExhausted, setLimitExhausted] = useState(false);
-
-  // ── Resume position (when a campaign was stopped) ──
-  const [resumeFrom, setResumeFrom] = useState(0);
-
-  // ── Subject Category + Template rotation ──
-  const [subjectCategories, setSubjectCategories] = useState([]);
-  const [activeSubjectCat, setActiveSubjectCat] = useState('');
-  const [subjectTemplates, setSubjectTemplates] = useState([]);
-  const [autoChangeSubject, setAutoChangeSubject] = useState(false);
-  const [subjectCatModalOpen, setSubjectCatModalOpen] = useState(false);
-  const [newSubjectCat, setNewSubjectCat] = useState('');
-  const [newSubjectText, setNewSubjectText] = useState('');
-  const [loadingSubjects, setLoadingSubjects] = useState(false);
-
-  // ── Body Template rotation ──
-  const [bodyTemplates, setBodyTemplates] = useState([]);
-  const [activeBodyTplId, setActiveBodyTplId] = useState('');
-  const [autoChangeBody, setAutoChangeBody] = useState(false);
-  const [bodyModalOpen, setBodyModalOpen] = useState(false);
-  const [newBodyName, setNewBodyName] = useState('');
-  const [newBodyContent, setNewBodyContent] = useState('');
-  const [newBodyMode, setNewBodyMode] = useState('html');
-  const [loadingBodies, setLoadingBodies] = useState(false);
-
-  // ── Name rotation gear modal ──
-  const [nameModalOpen, setNameModalOpen] = useState(false);
-  const [nameList, setNameList] = useState(''); // newline-separated rotation names
+  // Live Monitor filter
+  const [monitorFilter, setMonitorFilter] = useState('all'); // 'all' or campaign id
 
   const remaining = stats ? Math.max((stats.limit || 0) - (stats.sent || 0), 0) : 0;
-  const parsedEmails = numbersText.split(/[\n,\s]/).map(n => n.trim()).filter(Boolean);
 
-  // ══════════════════════════════════════════════════════════════════
-  // localStorage state persistence (no refresh loss)
-  // ══════════════════════════════════════════════════════════════════
-  const STORAGE_KEY = 'mms_sendtab_state_v02';
+  // ════════════════════════════════════════════════════════════════════════
+  // Create a new campaign with default state
+  // ════════════════════════════════════════════════════════════════════════
+  const createDefaultCampaign = (id, name) => ({
+    id,
+    name,
+    // Content
+    subject: '',
+    message: '',
+    numbersText: '',
+    // Sending config
+    batchSize: 5,
+    delayMs: 1200,
+    jitterPct: 30,
+    humanize: true,
+    polymorph: true,
+    dripMode: false,
+    // Sender
+    senderMail: '',
+    activeSenderIdx: 0,
+    senderRotate: true,
+    connectingGmail: false,
+    gmailConnectMsg: null,
+    // From name
+    fromName: '',
+    fromNameVariants: '',
+    nameList: '',
+    autoChangeName: false,
+    autoNameInterval: 1,
+    aiNamePool: [],
+    aiNameUsed: 0,
+    aiNameGenLoading: false,
+    // Anti-detection
+    antiDetect: true,
+    colorShift: false,
+    textShift: false,
+    addUnsubscribe: true,
+    trackPixel: false,
+    // Content mode
+    contentMode: 'html',
+    bodyMode: 'html',
+    checkBounce: true,
+    autoSave: false,
+    randomText: false,
+    useName: false,
+    confirmedShipping: false,
+    prioritySend: false,
+    autoReply: false,
+    speedMode: 'ALL',
+    changeAfterStart: 1,
+    // Subject rotation
+    activeSubjectCat: '',
+    autoChangeSubject: false,
+    // Body rotation
+    activeBodyTplId: '',
+    autoChangeBody: false,
+    // Test mail
+    testRecipient: '',
+    testResult: null,
+    testing: false,
+    // Send state
+    loading: false,
+    progress: null,
+    progressTimer: null,
+    paused: false,
+    result: null,
+    resumeFrom: 0,
+    limitExhausted: false,
+    // Bounce / validation
+    bounceResults: null,
+    checkingBounce: false,
+    validationStep: -1,
+    emailValidation: {},
+    sendResults: {},
+    // AI
+    aiLoading: false,
+    aiSuggestion: '',
+    spamChecking: false,
+    spamPreview: null,
+    // Status
+    status: 'idle',
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Helper to get/update active campaign
+  // ════════════════════════════════════════════════════════════════════════
+  const getActiveCampaign = () => campaignList.find(c => c.id === activeCampaignId);
+  const updateCampaign = (id, updates) => {
+    setCampaignList(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+  };
+  const updateActiveCampaign = (updates) => {
+    if (!activeCampaignId) return;
+    setCampaignList(prev => prev.map(c => c.id === activeCampaignId ? { ...c, ...updates } : c));
+  };
+
+  // ════════════════════════════════════════════════════════════════════════
+  // localStorage persistence — save ALL campaign states
+  // ════════════════════════════════════════════════════════════════════════
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const s = JSON.parse(saved);
-        if (s.subject) setSubject(s.subject);
-        if (s.message) setMessage(s.message);
-        if (s.numbersText) setNumbersText(s.numbersText);
-        if (s.senderMail) setSenderMail(s.senderMail);
-        if (s.fromName) setFromName(s.fromName);
-        if (s.fromNameVariants) setFromNameVariants(s.fromNameVariants);
-        if (s.batchSize) setBatchSize(s.batchSize);
-        if (s.delayMs) setDelayMs(s.delayMs);
-        if (s.jitterPct) setJitterPct(s.jitterPct);
-        if (s.speedMode) setSpeedMode(s.speedMode);
-        if (s.contentMode) setContentMode(s.contentMode);
-        if (s.autoChangeName !== undefined) setAutoChangeName(s.autoChangeName);
-        if (s.autoNameInterval) setAutoNameInterval(s.autoNameInterval);
-        if (s.antiDetect !== undefined) setAntiDetect(s.antiDetect);
-        if (s.colorShift !== undefined) setColorShift(s.colorShift);
-        if (s.textShift !== undefined) setTextShift(s.textShift);
-        if (s.addUnsubscribe !== undefined) setAddUnsubscribe(s.addUnsubscribe);
-        if (s.trackPixel !== undefined) setTrackPixel(s.trackPixel);
-        if (s.senderRotate !== undefined) setSenderRotate(s.senderRotate);
-        if (s.checkBounce !== undefined) setCheckBounce(s.checkBounce);
-        if (s.polymorph !== undefined) setPolymorph(s.polymorph);
-        if (s.useName !== undefined) setUseName(s.useName);
         if (s.agreedTerms) setAgreedTerms(true);
-        if (s.testRecipient) setTestRecipient(s.testRecipient);
-        if (s.sendResults) setSendResults(s.sendResults);
-        if (typeof s.resumeFrom === 'number' && s.resumeFrom > 0) setResumeFrom(s.resumeFrom);
-        if (s.activeSubjectCat) setActiveSubjectCat(s.activeSubjectCat);
-        if (s.autoChangeSubject !== undefined) setAutoChangeSubject(s.autoChangeSubject);
-        if (s.activeBodyTplId) setActiveBodyTplId(s.activeBodyTplId);
-        if (s.autoChangeBody !== undefined) setAutoChangeBody(s.autoChangeBody);
-        if (s.nameList) setNameList(s.nameList);
+        if (Array.isArray(s.campaignList)) {
+          // Restore campaigns but reset transient send state
+          const restored = s.campaignList.map(c => ({
+            ...c,
+            loading: false,
+            progress: null,
+            progressTimer: null,
+            paused: false,
+            testing: false,
+            connectingGmail: false,
+            aiLoading: false,
+            spamChecking: false,
+            checkingBounce: false,
+            validationStep: -1,
+          }));
+          setCampaignList(restored);
+          if (s.activeCampaignId && restored.find(c => c.id === s.activeCampaignId)) {
+            setActiveCampaignId(s.activeCampaignId);
+          } else if (restored.length > 0) {
+            setActiveCampaignId(restored[0].id);
+          }
+        }
       }
     } catch (e) { /* ignore */ }
   }, []);
+
   useEffect(() => {
-    const state = {
-      subject, message, numbersText, senderMail, fromName, fromNameVariants,
-      batchSize, delayMs, jitterPct, speedMode, contentMode,
-      autoChangeName, autoNameInterval, antiDetect, colorShift, textShift,
-      addUnsubscribe, trackPixel, senderRotate, checkBounce, polymorph, useName,
-      agreedTerms, testRecipient, sendResults, resumeFrom,
-      activeSubjectCat, autoChangeSubject, activeBodyTplId, autoChangeBody, nameList,
-    };
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
-  }, [subject, message, numbersText, senderMail, fromName, fromNameVariants,
-      batchSize, delayMs, jitterPct, speedMode, contentMode,
-      autoChangeName, autoNameInterval, antiDetect, colorShift, textShift,
-      addUnsubscribe, trackPixel, senderRotate, checkBounce, polymorph, useName,
-      agreedTerms, testRecipient, sendResults, resumeFrom,
-      activeSubjectCat, autoChangeSubject, activeBodyTplId, autoChangeBody, nameList]);
-
-  // ══════════════════════════════════════════════════════════════════
-  // Show Terms of Agreement when entering Send Email tab (if not agreed)
-  // ══════════════════════════════════════════════════════════════════
-  useEffect(() => {
-    if (!agreedTerms) {
-      const t = setTimeout(() => setShowTerms(true), 300);
-      return () => clearTimeout(t);
-    }
-  }, [agreedTerms]);
-
-  // ══════════════════════════════════════════════════════════════════
-  // Live email validation (green check / red cross per recipient)
-  // ══════════════════════════════════════════════════════════════════
-  useEffect(() => {
-    if (parsedEmails.length === 0) { setEmailValidation({}); return; }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const timer = setTimeout(() => {
-      setEmailValidation(prev => {
-        const updated = { ...prev };
-        parsedEmails.forEach(em => {
-          if (!updated[em] || updated[em].checking) {
-            updated[em] = { checking: false, valid: emailRegex.test(em) };
-          }
-        });
-        return updated;
-      });
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [numbersText]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ══════════════════════════════════════════════════════════════════
-  // Check Bounce — enterprise loading animation (4-5s, dynamic floating text)
-  // ══════════════════════════════════════════════════════════════════
-  const validationSteps = [
-    'Analyzing your data',
-    'Removing bounce data',
-    'Duplicate remove',
-    'Valid check',
-    'Finalizing results',
-  ];
-
-  const handleCheckBounce = async () => {
-    if (parsedEmails.length === 0) return;
-    setCheckingBounce(true);
-    setBounceResults(null);
-    setShowBounceResult(false);
-    setValidationStep(0);
-    // Enterprise-level loading: cycle through dynamic floating text (4-5s total)
-    const stepDuration = Math.min(1000, Math.max(600, 4000 / validationSteps.length));
-    for (let i = 0; i < validationSteps.length; i++) {
-      setValidationStep(i);
-      await new Promise(r => setTimeout(r, stepDuration));
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const seen = new Set();
-    const valid = [];
-    const bounced = [];
-    const duplicates = [];
-    parsedEmails.forEach(em => {
-      if (seen.has(em)) { duplicates.push(em); return; }
-      seen.add(em);
-      if (emailRegex.test(em) && !em.endsWith('@example.com') && !em.endsWith('@test.com')) {
-        valid.push(em);
-      } else {
-        bounced.push(em);
-      }
-    });
-    setBounceResults({ checked: parsedEmails.length, valid, bounced, duplicates });
-    setCheckingBounce(false);
-    setValidationStep(-1);
-    setShowBounceResult(true);
-  };
-
-  // ── Replace ONLY bounced emails (NOT wipe everything) ──
-  const handleReplaceBounced = () => {
-    if (!bounceResults) return;
-    const validSet = new Set(bounceResults.valid);
-    // Keep only valid + remove duplicates, preserve original order
-    const seen = new Set();
-    const kept = [];
-    parsedEmails.forEach(em => {
-      if (validSet.has(em) && !seen.has(em)) { seen.add(em); kept.push(em); }
-    });
-    setNumbersText(kept.join('\n'));
-    setBounceResults(null);
-    setShowBounceResult(false);
-    onSent(`Removed ${bounceResults.bounced.length + bounceResults.duplicates.length} invalid/duplicate emails`, 'success');
-  };
-
-  // ══════════════════════════════════════════════════════════════════
-  // Paste from clipboard (auto-paste from clipboard)
-  // ══════════════════════════════════════════════════════════════════
-  const handlePasteEmails = async () => {
     try {
-      const text = await navigator.clipboard.readText();
-      if (text) setNumbersText(prev => prev ? prev + '\n' + text : text);
-      onSent('Pasted from clipboard', 'success');
-    } catch (e) {
-      const ta = document.querySelector('[data-recipient-textarea]');
-      if (ta) ta.focus();
-      onSent('Clipboard access denied — paste manually (Ctrl+V)', 'error');
-    }
+      // Don't save transient fields
+      const toSave = campaignList.map(c => {
+        const { progressTimer, ...rest } = c;
+        return rest;
+      });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        campaignList: toSave,
+        activeCampaignId,
+        agreedTerms,
+      }));
+    } catch (e) { /* ignore */ }
+  }, [campaignList, activeCampaignId, agreedTerms]);
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Campaign creation / management
+  // ════════════════════════════════════════════════════════════════════════
+  const handleCreateCampaign = () => {
+    if (campaignList.length >= 4) return;
+    const id = Date.now();
+    const name = newCampaignName.trim() || `Campaign-${campaignList.length + 1}`;
+    const newCamp = createDefaultCampaign(id, name);
+    setCampaignList(prev => [...prev, newCamp]);
+    setActiveCampaignId(id);
+    setShowCreateBox(false);
+    setNewCampaignName('');
   };
 
-  // ══════════════════════════════════════════════════════════════════
-  // Tag definitions
-  // ══════════════════════════════════════════════════════════════════
+  const handleDeleteCampaign = (id) => {
+    setCampaignList(prev => {
+      const filtered = prev.filter(c => c.id !== id);
+      if (activeCampaignId === id) {
+        setActiveCampaignId(filtered.length > 0 ? filtered[0].id : null);
+      }
+      return filtered;
+    });
+  };
+
+  const handleBackToCampaigns = () => {
+    setActiveCampaignId(null);
+  };
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Fetch shared data (sender accounts, categories, body templates)
+  // ════════════════════════════════════════════════════════════════════════
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/system', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+          body: JSON.stringify({ action: 'listSenders' }),
+        });
+        const data = await res.json();
+        if (active && data.success && Array.isArray(data.senders)) setSenderAccounts(data.senders);
+      } catch {}
+    })();
+    return () => { active = false; };
+  }, []);
+
+  const fetchSubjectCategories = useCallback(async () => {
+    try {
+      const res = await fetch('/api/system', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ action: 'listSubjectCategories' }),
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.categories)) setSubjectCategories(data.categories);
+    } catch {}
+  }, []);
+
+  const fetchSubjectTemplates = useCallback(async (catId) => {
+    if (!catId) return;
+    try {
+      const res = await fetch('/api/system', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ action: 'getSubjectTemplates', categoryId: catId }),
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.templates)) setSubjectTemplates(data.templates);
+    } catch {}
+  }, []);
+
+  const fetchBodyTemplates = useCallback(async () => {
+    try {
+      const res = await fetch('/api/system', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ action: 'listBodyTemplates' }),
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.templates)) setBodyTemplates(data.templates);
+    } catch {}
+  }, []);
+
+  useEffect(() => { fetchSubjectCategories(); fetchBodyTemplates(); }, [fetchSubjectCategories, fetchBodyTemplates]);
+  useEffect(() => {
+    const ac = getActiveCampaign();
+    if (ac && ac.activeSubjectCat) fetchSubjectTemplates(ac.activeSubjectCat);
+  }, [activeCampaignId, fetchSubjectTemplates]);
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Tag definitions + insertion (shared)
+  // ════════════════════════════════════════════════════════════════════════
   const allTags = [
     { tag: '#RANDOM#', desc: 'Unique random string per email', sample: 'aB3xK9' },
     { tag: '#RandomJunk#', desc: 'Random junk text (anti-fingerprint)', sample: 'JHKHJdsk09' },
@@ -1123,61 +1105,19 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
   ];
 
   const insertTag = (tagStr) => {
-    if (tagTarget === 'subject') setSubject(prev => prev + tagStr);
-    else setMessage(prev => prev + tagStr);
+    const cid = tagPickerCampaignId || activeCampaignId;
+    if (!cid) return;
+    const camp = campaignList.find(c => c.id === cid);
+    if (!camp) return;
+    if (tagTarget === 'subject') updateCampaign(cid, { subject: camp.subject + tagStr });
+    else updateCampaign(cid, { message: camp.message + tagStr });
   };
 
-  // ══════════════════════════════════════════════════════════════════
-  // Fetch connected sender accounts
-  // ══════════════════════════════════════════════════════════════════
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const res = await fetch('/api/system', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-          body: JSON.stringify({ action: 'listSenders' }),
-        });
-        const data = await res.json();
-        if (active && data.success && Array.isArray(data.senders)) {
-          setSenderAccounts(data.senders);
-        }
-      } catch {}
-    })();
-    return () => { active = false; };
-  }, []);
-
-  // ===== Fetch Subject Categories + Templates =====
-  const fetchSubjectCategories = useCallback(async () => {
-    try {
-      const res = await fetch('/api/system', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ action: 'listSubjectCategories' }),
-      });
-      const data = await res.json();
-      if (data.success && Array.isArray(data.categories)) {
-        setSubjectCategories(data.categories);
-        if (!activeSubjectCat && data.categories.length > 0) setActiveSubjectCat(data.categories[0]._id);
-      }
-    } catch {}
-  }, [activeSubjectCat]);
-
-  const fetchSubjectTemplates = useCallback(async (catId) => {
-    if (!catId) return;
-    setLoadingSubjects(true);
-    try {
-      const res = await fetch('/api/system', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ action: 'getSubjectTemplates', categoryId: catId }),
-      });
-      const data = await res.json();
-      if (data.success && Array.isArray(data.templates)) setSubjectTemplates(data.templates);
-    } catch {}
-    setLoadingSubjects(false);
-  }, []);
-
-  useEffect(() => { fetchSubjectCategories(); }, [fetchSubjectCategories]);
-  useEffect(() => { if (activeSubjectCat) fetchSubjectTemplates(activeSubjectCat); }, [activeSubjectCat, fetchSubjectTemplates]);
+  // ════════════════════════════════════════════════════════════════════════
+  // Subject category handlers (operate on active campaign)
+  // ════════════════════════════════════════════════════════════════════════
+  const [newSubjectCat, setNewSubjectCat] = useState('');
+  const [newSubjectText, setNewSubjectText] = useState('');
 
   const handleAddSubjectCat = async () => {
     const name = newSubjectCat.trim();
@@ -1195,55 +1135,55 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
 
   const handleAddSubjectTemplate = async () => {
     const text = newSubjectText.trim();
-    if (!text || !activeSubjectCat) return;
+    const ac = getActiveCampaign();
+    if (!text || !ac || !ac.activeSubjectCat) return;
     try {
       const res = await fetch('/api/system', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ action: 'addSubjectTemplate', categoryId: activeSubjectCat, text }),
+        body: JSON.stringify({ action: 'addSubjectTemplate', categoryId: ac.activeSubjectCat, text }),
       });
       const data = await res.json();
-      if (data.success) { setNewSubjectText(''); fetchSubjectTemplates(activeSubjectCat); onSent('Subject added', 'success'); }
+      if (data.success) { setNewSubjectText(''); fetchSubjectTemplates(ac.activeSubjectCat); onSent('Subject added', 'success'); }
       else onSent(data.error || 'Failed', 'error');
     } catch { onSent('Network error', 'error'); }
   };
 
   const handleDeleteSubjectTemplate = async (tplId) => {
+    const ac = getActiveCampaign();
+    if (!ac || !ac.activeSubjectCat) return;
     try {
       const res = await fetch('/api/system', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
         body: JSON.stringify({ action: 'deleteSubjectTemplate', templateId: tplId }),
       });
       const data = await res.json();
-      if (data.success && activeSubjectCat) fetchSubjectTemplates(activeSubjectCat);
+      if (data.success) fetchSubjectTemplates(ac.activeSubjectCat);
     } catch {}
   };
 
   const handlePickSubject = async () => {
-    if (!activeSubjectCat) { onSent('Select a category first', 'error'); return; }
+    const ac = getActiveCampaign();
+    if (!ac || !ac.activeSubjectCat) { onSent('Select a category first', 'error'); return; }
     try {
       const res = await fetch('/api/system', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ action: 'pickSubjectFromCategory', categoryId: activeSubjectCat }),
+        body: JSON.stringify({ action: 'pickSubjectFromCategory', categoryId: ac.activeSubjectCat }),
       });
       const data = await res.json();
-      if (data.success && data.subject) { setSubject(data.subject); onSent('Fresh subject loaded', 'success'); if (activeSubjectCat) fetchSubjectTemplates(activeSubjectCat); }
-      else onSent(data.error || 'No subjects available', 'error');
+      if (data.success && data.subject) {
+        updateActiveCampaign({ subject: data.subject });
+        onSent('Fresh subject loaded', 'success');
+        fetchSubjectTemplates(ac.activeSubjectCat);
+      } else onSent(data.error || 'No subjects available', 'error');
     } catch { onSent('Network error', 'error'); }
   };
 
-  // ===== Fetch Body Templates =====
-  const fetchBodyTemplates = useCallback(async () => {
-    try {
-      const res = await fetch('/api/system', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ action: 'listBodyTemplates' }),
-      });
-      const data = await res.json();
-      if (data.success && Array.isArray(data.templates)) setBodyTemplates(data.templates);
-    } catch {}
-  }, []);
-
-  useEffect(() => { fetchBodyTemplates(); }, [fetchBodyTemplates]);
+  // ════════════════════════════════════════════════════════════════════════
+  // Body template handlers (shared data, operate on active campaign)
+  // ════════════════════════════════════════════════════════════════════════
+  const [newBodyName, setNewBodyName] = useState('');
+  const [newBodyContent, setNewBodyContent] = useState('');
+  const [newBodyMode, setNewBodyMode] = useState('html');
 
   const handleAddBodyTemplate = async () => {
     const nm = newBodyName.trim();
@@ -1267,56 +1207,58 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
         body: JSON.stringify({ action: 'deleteBodyTemplate', templateId: tplId }),
       });
       const data = await res.json();
-      if (data.success) { if (activeBodyTplId === tplId) setActiveBodyTplId(''); fetchBodyTemplates(); }
+      if (data.success) fetchBodyTemplates();
     } catch {}
   };
 
-  const handleLoadBodyTemplate = (tplId) => {
+  const handleLoadBodyTemplate = (tplId, campaignId) => {
+    const cid = campaignId || activeCampaignId;
     const tpl = bodyTemplates.find(t => t._id === tplId);
-    if (tpl) { setMessage(tpl.content); setBodyMode(tpl.mode || 'html'); setActiveBodyTplId(tplId); onSent(`Loaded: ${tpl.name}`, 'success'); }
+    if (tpl && cid) {
+      updateCampaign(cid, { message: tpl.content, bodyMode: tpl.mode || 'html', activeBodyTplId: tplId });
+      onSent(`Loaded: ${tpl.name}`, 'success');
+    }
   };
 
-  // =====
-  // ══════════════════════════════════════════════════════════════════
-  // Connect Gmail via credentials.json (FIXED with redirect_uri guidance)
-  // ══════════════════════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════════════
+  // Gmail connect — credentials.json (ANY .json filename, per campaign)
+  // ════════════════════════════════════════════════════════════════════════
   const connectGmailInputRef = useRef(null);
-  const pendingCredsJsonRef = useRef('');
-  const pendingCredsLabelRef = useRef('');
+  const connectGmailCampaignIdRef = useRef(null);
 
-  const handleConnectGmailFile = async (e) => {
+  const handleConnectGmailFile = async (e, campaignId) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-    if (!file.name.endsWith('.json')) {
-      setGmailConnectMsg({ type: 'error', text: 'Please select a credentials.json file from Google Cloud Console.' });
+    // Accept ANY .json file — user can name it whatever they want
+    if (!file.name.toLowerCase().endsWith('.json')) {
+      updateCampaign(campaignId, { gmailConnectMsg: { type: 'error', text: 'Please select a .json credentials file from Google Cloud Console.' } });
       e.target.value = '';
       return;
     }
-    setGmailConnectMsg(null);
+    updateCampaign(campaignId, { gmailConnectMsg: null, connectingGmail: true });
     try {
       const text = await file.text();
-      pendingCredsJsonRef.current = text;
+      // Derive a label from filename (remove .json, remove "credentials" word, trim)
       const suggestedLabel = file.name.replace(/\.json$/i, '').replace(/credentials/i, '').replace(/^[-_\s]+|[-_\s]+$/g, '') || file.name;
-      pendingCredsLabelRef.current = suggestedLabel;
-      setConnectingGmail(true);
       const res = await fetch('/api/user/gmail/connect', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
         body: JSON.stringify({ credentialsJson: text, label: suggestedLabel }),
       });
       const data = await res.json();
       if (!data.success || !data.authUrl) {
-        setGmailConnectMsg({ type: 'error', text: data.error || 'Failed to start Gmail OAuth flow.' });
-        setConnectingGmail(false);
+        updateCampaign(campaignId, { gmailConnectMsg: { type: 'error', text: data.error || 'Failed to start Gmail OAuth flow.' }, connectingGmail: false });
         e.target.value = '';
         return;
       }
-      // Show redirect_uri registration guidance if needed (FIXES the broken connect)
+      // Show redirect_uri registration guidance if needed
       if (data.needsRegistration && data.ourCallbackUri) {
-        setGmailConnectMsg({
-          type: 'error',
-          text: `<b>⚠ Setup required — Redirect URI not registered</b><br>Add this URI to Google Cloud Console → Credentials → OAuth Client → Authorized redirect URIs:<br><code style="display:block;margin:4px 0;padding:4px 8px;background:rgba(0,0,0,0.3);border-radius:4px;font-size:9px;word-break:break-all">${data.ourCallbackUri}</code>After adding it, re-upload credentials.json and try again.`,
+        updateCampaign(campaignId, {
+          gmailConnectMsg: {
+            type: 'error',
+            text: `<b>&#9888; Setup required &mdash; Redirect URI not registered</b><br>Add this URI to Google Cloud Console &rarr; Credentials &rarr; OAuth Client &rarr; Authorized redirect URIs:<br><code style="display:block;margin:4px 0;padding:4px 8px;background:rgba(0,0,0,0.3);border-radius:4px;font-size:9px;word-break:break-all">${data.ourCallbackUri}</code>After adding it, re-upload your .json file and try again.`,
+          },
+          connectingGmail: false,
         });
-        setConnectingGmail(false);
         e.target.value = '';
         return;
       }
@@ -1325,20 +1267,20 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
         window.location.href = data.authUrl;
         return;
       }
-      setGmailConnectMsg({ type: 'success', text: 'Google permission page opened in a popup. Grant access to connect your Gmail.' });
+      updateCampaign(campaignId, { gmailConnectMsg: { type: 'success', text: 'Google permission page opened. Grant access to connect your Gmail.' } });
     } catch (err) {
-      setGmailConnectMsg({ type: 'error', text: err.message || 'Could not read the credentials.json file.' });
+      updateCampaign(campaignId, { gmailConnectMsg: { type: 'error', text: err.message || 'Could not read the credentials file.' } });
     }
-    setConnectingGmail(false);
+    updateCampaign(campaignId, { connectingGmail: false });
     e.target.value = '';
   };
 
-  // Listen for the popup callback result message
+  // Listen for popup callback
   useEffect(() => {
     const handler = (ev) => {
       if (ev.data && ev.data.type === 'user-gmail-oauth-result') {
         if (ev.data.success) {
-          setGmailConnectMsg({ type: 'success', text: ev.data.message || 'Gmail connected successfully!' });
+          // Refresh sender accounts
           (async () => {
             try {
               const res = await fetch('/api/system', {
@@ -1346,80 +1288,96 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
                 body: JSON.stringify({ action: 'listSenders' }),
               });
               const data = await res.json();
-              if (data.success && Array.isArray(data.senders)) {
-                setSenderAccounts(data.senders);
-                if (data.senders.length > 0) setActiveSenderIdx(data.senders.length - 1);
-              }
+              if (data.success && Array.isArray(data.senders)) setSenderAccounts(data.senders);
             } catch {}
           })();
+          onSent(`Gmail connected: ${ev.data.email}`, 'success');
         } else {
-          setGmailConnectMsg({ type: 'error', text: ev.data.message || 'Gmail connection failed.' });
+          onSent(ev.data.error || 'Gmail connection failed', 'error');
         }
       }
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, []);
+  }, [onSent]);
 
-  // ══════════════════════════════════════════════════════════════════
-  // Spam check (auto on content change)
-  // ══════════════════════════════════════════════════════════════════
-  const handleSpamCheck = async () => {
-    if (!message.trim()) return;
-    setSpamChecking(true);
-    try {
-      const res = await fetch('/api/system', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ action: 'spamCheck', message }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setSpamPreview({ score: data.spamScore, level: data.spamLevel, reasons: data.spamReasons, aiReview: data.aiReview });
+  // ════════════════════════════════════════════════════════════════════════
+  // Check Bounce — enterprise loading animation (per campaign)
+  // ════════════════════════════════════════════════════════════════════════
+  const validationSteps = [
+    'Analyzing recipient data...',
+    'Checking bounce response...',
+    'Checking valid format...',
+    'Removing duplicates...',
+    'Validating email syntax...',
+    'Filtering disposable domains...',
+    'MX record verification...',
+    'Finalizing results...',
+  ];
+
+  const handleCheckBounce = async (campaignId) => {
+    const camp = campaignList.find(c => c.id === campaignId);
+    if (!camp) return;
+    const emails = camp.numbersText.split(/[\n,\s]/).map(n => n.trim()).filter(Boolean);
+    if (emails.length === 0) return;
+    updateCampaign(campaignId, { checkingBounce: true, bounceResults: null, validationStep: 0 });
+    // Enterprise-level loading: cycle through dynamic text (~3s each step)
+    const stepDuration = 3000;
+    for (let i = 0; i < validationSteps.length; i++) {
+      updateCampaign(campaignId, { validationStep: i });
+      await new Promise(r => setTimeout(r, stepDuration));
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const seen = new Set();
+    const valid = [];
+    const bounced = [];
+    const duplicates = [];
+    emails.forEach(em => {
+      if (seen.has(em)) { duplicates.push(em); return; }
+      seen.add(em);
+      if (emailRegex.test(em) && !em.endsWith('@example.com') && !em.endsWith('@test.com')) {
+        valid.push(em);
+      } else {
+        bounced.push(em);
       }
-    } catch {}
-    setSpamChecking(false);
+    });
+    updateCampaign(campaignId, {
+      bounceResults: { checked: emails.length, valid, bounced, duplicates },
+      checkingBounce: false,
+      validationStep: -1,
+    });
   };
 
-  useEffect(() => {
-    if (!message.trim() || message.length < 10) { setSpamPreview(null); return; }
-    const t = setTimeout(handleSpamCheck, 800);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [message]);
+  const handleReplaceBounced = (campaignId) => {
+    const camp = campaignList.find(c => c.id === campaignId);
+    if (!camp || !camp.bounceResults) return;
+    const validSet = new Set(camp.bounceResults.valid);
+    const seen = new Set();
+    const kept = [];
+    camp.numbersText.split(/[\n,\s]/).map(n => n.trim()).filter(Boolean).forEach(em => {
+      if (validSet.has(em) && !seen.has(em)) { seen.add(em); kept.push(em); }
+    });
+    updateCampaign(campaignId, { numbersText: kept.join('\n'), bounceResults: null });
+    onSent(`Removed ${camp.bounceResults.bounced.length + camp.bounceResults.duplicates.length} invalid/duplicate emails`, 'success');
+  };
 
-  // ══════════════════════════════════════════════════════════════════
-  // AI suggest content
-  // ══════════════════════════════════════════════════════════════════
-  const handleAiSuggest = async () => {
-    setAiLoading(true); setAiSuggestion('');
+  // ════════════════════════════════════════════════════════════════════════
+  // Paste / Import (per campaign)
+  // ════════════════════════════════════════════════════════════════════════
+  const handlePasteEmails = async (campaignId) => {
     try {
-      const res = await fetch('/api/system', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({
-          action: 'aiChat', language,
-          message: `I need an effective, spam-free email marketing message in ${language === 'bn' ? 'Bengali' : 'English'}. ${message ? 'Improve this draft: ' + message : 'Create a new one'}. Keep the subject under 60 chars and body under 500 chars. Return as: SUBJECT|||BODY format.`,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) setAiSuggestion(data.reply);
-      else onSent(data.error || 'AI suggestion failed', 'error');
-    } catch { onSent('Network error', 'error'); }
-    setAiLoading(false);
-  };
-
-  const handleApplyAi = () => {
-    if (aiSuggestion) {
-      const parts = aiSuggestion.split('|||');
-      if (parts.length >= 2) { setSubject(parts[0].trim()); setMessage(parts.slice(1).join('|||').trim()); }
-      else { setMessage(aiSuggestion); }
-      setSendType('ai'); setAiSuggestion('');
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        const camp = campaignList.find(c => c.id === campaignId);
+        updateCampaign(campaignId, { numbersText: camp && camp.numbersText ? camp.numbersText + '\n' + text : text });
+        onSent('Pasted from clipboard', 'success');
+      }
+    } catch (e) {
+      onSent('Clipboard access denied — paste manually (Ctrl+V)', 'error');
     }
   };
 
-  // ══════════════════════════════════════════════════════════════════
-  // Bulk import (file)
-  // ══════════════════════════════════════════════════════════════════
-  const handleBulkImport = async (e) => {
+  const handleBulkImport = async (e, campaignId) => {
     const file = e.target.files[0]; if (!file) return;
     const text = await file.text();
     try {
@@ -1428,18 +1386,54 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
         body: JSON.stringify({ action: 'bulkImport', csvData: text }),
       });
       const data = await res.json();
-      if (data.success) { setNumbersText(data.numbers.join('\n')); onSent(`Imported ${data.count} emails`, 'success'); }
+      if (data.success) { updateCampaign(campaignId, { numbersText: data.numbers.join('\n') }); onSent(`Imported ${data.count} emails`, 'success'); }
       else onSent(data.error || 'Import failed', 'error');
     } catch { onSent('Import error', 'error'); }
     e.target.value = '';
   };
 
-  // ══════════════════════════════════════════════════════════════════
-  // Auto-change Name — Gemini AI generates ~1040 fresh brand names
-  // Auto-regenerates when only 100 remain
-  // ══════════════════════════════════════════════════════════════════
-  const generateAiNames = useCallback(async () => {
-    setAiNameGenLoading(true);
+  // ════════════════════════════════════════════════════════════════════════
+  // AI functions (per campaign)
+  // ════════════════════════════════════════════════════════════════════════
+  const handleAiSuggest = async (campaignId) => {
+    const camp = campaignList.find(c => c.id === campaignId);
+    if (!camp) return;
+    updateCampaign(campaignId, { aiLoading: true });
+    try {
+      const res = await fetch('/api/system', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ action: 'aiChat', language: 'en', message: `Write a professional email body for subject: "${camp.subject}". Keep it concise, business-appropriate. HTML format.` }),
+      });
+      const data = await res.json();
+      if (data.success && data.reply) updateCampaign(campaignId, { aiSuggestion: data.reply });
+    } catch {}
+    updateCampaign(campaignId, { aiLoading: false });
+  };
+
+  const handleApplyAi = (campaignId) => {
+    const camp = campaignList.find(c => c.id === campaignId);
+    if (camp && camp.aiSuggestion) {
+      updateCampaign(campaignId, { message: camp.aiSuggestion, aiSuggestion: '' });
+    }
+  };
+
+  const handleSpamCheck = async (campaignId) => {
+    const camp = campaignList.find(c => c.id === campaignId);
+    if (!camp || !camp.message.trim()) return;
+    updateCampaign(campaignId, { spamChecking: true });
+    try {
+      const res = await fetch('/api/system', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ action: 'aiSpamReview', content: camp.message, subject: camp.subject }),
+      });
+      const data = await res.json();
+      if (data.success) updateCampaign(campaignId, { spamPreview: { score: data.score, level: data.level, reasons: data.reasons } });
+    } catch {}
+    updateCampaign(campaignId, { spamChecking: false });
+  };
+
+  const generateAiNames = useCallback(async (campaignId) => {
+    updateCampaign(campaignId, { aiNameGenLoading: true });
     try {
       const res = await fetch('/api/system', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
@@ -1450,179 +1444,88 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
       });
       const data = await res.json();
       if (data.success && data.reply) {
-        const names = data.reply.split('\n').map(n => n.trim().replace(/^\d+[\.\)]\s*/, '')).filter(Boolean).slice(0, 200);
-        setAiNamePool(prev => [...prev, ...names]);
-        setAiNameUsed(0);
+        const names = data.reply.split('\n').map(n => n.trim().replace(/^\d+[\.)]\s*/, '')).filter(Boolean).slice(0, 200);
+        const camp = campaignList.find(c => c.id === campaignId);
+        updateCampaign(campaignId, { aiNamePool: [...(camp?.aiNamePool || []), ...names], aiNameUsed: 0 });
       }
     } catch {}
-    setAiNameGenLoading(false);
-  }, []);
+    updateCampaign(campaignId, { aiNameGenLoading: false });
+  }, [campaignList]);
 
-  // When auto-change-name is enabled, pre-generate names
-  useEffect(() => {
-    if (autoChangeName && aiNamePool.length === 0 && !aiNameGenLoading) {
-      generateAiNames();
-    }
-  }, [autoChangeName]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Auto-regenerate when only 100 names remain
-  useEffect(() => {
-    if (autoChangeName && aiNamePool.length > 0 && (aiNamePool.length - aiNameUsed) <= 100 && !aiNameGenLoading) {
-      generateAiNames();
-    }
-  }, [aiNameUsed, aiNamePool.length, autoChangeName]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ══════════════════════════════════════════════════════════════════
-  // Poll campaign progress (every 2s)
-  // ══════════════════════════════════════════════════════════════════
-  const pollProgress = (campaignId) => {
-    if (progressTimer) clearInterval(progressTimer);
+  // ════════════════════════════════════════════════════════════════════════
+  // Send / Stop / Pause / Test — per campaign
+  // ════════════════════════════════════════════════════════════════════════
+  const pollProgress = (campaignId, campaignDbId) => {
+    // Clear existing timer for this campaign
+    const camp = campaignList.find(c => c.id === campaignId);
+    if (camp && camp.progressTimer) clearInterval(camp.progressTimer);
     const timer = setInterval(async () => {
       try {
         const res = await fetch('/api/system', {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-          body: JSON.stringify({ action: 'getCampaignProgress', campaignId }),
+          body: JSON.stringify({ action: 'getCampaignProgress', campaignId: campaignDbId }),
         });
         const data = await res.json();
         if (data.success) {
-          setProgress(data.campaign);
-          // Update live send results (blue tick / red cross per recipient)
-          if (data.campaign.recipients) {
-            const sr = {};
-            data.campaign.recipients.forEach(r => {
+          const prog = data.campaign;
+          const sr = {};
+          if (prog.recipients) {
+            prog.recipients.forEach(r => {
               sr[r.email] = r.status === 'sent' || r.status === 'delivered' ? 'sent' : 'failed';
             });
-            setSendResults(sr);
           }
-          // Auto-stop on sending limit exhaustion
-          if (data.campaign.limitExhausted) {
-            setLimitExhausted(true);
-          }
-          if (data.campaign.senderApiName) {
-            const idx = senderAccounts.findIndex(s => s.email === data.campaign.senderApiName);
-            if (idx >= 0) setActiveSenderIdx(idx);
-          }
-          if (['sent', 'partial', 'failed', 'blocked_spam'].includes(data.campaign.status)) {
+          updateCampaign(campaignId, {
+            progress: prog,
+            sendResults: sr,
+            limitExhausted: prog.limitExhausted || false,
+            status: prog.status,
+          });
+          if (['sent', 'partial', 'failed', 'blocked_spam'].includes(prog.status)) {
             clearInterval(timer);
-            setProgressTimer(null);
-            setLoading(false);
-            // Update campaign slot status
-            setCampaignSlots(prev => prev.map(c => c.active ? { ...c, status: data.campaign.status } : c));
+            updateCampaign(campaignId, { progressTimer: null, loading: false, status: prog.status });
           }
         }
       } catch {}
     }, 2000);
-    setProgressTimer(timer);
+    updateCampaign(campaignId, { progressTimer: timer });
   };
 
-  useEffect(() => () => { if (progressTimer) clearInterval(progressTimer); }, [progressTimer]);
-
-  // ══════════════════════════════════════════════════════════════════
-  // Stop campaign — persists resume position (continues from stopped position)
-  // ══════════════════════════════════════════════════════════════════
-  const handleStop = async () => {
-    // Save the current progress position so we can resume later
-    const sentCount = progress?.totalSent || 0;
-    if (progress?._id) {
-      try {
-        await fetch('/api/system', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-          body: JSON.stringify({ action: 'stopCampaign', campaignId: progress._id, resumeFrom: sentCount }),
-        });
-      } catch {}
-    }
-    if (progressTimer) { clearInterval(progressTimer); setProgressTimer(null); }
-    setLoading(false);
-    setPaused(false);
-    setResumeFrom(sentCount); // remember where to resume from
-    setCampaignSlots(prev => prev.map(c => c.active ? { ...c, status: 'stopped' } : c));
-    // Persist resume position in localStorage
-    try {
-      const st = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-      st.resumeFrom = sentCount;
-      st.lastCampaignId = progress?._id;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(st));
-    } catch {}
-    onSent(`Campaign stopped at ${sentCount} sent — press Start to resume from here`, 'error');
-  };
-
-  const handlePause = () => {
-    setPaused(p => !p);
-  };
-
-  // ══════════════════════════════════════════════════════════════════
-  // Test mail (inline, moved into page)
-  // ══════════════════════════════════════════════════════════════════
-  const handleTestMail = async () => {
-    if (!message.trim()) { onSent('Enter email body first', 'error'); return; }
-    if (!testRecipient.trim()) { onSent('Enter a test recipient email', 'error'); return; }
-    setTesting(true); setTestResult(null);
-    try {
-      const res = await fetch('/api/system', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({
-          action: 'sendCampaign', message, subject, numbers: [testRecipient.trim()], sendType: 'test',
-          options: { testMail: true, testRecipient: testRecipient.trim(), contentMode, batchSize: 1, delayMs: 0, checkBounce, bodyMode },
-        }),
-      });
-      const data = await res.json();
-      if (data.success && data.testMail) {
-        setTestResult({ ok: true, recipient: data.recipient, sender: data.senderApiUsed });
-        onSent(`Test email sent to ${data.recipient}`, 'success');
-      } else if (data.blocked) {
-        setTestResult({ ok: false, blocked: true, score: data.spamScore, reasons: data.spamReasons });
-        onSent('Test blocked by spam filter', 'error');
-      } else {
-        setTestResult({ ok: false, error: data.error });
-        onSent(data.error || 'Test failed', 'error');
-      }
-    } catch { onSent('Network error', 'error'); }
-    setTesting(false);
-  };
-
-  // ══════════════════════════════════════════════════════════════════
-  // Send campaign (Start Campaign)
-  // ══════════════════════════════════════════════════════════════════
-  const handleSend = async () => {
-    if (!message.trim()) { onSent('Please enter an email body', 'error'); return; }
+  const handleSend = async (campaignId) => {
+    const camp = campaignList.find(c => c.id === campaignId);
+    if (!camp) return;
+    if (!camp.message.trim()) { onSent('Please enter an email body', 'error'); return; }
+    const parsedEmails = camp.numbersText.split(/[\n,\s]/).map(n => n.trim()).filter(Boolean);
     if (parsedEmails.length === 0) { onSent('No valid email addresses', 'error'); return; }
-    // Resume support: if we stopped mid-send, only send the remaining emails
-    const startIdx = resumeFrom > 0 && resumeFrom < parsedEmails.length ? resumeFrom : 0;
+    const startIdx = camp.resumeFrom > 0 && camp.resumeFrom < parsedEmails.length ? camp.resumeFrom : 0;
     const nums = parsedEmails.slice(startIdx, startIdx + remaining);
-    setLoading(true); setResult(null); setProgress(null); setPaused(false);
-    setSendResults({});
-    setLimitExhausted(false);
-    setCampaignSlots(prev => prev.map(c => c.active ? { ...c, status: 'running' } : c));
-    // Consume an AI name for the from name if auto-change is on
-    let currentFromName = fromName;
-    if (autoChangeName && aiNamePool.length > aiNameUsed) {
-      currentFromName = aiNamePool[aiNameUsed] || fromName;
-      setAiNameUsed(prev => prev + 1);
+    updateCampaign(campaignId, { loading: true, result: null, progress: null, paused: false, sendResults: {}, limitExhausted: false, status: 'running' });
+    let currentFromName = camp.fromName;
+    if (camp.autoChangeName && camp.aiNamePool.length > camp.aiNameUsed) {
+      currentFromName = camp.aiNamePool[camp.aiNameUsed] || camp.fromName;
+      updateCampaign(campaignId, { aiNameUsed: camp.aiNameUsed + 1 });
     }
     try {
       const res = await fetch('/api/system', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
         body: JSON.stringify({
-          action: 'sendCampaign', message, subject, numbers: nums, sendType,
+          action: 'sendCampaign', message: camp.message, subject: camp.subject, numbers: nums, sendType: 'manual',
           options: {
-            batchSize, delayMs, jitterPct, humanize, polymorph, dripMode,
-            contentMode, changeAfterSent: polymorph, randomText,
-            senderRotate, checkBounce, bodyMode,
-            autoSave, autoReply,
-            speedMode, changeAfterStart, useName,
-            confirmedShipping, prioritySend, senderMail,
+            batchSize: camp.batchSize, delayMs: camp.delayMs, jitterPct: camp.jitterPct, humanize: camp.humanize, polymorph: camp.polymorph, dripMode: camp.dripMode,
+            contentMode: camp.contentMode, changeAfterSent: camp.polymorph, randomText: camp.randomText,
+            senderRotate: camp.senderRotate, checkBounce: camp.checkBounce, bodyMode: camp.bodyMode,
+            autoSave: camp.autoSave, autoReply: camp.autoReply,
+            speedMode: camp.speedMode, changeAfterStart: camp.changeAfterStart, useName: camp.useName,
+            confirmedShipping: camp.confirmedShipping, prioritySend: camp.prioritySend, senderMail: camp.senderMail,
             fromName: currentFromName,
-            fromNameVariants: [...fromNameVariants.split(',').map(s => s.trim()).filter(Boolean), ...nameList.split('\n').map(s => s.trim()).filter(Boolean)],
-            autoChangeName, autoNameInterval,
-            aiNamePool: autoChangeName ? aiNamePool.slice(aiNameUsed) : [],
-            // Subject rotation: if auto-change subject on, send all template texts as variants
-            subjectVariants: autoChangeSubject ? subjectTemplates.map(t => t.text).filter(Boolean) : [],
-            autoChangeSubject,
-            // Body rotation: if auto-change body on, send all body template contents as variants
-            bodyVariants: autoChangeBody ? bodyTemplates.map(t => t.content).filter(Boolean) : [],
-            autoChangeBody,
-            trackPixel, embedAll: false,
-            antiDetect, colorShift, textShift, addUnsubscribe,
+            fromNameVariants: [...camp.fromNameVariants.split(',').map(s => s.trim()).filter(Boolean), ...camp.nameList.split('\n').map(s => s.trim()).filter(Boolean)],
+            autoChangeName: camp.autoChangeName, autoNameInterval: camp.autoNameInterval,
+            aiNamePool: camp.autoChangeName ? camp.aiNamePool.slice(camp.aiNameUsed) : [],
+            subjectVariants: camp.autoChangeSubject ? subjectTemplates.map(t => t.text).filter(Boolean) : [],
+            autoChangeSubject: camp.autoChangeSubject,
+            bodyVariants: camp.autoChangeBody ? bodyTemplates.map(t => t.content).filter(Boolean) : [],
+            autoChangeBody: camp.autoChangeBody,
+            trackPixel: camp.trackPixel, embedAll: false,
+            antiDetect: camp.antiDetect, colorShift: camp.colorShift, textShift: camp.textShift, addUnsubscribe: camp.addUnsubscribe,
           },
         }),
       });
@@ -1630,41 +1533,79 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
       if (res.ok && data.success) {
         const invalidInfo = data.totalInvalid > 0 ? ` | ${data.totalInvalid} invalid` : '';
         const resumeNote = startIdx > 0 ? ` (resumed from #${startIdx + 1})` : '';
-        onSent(`Sent ${data.totalSent} via ${data.senderApiUsed} — ${data.totalDelivered} delivered, ${data.totalUndelivered} undelivered${invalidInfo}${resumeNote}`, 'success');
-        setResult(data);
-        setResumeFrom(0); // clear resume position after a successful send
-        if (data.campaignId) pollProgress(data.campaignId);
+        onSent(`[${camp.name}] Sent ${data.totalSent} via ${data.senderApiUsed} — ${data.totalDelivered} delivered, ${data.totalUndelivered} undelivered${invalidInfo}${resumeNote}`, 'success');
+        updateCampaign(campaignId, { result: data, resumeFrom: 0 });
+        if (data.campaignId) pollProgress(campaignId, data.campaignId);
       } else if (data.blocked) {
-        onSent('⚠ Message blocked by spam protection. Rewrite your content.', 'error');
-        setResult({ blocked: true, spamScore: data.spamScore, spamReasons: data.spamReasons });
-        setCampaignSlots(prev => prev.map(c => c.active ? { ...c, status: 'blocked' } : c));
-        setLoading(false);
+        onSent(`[${camp.name}] Message blocked by spam protection. Rewrite your content.`, 'error');
+        updateCampaign(campaignId, { result: { blocked: true, spamScore: data.spamScore, spamReasons: data.spamReasons }, status: 'blocked', loading: false });
       } else {
-        onSent(data.error || 'Failed to send', 'error');
-        if (data.invalidNumbers) setResult({ invalidNumbers: data.invalidNumbers });
-        setCampaignSlots(prev => prev.map(c => c.active ? { ...c, status: 'failed' } : c));
-        setLoading(false);
+        onSent(`[${camp.name}] ${data.error || 'Failed to send'}`, 'error');
+        updateCampaign(campaignId, { status: 'failed', loading: false });
       }
-    } catch { onSent('Network error', 'error'); setLoading(false); }
+    } catch { onSent(`[${camp.name}] Network error`, 'error'); updateCampaign(campaignId, { loading: false, status: 'failed' }); }
   };
 
-  // ══════════════════════════════════════════════════════════════════
-  // Campaign slot management
-  // ══════════════════════════════════════════════════════════════════
-  const addCampaign = () => {
-    if (campaignSlots.length >= 4) return;
-    setCampaignSlots(prev => [...prev, { id: prev.length + 1, name: `Campaign ${prev.length + 1}`, active: false, data: null, status: 'idle' }]);
-  };
-  const selectCampaign = (id) => {
-    setCampaignSlots(prev => prev.map(c => ({ ...c, active: c.id === id })));
-  };
-  const removeCampaign = (id) => {
-    setCampaignSlots(prev => prev.filter(c => c.id !== id).map((c, i) => ({ ...c, id: i + 1, name: `Campaign ${i + 1}` })));
+  const handleStop = async (campaignId) => {
+    const camp = campaignList.find(c => c.id === campaignId);
+    if (!camp) return;
+    const sentCount = camp.progress?.totalSent || 0;
+    if (camp.progress?._id) {
+      try {
+        await fetch('/api/system', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+          body: JSON.stringify({ action: 'stopCampaign', campaignId: camp.progress._id, resumeFrom: sentCount }),
+        });
+      } catch {}
+    }
+    if (camp.progressTimer) clearInterval(camp.progressTimer);
+    updateCampaign(campaignId, { loading: false, paused: false, resumeFrom: sentCount, progressTimer: null, status: 'stopped' });
+    onSent(`[${camp.name}] Stopped at ${sentCount} sent — press Start to resume`, 'error');
   };
 
-  // ══════════════════════════════════════════════════════════════════
-  // Content type options
-  // ══════════════════════════════════════════════════════════════════
+  const handlePause = (campaignId) => {
+    const camp = campaignList.find(c => c.id === campaignId);
+    if (!camp) return;
+    updateCampaign(campaignId, { paused: !camp.paused });
+  };
+
+  const handleTestMail = async (campaignId) => {
+    const camp = campaignList.find(c => c.id === campaignId);
+    if (!camp) return;
+    if (!camp.message.trim()) { onSent('Enter email body first', 'error'); return; }
+    if (!camp.testRecipient.trim()) { onSent('Enter a test recipient email', 'error'); return; }
+    updateCampaign(campaignId, { testing: true, testResult: null });
+    try {
+      const res = await fetch('/api/system', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({
+          action: 'sendCampaign', message: camp.message, subject: camp.subject, numbers: [camp.testRecipient.trim()], sendType: 'test',
+          options: { testMail: true, testRecipient: camp.testRecipient.trim(), contentMode: camp.contentMode, batchSize: 1, delayMs: 0, checkBounce: camp.checkBounce, bodyMode: camp.bodyMode },
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.testMail) {
+        updateCampaign(campaignId, { testResult: { ok: true, recipient: data.recipient, sender: data.senderApiUsed } });
+        onSent(`Test email sent to ${data.recipient}`, 'success');
+      } else if (data.blocked) {
+        updateCampaign(campaignId, { testResult: { ok: false, blocked: true, score: data.spamScore } });
+        onSent('Test blocked by spam filter', 'error');
+      } else {
+        updateCampaign(campaignId, { testResult: { ok: false, error: data.error } });
+        onSent(data.error || 'Test failed', 'error');
+      }
+    } catch { onSent('Network error', 'error'); }
+    updateCampaign(campaignId, { testing: false });
+  };
+
+  // Cleanup timers on unmount
+  useEffect(() => () => {
+    campaignList.forEach(c => { if (c.progressTimer) clearInterval(c.progressTimer); });
+  }, []);
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Static config arrays
+  // ════════════════════════════════════════════════════════════════════════
   const contentTypes = [
     { key: 'html', label: 'HTML', icon: 'FileCode' },
     { key: 'pdf', label: 'PDF', icon: 'FilePdf' },
@@ -1680,12 +1621,6 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
     { key: 'SAFE', label: 'SAFE' },
   ];
 
-  const totalTarget = Math.min(parsedEmails.length, remaining);
-  const estMinutes = Math.ceil(totalTarget / batchSize) * (delayMs / 1000 / 60);
-
-  // ══════════════════════════════════════════════════════════════════
-  // Mini toggle helper (static class lookup for Tailwind build)
-  // ══════════════════════════════════════════════════════════════════
   const miniToggleStyles = {
     yellow: { on: 'bg-amber-500/15 text-amber-300 border-amber-500/30', chk: 'bg-amber-500 border-amber-500' },
     green:  { on: 'bg-green-500/15 text-green-300 border-green-500/30', chk: 'bg-green-500 border-green-500' },
@@ -1693,6 +1628,7 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
     red:    { on: 'bg-red-500/15 text-red-300 border-red-500/30',       chk: 'bg-red-500 border-red-500' },
     violet: { on: 'bg-violet-500/15 text-violet-300 border-violet-500/30', chk: 'bg-violet-500 border-violet-500' },
   };
+
   const MiniToggle = ({ label, value, onChange, icon, accent = 'yellow' }) => {
     const st = miniToggleStyles[accent] || miniToggleStyles.yellow;
     return (
@@ -1717,14 +1653,13 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
     blocked: 'bg-red-500/20 text-red-300',
   };
 
-  // ══════════════════════════════════════════════════════════════════
-  // TERMS OF AGREEMENT MODAL — enterprise anti-bypass engine text
-  // ══════════════════════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════════════
+  // TERMS OF AGREEMENT MODAL
+  // ════════════════════════════════════════════════════════════════════════
   if (showTerms && !agreedTerms) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
         <div className="bg-slate-900 border border-violet-500/30 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
-          {/* Header */}
           <div className="flex items-center gap-3 px-6 py-4 border-b border-white/10 bg-gradient-to-r from-violet-600/20 to-indigo-600/10">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg">
               <Icon.Shield className="w-5 h-5 text-white" />
@@ -1734,47 +1669,32 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
               <p className="text-[10px] text-violet-300/80 uppercase tracking-widest">MMS Sender V01 — Anti-Bypass Engine</p>
             </div>
           </div>
-          {/* Body */}
           <div className="overflow-y-auto flex-1 px-6 py-5 space-y-4 text-sm text-gray-300 leading-relaxed">
             <div className="bg-violet-500/10 border border-violet-500/20 rounded-xl p-4">
               <p className="text-violet-200 font-semibold flex items-center gap-2 mb-1.5"><Icon.Bolt className="w-4 h-4" /> Enterprise Anti-Bypass & Anti-Detection Engine</p>
-              <p className="text-[12px] text-gray-400">By proceeding, you acknowledge that this platform employs a multi-layered anti-detection system designed to ensure maximum deliverability while protecting sender reputation. The engine operates transparently and in compliance with operational best practices.</p>
+              <p className="text-[12px] text-gray-400">By proceeding, you acknowledge that this platform employs a multi-layered anti-detection system designed to ensure maximum deliverability while protecting sender reputation.</p>
             </div>
             <div className="space-y-3">
-              <div className="flex items-start gap-3">
-                <span className="flex-shrink-0 w-6 h-6 rounded-lg bg-green-500/15 text-green-400 flex items-center justify-center text-[11px] font-bold">1</span>
-                <div><p className="text-white font-medium text-[13px]">Polymorphic Content Engine</p><p className="text-[11px] text-gray-500">Each email is uniquely transformed — random color shifts, text variation, and structural changes ensure no two emails are identical, bypassing provider fingerprint detection systems.</p></div>
-              </div>
-              <div className="flex items-start gap-3">
-                <span className="flex-shrink-0 w-6 h-6 rounded-lg bg-cyan-500/15 text-cyan-400 flex items-center justify-center text-[11px] font-bold">2</span>
-                <div><p className="text-white font-medium text-[13px]">Humanized Sending Patterns</p><p className="text-[11px] text-gray-500">Adaptive delay algorithms with randomized jitter replicate natural human sending behavior, preventing rate-limit triggers and automated flagging.</p></div>
-              </div>
-              <div className="flex items-start gap-3">
-                <span className="flex-shrink-0 w-6 h-6 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center text-[11px] font-bold">3</span>
-                <div><p className="text-white font-medium text-[13px]">AI-Powered Name Rotation</p><p className="text-[11px] text-gray-500">Gemini AI generates thousands of fresh, realistic sender display names per campaign. Names auto-regenerate when the pool runs low, ensuring sender identity diversity.</p></div>
-              </div>
-              <div className="flex items-start gap-3">
-                <span className="flex-shrink-0 w-6 h-6 rounded-lg bg-violet-500/15 text-violet-400 flex items-center justify-center text-[11px] font-bold">4</span>
-                <div><p className="text-white font-medium text-[13px]">Smart Bounce Validation</p><p className="text-[11px] text-gray-500">Enterprise-grade email validation removes bounces, duplicates, and invalid addresses before sending — protecting your sender score and maximizing inbox placement.</p></div>
-              </div>
-              <div className="flex items-start gap-3">
-                <span className="flex-shrink-0 w-6 h-6 rounded-lg bg-red-500/15 text-red-400 flex items-center justify-center text-[11px] font-bold">5</span>
-                <div><p className="text-white font-medium text-[13px]">Sending Limit Protection</p><p className="text-[11px] text-gray-500">Per-provider sending limits are monitored in real-time. The engine auto-stops when limits are reached, preventing account suspension and sign-out events.</p></div>
-              </div>
-              <div className="flex items-start gap-3">
-                <span className="flex-shrink-0 w-6 h-6 rounded-lg bg-indigo-500/15 text-indigo-400 flex items-center justify-center text-[11px] font-bold">6</span>
-                <div><p className="text-white font-medium text-[13px]]">Unsubscribe Compliance</p><p className="text-[11px] text-gray-500">Automatic unsubscribe link injection based on email content ensures CAN-SPAM compliance and reduces spam complaints.</p></div>
-              </div>
+              {[
+                { n: '1', c: 'green', t: 'Polymorphic Content Engine', d: 'Each email is uniquely transformed — random color shifts, text variation, and structural changes ensure no two emails are identical.' },
+                { n: '2', c: 'cyan', t: 'Humanized Sending Patterns', d: 'Adaptive delay algorithms with randomized jitter replicate natural human sending behavior.' },
+                { n: '3', c: 'amber', t: 'AI-Powered Name Rotation', d: 'Gemini AI generates thousands of fresh, realistic sender display names per campaign.' },
+                { n: '4', c: 'red', t: 'Smart Bounce Validation', d: 'Enterprise-grade email validation removes bounces, duplicates, and invalid addresses before sending.' },
+                { n: '5', c: 'indigo', t: 'Multi-Campaign Parallel Sending', d: 'Run up to 4 independent campaigns simultaneously — each with its own sender, subject, body, and recipient list.' },
+              ].map(item => (
+                <div key={item.n} className="flex items-start gap-3">
+                  <span className={`flex-shrink-0 w-6 h-6 rounded-lg bg-${item.c}-500/15 text-${item.c}-400 flex items-center justify-center text-[11px] font-bold`}>{item.n}</span>
+                  <div><p className="text-white font-medium text-[13px]">{item.t}</p><p className="text-[11px] text-gray-500">{item.d}</p></div>
+                </div>
+              ))}
             </div>
             <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
               <p className="text-[11px] text-amber-200/90">
                 <strong className="text-amber-300">User Responsibility:</strong> You agree to use this platform for legitimate email marketing only.
-                State persistence ensures your campaigns survive page refreshes. The "Stop" function preserves your sending position for seamless resume.
-                All sending activities are logged for quality assurance.
+                State persistence ensures your campaigns survive page refreshes. Each of the 4 campaign slots operates independently.
               </p>
             </div>
           </div>
-          {/* Footer */}
           <div className="px-6 py-4 border-t border-white/10 bg-slate-950/50 space-y-3">
             <label className="flex items-center gap-2.5 cursor-pointer group">
               <span className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition ${termsChecked ? 'bg-violet-500 border-violet-500' : 'border-gray-600 group-hover:border-gray-500'}`}>
@@ -1784,13 +1704,8 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
               <span className="text-[12px] text-gray-300">I have read and agree to the Terms of Agreement and Anti-Bypass Engine policies.</span>
             </label>
             <div className="flex gap-2.5">
-              <button onClick={() => setShowTerms(false)}
-                className="flex-1 px-4 py-2.5 bg-white/5 hover:bg-white/10 text-gray-400 rounded-lg text-sm font-medium transition">
-                Cancel
-              </button>
-              <button
-                onClick={() => { if (termsChecked) { setAgreedTerms(true); setShowTerms(false); } }}
-                disabled={!termsChecked}
+              <button onClick={() => setShowTerms(false)} className="flex-1 px-4 py-2.5 bg-white/5 hover:bg-white/10 text-gray-400 rounded-lg text-sm font-medium transition">Cancel</button>
+              <button onClick={() => { if (termsChecked) { setAgreedTerms(true); setShowTerms(false); } }} disabled={!termsChecked}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-sm font-bold transition shadow-lg shadow-violet-600/30">
                 <Icon.Rocket className="w-4 h-4" /> Create Campaign
               </button>
@@ -1801,353 +1716,598 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════
-  // MAIN LAYOUT — Single page, NO scroll on desktop
-  // ══════════════════════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════════════
+  // AGGREGATED LIVE MONITOR STATS
+  // ════════════════════════════════════════════════════════════════════════
+  const runningCampaigns = campaignList.filter(c => c.status === 'running' || c.loading);
+  const totalSentAll = campaignList.reduce((sum, c) => sum + (c.progress?.totalSent || 0), 0);
+  const totalDeliveredAll = campaignList.reduce((sum, c) => sum + (c.progress?.totalDelivered || 0), 0);
+  const totalBouncedAll = campaignList.reduce((sum, c) => sum + (c.progress?.totalUndelivered || 0), 0);
+
+  const monitorCampaigns = monitorFilter === 'all' ? campaignList : campaignList.filter(c => c.id === monitorFilter);
+  const monSent = monitorCampaigns.reduce((sum, c) => sum + (c.progress?.totalSent || 0), 0);
+  const monDelivered = monitorCampaigns.reduce((sum, c) => sum + (c.progress?.totalDelivered || 0), 0);
+  const monBounced = monitorCampaigns.reduce((sum, c) => sum + (c.progress?.totalUndelivered || 0), 0);
+
+  // ════════════════════════════════════════════════════════════════════════
+  // MAIN LAYOUT
+  // ════════════════════════════════════════════════════════════════════════
   return (
-    <div className="h-[calc(100vh-180px)] min-h-[520px] flex flex-col gap-2">
-      {/* ═══ TOP STATUS BAR — Check Bounce + Limit + Expiry + Connect Email ═══ */}
-      <div className="relative overflow-hidden rounded-xl border border-white/5 bg-gradient-to-r from-violet-600/15 via-indigo-600/8 to-transparent px-3 py-2 flex-shrink-0">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,0.12),transparent_60%)]" />
-        <div className="relative flex items-center gap-2.5">
-          {/* Check Bounce at TOP */}
-          <button onClick={handleCheckBounce} disabled={checkingBounce || parsedEmails.length === 0}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition flex-shrink-0 ${checkBounce ? 'bg-green-600 hover:bg-green-500 text-white' : 'bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10'} disabled:opacity-40`}>
-            {checkingBounce ? <Spinner size={11} /> : <Icon.Shield className="w-3.5 h-3.5" />} Check Bounce
-          </button>
-          {bounceResults && !checkingBounce && (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[10px] text-green-300 bg-green-500/10 px-2 py-1 rounded-md border border-green-500/20 flex items-center gap-1"><Icon.CheckCircle className="w-3 h-3" /> {bounceResults.valid.length} valid</span>
-              {bounceResults.bounced.length > 0 && (
-                <span className="text-[10px] text-red-300 bg-red-500/10 px-2 py-1 rounded-md border border-red-500/20 flex items-center gap-1"><Icon.XCircle className="w-3 h-3" /> {bounceResults.bounced.length} bounced</span>
-              )}
-              {bounceResults.duplicates && bounceResults.duplicates.length > 0 && (
-                <span className="text-[10px] text-amber-300 bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/20 flex items-center gap-1"><Icon.Copy className="w-3 h-3" /> {bounceResults.duplicates.length} dupes</span>
-              )}
-              <button onClick={() => setShowBounceResult(true)} className="text-[10px] text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 px-2 py-1 rounded-md border border-cyan-500/20 flex items-center gap-1 font-medium transition">
-                <Icon.Eye className="w-3 h-3" /> View Result
-              </button>
-              {bounceResults.bounced.length > 0 && (
-                <button onClick={handleReplaceBounced} className="text-[10px] text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-1 rounded-md border border-amber-500/20 flex items-center gap-1 font-medium transition">
-                  <Icon.Refresh className="w-3 h-3" /> Replace Bounced
-                </button>
-              )}
-            </div>
-          )}
-          {/* Validation loading animation */}
-          {checkingBounce && (
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20 flex-1 min-w-0">
-                <Spinner size={11} />
-                <span key={validationStep} className="text-[11px] text-violet-200 font-medium truncate animate-pulse">
-                  {validationSteps[validationStep] || 'Processing…'}
-                  <span className="inline-block w-1 h-1 rounded-full bg-violet-400 ml-1 animate-ping" />
-                </span>
-              </div>
-            </div>
-          )}
-          <div className="h-6 w-px bg-white/10 hidden lg:block" />
-          {/* Sending limit + expiry compact */}
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-600/30">
-              <Icon.Bolt className="w-3 h-3 text-white" />
-            </div>
-            <div className="leading-none">
-              <p className="text-[8px] text-violet-300/80 uppercase tracking-widest font-semibold">Limit</p>
-              <p className="text-[12px] text-white mt-0.5"><span className="font-black">{remaining}</span><span className="text-gray-400 text-[9px]">/{stats?.limit || 0}</span></p>
-            </div>
-          </div>
-          {stats?.expiresAt && (
-            <div className="flex items-center gap-1 text-[9px] text-gray-400 flex-shrink-0">
-              <Icon.Clock className="w-3 h-3 text-amber-400" />
-              <span>Exp: <span className="text-amber-300 font-medium">{new Date(stats.expiresAt).toLocaleDateString()}</span></span>
-            </div>
-          )}
-          <div className="h-6 w-px bg-white/10 hidden lg:block" />
+    <div className="flex flex-col gap-2">
+      {/* ═══ LIVE MONITOR BAR (TOP, ADVANCED) ═══ */}
+      <div className="relative overflow-hidden rounded-xl border border-white/5 bg-gradient-to-r from-green-600/10 via-violet-600/8 to-transparent px-3 py-2 flex-shrink-0">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,197,94,0.08),transparent_60%)]" />
+        <div className="relative flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            <span className="relative flex h-2 w-2">
+            <span className="relative flex h-2.5 w-2.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
             </span>
-            <span className="text-[10px] text-green-300 font-medium hidden xl:inline">Anti-Spam Engine</span>
+            <p className="text-[11px] text-green-400 uppercase tracking-wider font-bold flex items-center gap-1"><Icon.Activity className="w-3.5 h-3.5" /> Live Monitor</p>
           </div>
-          <div className="flex items-center gap-1.5 ml-auto flex-shrink-0">
-            {/* Connect Email — compact button top corner */}
-            <label className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-medium cursor-pointer transition ${connectingGmail ? 'bg-slate-700 text-gray-400' : 'bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30'}`}>
-              <Icon.Mail className="w-3 h-3" />
-              {connectingGmail ? '…' : senderAccounts.length > 0 ? `${senderAccounts.length} ✓` : 'Connect'}
-              <input ref={connectGmailInputRef} type="file" accept=".json,application/json" onChange={handleConnectGmailFile} className="hidden" disabled={connectingGmail} />
-            </label>
-            <span className={`text-[10px] px-2 py-1 rounded-full font-medium ${loading || progress ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20 animate-pulse' : 'bg-amber-500/10 text-amber-300 border border-amber-500/20'}`}>{loading || progress ? 'Sending' : 'Ready'}</span>
+          {/* Filter tabs: All + each campaign */}
+          <div className="flex items-center gap-1 flex-wrap">
+            <button onClick={() => setMonitorFilter('all')}
+              className={`px-2 py-1 rounded-md text-[9px] font-bold transition ${monitorFilter === 'all' ? 'bg-green-600 text-white' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}>
+              All ({campaignList.length})
+            </button>
+            {campaignList.map(c => (
+              <button key={c.id} onClick={() => setMonitorFilter(c.id)}
+                className={`px-2 py-1 rounded-md text-[9px] font-bold transition flex items-center gap-1 ${monitorFilter === c.id ? 'bg-violet-600 text-white' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}>
+                {c.name}
+                {c.status === 'running' && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />}
+              </button>
+            ))}
+          </div>
+          {/* Aggregated stats */}
+          <div className="flex items-center gap-3 ml-auto flex-shrink-0">
+            <div className="flex items-center gap-1.5">
+              <Icon.Send className="w-3 h-3 text-violet-400" />
+              <div className="leading-none"><p className="text-[8px] text-gray-500 uppercase">Sent</p><p className="text-[13px] font-black text-white tabular-nums">{monSent}</p></div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Icon.CheckCircle className="w-3 h-3 text-green-400" />
+              <div className="leading-none"><p className="text-[8px] text-gray-500 uppercase">Delivered</p><p className="text-[13px] font-black text-green-400 tabular-nums">{monDelivered}</p></div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Icon.XCircle className="w-3 h-3 text-red-400" />
+              <div className="leading-none"><p className="text-[8px] text-gray-500 uppercase">Bounced</p><p className="text-[13px] font-black text-red-400 tabular-nums">{monBounced}</p></div>
+            </div>
+            {runningCampaigns.length > 0 && (
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-500/15 border border-blue-500/30">
+                <Icon.Rocket className="w-3 h-3 text-blue-400 animate-pulse" />
+                <span className="text-[10px] text-blue-300 font-bold">{runningCampaigns.length} running</span>
+              </div>
+            )}
           </div>
         </div>
-        {gmailConnectMsg && (
-          <div className={`relative mt-1.5 px-2.5 py-1.5 rounded-lg text-[10px] flex items-start gap-1.5 ${gmailConnectMsg.type === 'success' ? 'bg-green-500/10 text-green-300 border border-green-500/20' : 'bg-red-500/10 text-red-300 border border-red-500/20'}`}>
-            <span className="flex-shrink-0">{gmailConnectMsg.type === 'success' ? '✓' : '✕'}</span>
-            <span className="leading-snug" dangerouslySetInnerHTML={{ __html: gmailConnectMsg.text }} />
+        {/* Per-campaign progress bars (only for running/progress campaigns in filter) */}
+        {monitorCampaigns.filter(c => c.progress && (c.progress.totalSent > 0 || c.loading)).length > 0 && (
+          <div className="relative mt-2 space-y-1">
+            {monitorCampaigns.filter(c => c.progress || c.loading).map(c => {
+              const sent = c.progress?.totalSent || 0;
+              const total = (c.progress?.totalSent || 0) + (c.progress?.totalUndelivered || 0);
+              const pct = total > 0 ? Math.round((sent / total) * 100) : 0;
+              return (
+                <div key={c.id} className="flex items-center gap-2">
+                  <span className="text-[9px] text-gray-400 w-20 truncate flex-shrink-0">{c.name}</span>
+                  <div className="flex-1 bg-slate-800 rounded-full h-1.5 overflow-hidden min-w-0">
+                    <div className={`h-full rounded-full transition-all duration-500 ${c.status === 'running' ? 'bg-gradient-to-r from-violet-500 to-blue-500' : 'bg-gradient-to-r from-violet-500 to-green-500'}`} style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="text-[9px] text-gray-300 tabular-nums flex-shrink-0 w-12 text-right">{sent}/{total || '?'}</span>
+                  <span className={`text-[7px] px-1 py-0.5 rounded-full font-bold flex-shrink-0 ${campaignStatusColors[c.status] || ''}`}>{c.status}</span>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* ═══ THREE-COLUMN ENTERPRISE WORKBENCH (no-scroll, fits full screen) ═══ */}
-      <div className="grid lg:grid-cols-[200px_1fr_240px] gap-2 flex-1 min-h-0 overflow-hidden">
-        {/* ── LEFT: Campaign Slots + Live Monitor ── */}
-        <div className="flex flex-col gap-2 min-h-0 overflow-hidden order-2 lg:order-1">
-          {/* Campaign Slots */}
-          <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5 flex-shrink-0">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[10px] text-amber-400 uppercase tracking-wider font-semibold flex items-center gap-1"><Icon.Layers className="w-3 h-3" /> Campaigns</p>
-              <span className="text-[9px] text-gray-500">{campaignSlots.length}/4</span>
-            </div>
-            <div className="space-y-1.5">
-              {campaignSlots.map((cs, idx) => (
-                <div key={cs.id} className={`group flex items-center gap-2 px-2 py-1.5 rounded-lg border cursor-pointer transition ${cs.active ? 'bg-violet-500/15 border-violet-500/30' : 'bg-white/[0.02] border-white/5 hover:border-white/10'}`}
-                  onClick={() => selectCampaign(cs.id)}>
-                  <span className={`w-5 h-5 rounded-md text-[10px] font-bold flex items-center justify-center flex-shrink-0 ${cs.active ? 'bg-violet-500 text-white' : 'bg-white/5 text-gray-400'}`}>{idx + 1}</span>
-                  <span className={`text-[10px] truncate flex-1 ${cs.active ? 'text-violet-200' : 'text-gray-400'}`}>{cs.name}</span>
-                  {cs.status !== 'idle' && (
-                    <span className={`text-[7px] px-1 py-0.5 rounded-full font-bold flex-shrink-0 ${campaignStatusColors[cs.status] || ''}`}>{cs.status}</span>
-                  )}
-                  {campaignSlots.length > 1 && (
-                    <button onClick={(e) => { e.stopPropagation(); removeCampaign(cs.id); }}
-                      className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 transition flex-shrink-0">
-                      <Icon.Close className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
-              ))}
-              {campaignSlots.length < 4 && (
-                <button onClick={addCampaign}
-                  className="w-full px-2 py-1.5 bg-white/5 hover:bg-white/10 text-gray-400 rounded-lg text-[10px] font-medium transition flex items-center justify-center gap-1">
-                  <Icon.Plus className="w-3 h-3" /> Add Campaign
-                </button>
-              )}
-            </div>
+      {/* ═══ LIMIT + CONNECT BAR ═══ */}
+      <div className="flex items-center gap-3 px-3 py-1.5 rounded-xl border border-white/5 bg-slate-900/50 flex-shrink-0 flex-wrap">
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-600/30">
+            <Icon.Bolt className="w-3 h-3 text-white" />
           </div>
-          {/* Live Monitor */}
-          <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5 flex-1 min-h-0 overflow-hidden flex flex-col">
-            <p className="text-[10px] text-green-400 uppercase tracking-wider mb-2 flex items-center gap-1 font-semibold flex-shrink-0"><Icon.Activity className="w-3 h-3" /> Live Monitor</p>
-            <div className="space-y-1.5 overflow-y-auto flex-1 min-h-0 pr-1">
-              <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-white/[0.02] border border-white/5">
-                <span className="text-[10px] text-gray-400 flex items-center gap-1"><Icon.Send className="w-2.5 h-2.5 text-violet-400" /> Sent</span>
-                <span className="text-[11px] font-bold text-white tabular-nums">{progress?.totalSent || 0}</span>
+          <div className="leading-none">
+            <p className="text-[8px] text-violet-300/80 uppercase tracking-widest font-semibold">Limit</p>
+            <p className="text-[12px] text-white mt-0.5"><span className="font-black">{remaining}</span><span className="text-gray-400 text-[9px]">/{stats?.limit || 0}</span></p>
+          </div>
+        </div>
+        {stats?.expiresAt && (
+          <div className="flex items-center gap-1 text-[9px] text-gray-400 flex-shrink-0">
+            <Icon.Clock className="w-3 h-3 text-amber-400" />
+            <span>Exp: <span className="text-amber-300 font-medium">{new Date(stats.expiresAt).toLocaleDateString()}</span></span>
+          </div>
+        )}
+        <div className="h-6 w-px bg-white/10 hidden lg:block" />
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+          </span>
+          <span className="text-[10px] text-green-300 font-medium">Anti-Spam Engine</span>
+        </div>
+        <div className="flex items-center gap-1.5 ml-auto flex-shrink-0">
+          <span className="text-[10px] px-2 py-1 rounded-full font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20">{senderAccounts.length} senders</span>
+          <span className={`text-[10px] px-2 py-1 rounded-full font-medium ${runningCampaigns.length > 0 ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20 animate-pulse' : 'bg-green-500/10 text-green-300 border border-green-500/20'}`}>{runningCampaigns.length > 0 ? 'Sending' : 'Ready'}</span>
+        </div>
+      </div>
+
+      {/* ═══ MAIN CONTENT AREA ═══ */}
+      {campaignList.length === 0 ? (
+        /* ── EMPTY STATE: Only "Create Campaign" button ── */
+        <div className="flex flex-col items-center justify-center min-h-[400px] gap-6">
+          <div className="text-center">
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-2xl shadow-violet-600/30 mx-auto mb-4">
+              <Icon.Rocket className="w-10 h-10 text-white" />
+            </div>
+            <h2 className="text-xl font-bold text-white mb-2">Start Your First Campaign</h2>
+            <p className="text-[12px] text-gray-500 max-w-md">Create up to 4 independent campaigns. Each runs simultaneously with its own sender, subject, body, and recipient list.</p>
+          </div>
+          {!showCreateBox ? (
+            <button onClick={() => { if (!agreedTerms) { setShowTerms(true); return; } setShowCreateBox(true); }}
+              className="flex items-center gap-2 px-8 py-3.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl text-base font-bold transition shadow-lg shadow-violet-600/30">
+              <Icon.Plus className="w-5 h-5" /> Create Campaign
+            </button>
+          ) : (
+            <div className="bg-slate-900 border border-violet-500/30 rounded-2xl p-5 w-full max-w-md shadow-2xl">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2"><Icon.Layers className="w-4 h-4 text-violet-400" /> New Campaign</h3>
+                <button onClick={() => { setShowCreateBox(false); setNewCampaignName(''); }} className="text-gray-500 hover:text-white"><Icon.Close className="w-5 h-5" /></button>
               </div>
-              <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-white/[0.02] border border-white/5">
-                <span className="text-[10px] text-gray-400 flex items-center gap-1"><Icon.CheckCircle className="w-2.5 h-2.5 text-green-400" /> Delivered</span>
-                <span className="text-[11px] font-bold text-green-400 tabular-nums">{progress?.totalDelivered || 0}</span>
+              <input value={newCampaignName} onChange={(e) => setNewCampaignName(e.target.value)} autoFocus
+                placeholder={`Campaign-${campaignList.length + 1}`}
+                className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500 text-sm mb-3"
+                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateCampaign(); }} />
+              <div className="flex gap-2">
+                <button onClick={() => { setShowCreateBox(false); setNewCampaignName(''); }} className="flex-1 px-4 py-2.5 bg-white/5 hover:bg-white/10 text-gray-400 rounded-lg text-sm font-medium transition">Cancel</button>
+                <button onClick={handleCreateCampaign}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-lg text-sm font-bold transition shadow-lg shadow-violet-600/30">
+                  <Icon.Check className="w-4 h-4" /> Create
+                </button>
               </div>
-              <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-white/[0.02] border border-white/5">
-                <span className="text-[10px] text-gray-400 flex items-center gap-1"><Icon.XCircle className="w-2.5 h-2.5 text-red-400" /> Bounced</span>
-                <span className="text-[11px] font-bold text-red-400 tabular-nums">{progress?.totalUndelivered || 0}</span>
-              </div>
-              {progress && (progress.totalSent || 0) > 0 && (
-                <div className="px-2 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[9px] text-violet-300 uppercase tracking-wider">Inbox Rate</span>
-                    <span className="text-[11px] font-bold text-violet-300 tabular-nums">{Math.round(((progress.totalDelivered || 0) / Math.max(progress.totalSent || 1, 1)) * 100)}%</span>
+            </div>
+          )}
+        </div>
+      ) : activeCampaignId && campaignList.find(c => c.id === activeCampaignId) ? (
+        /* ── CAMPAIGN EDITOR (active campaign) ── */
+        <CampaignEditor
+          campaign={campaignList.find(c => c.id === activeCampaignId)}
+          updateCampaign={updateCampaign}
+          onBack={handleBackToCampaigns}
+          onSend={handleSend}
+          onStop={handleStop}
+          onPause={handlePause}
+          onTestMail={handleTestMail}
+          onCheckBounce={handleCheckBounce}
+          onReplaceBounced={handleReplaceBounced}
+          onPasteEmails={handlePasteEmails}
+          onBulkImport={handleBulkImport}
+          onConnectGmail={handleConnectGmailFile}
+          onAiSuggest={handleAiSuggest}
+          onApplyAi={handleApplyAi}
+          onSpamCheck={handleSpamCheck}
+          onGenerateAiNames={generateAiNames}
+          onPickSubject={handlePickSubject}
+          onLoadBodyTemplate={handleLoadBodyTemplate}
+          onDeleteCampaign={handleDeleteCampaign}
+          openNameModal={(id) => { setNameModalCampaignId(id); setNameModalOpen(true); }}
+          openSubjectCatModal={() => setSubjectCatModalOpen(true)}
+          openBodyModal={() => setBodyModalOpen(true)}
+          openPreview={(id) => { setPreviewCampaignId(id); setShowPreview(true); }}
+          openTagPicker={(id, target) => { setTagPickerCampaignId(id); setTagTarget(target); setTagPickerOpen(true); }}
+          openBounceResult={(id) => { setBounceCampaignId(id); setShowBounceResult(true); }}
+          Icon={Icon} Spinner={Spinner} MiniToggle={MiniToggle}
+          contentTypes={contentTypes} speedModes={speedModes} campaignStatusColors={campaignStatusColors}
+          subjectCategories={subjectCategories} subjectTemplates={subjectTemplates} bodyTemplates={bodyTemplates}
+          senderAccounts={senderAccounts} remaining={remaining} stats={stats}
+          validationSteps={validationSteps}
+          allCampaigns={campaignList}
+          onSelectCampaign={setActiveCampaignId}
+          onDeleteCampaignFromList={handleDeleteCampaign}
+        />
+      ) : (
+        /* ── CAMPAIGN SELECTOR (list of campaign cards) ── */
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {campaignList.map((c, idx) => {
+            const emails = c.numbersText.split(/[\n,\s]/).map(n => n.trim()).filter(Boolean);
+            return (
+              <div key={c.id} className="group relative bg-slate-900/50 border border-white/5 hover:border-violet-500/30 rounded-2xl p-5 cursor-pointer transition"
+                onClick={() => setActiveCampaignId(c.id)}>
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-lg">
+                      <span className="text-white font-bold text-sm">{idx + 1}</span>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white">{c.name}</h3>
+                      <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-bold ${campaignStatusColors[c.status] || ''}`}>{c.status}</span>
+                    </div>
                   </div>
-                  <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                    <div className="bg-gradient-to-r from-violet-500 to-green-500 h-full rounded-full transition-all" style={{ width: `${Math.round(((progress.totalDelivered || 0) / Math.max(progress.totalSent || 1, 1)) * 100)}%` }} />
-                  </div>
+                  <button onClick={(e) => { e.stopPropagation(); handleDeleteCampaign(c.id); }}
+                    className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 transition">
+                    <Icon.Trash className="w-4 h-4" />
+                  </button>
                 </div>
-              )}
-              {senderAccounts.length > 0 && (
-                <div className="px-2 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center gap-1">
-                  <Icon.Refresh className="w-2.5 h-2.5 text-violet-400 animate-spin" style={{ animationDuration: '3s' }} />
-                  <span className="text-[9px] text-violet-300">{senderAccounts.length} senders rotating</span>
+                <div className="space-y-1.5 text-[11px]">
+                  <div className="flex items-center gap-2"><Icon.Mail className="w-3 h-3 text-violet-400" /><span className="text-gray-400 truncate flex-1">{c.subject || '(no subject)'}</span></div>
+                  <div className="flex items-center gap-2"><Icon.Users className="w-3 h-3 text-amber-400" /><span className="text-gray-400">{emails.length} recipients</span></div>
+                  <div className="flex items-center gap-2"><Icon.Send className="w-3 h-3 text-cyan-400" /><span className="text-gray-400">{c.progress?.totalSent || 0} sent · {c.progress?.totalDelivered || 0} delivered</span></div>
                 </div>
-              )}
-              {autoChangeSubject && (
-                <div className="px-2 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center gap-1">
-                  <Icon.Refresh className="w-2.5 h-2.5 text-amber-400 animate-spin" style={{ animationDuration: '4s' }} />
-                  <span className="text-[9px] text-amber-300">{subjectTemplates.length} subjects rotating</span>
+                <div className="mt-3 flex items-center justify-between">
+                  <span className="text-[10px] text-gray-600">Click to open</span>
+                  <Icon.Activity className="w-4 h-4 text-violet-400 group-hover:translate-x-1 transition" />
                 </div>
-              )}
-              {autoChangeBody && (
-                <div className="px-2 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center gap-1">
-                  <Icon.DocText className="w-2.5 h-2.5 text-cyan-400" />
-                  <span className="text-[9px] text-cyan-300">{bodyTemplates.length} bodies rotating</span>
-                </div>
-              )}
-              {autoChangeName && (
-                <div className="px-2 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20 flex items-center gap-1">
-                  <Icon.User className="w-2.5 h-2.5 text-green-400" />
-                  <span className="text-[9px] text-green-300">{[...fromNameVariants.split(',').map(s=>s.trim()).filter(Boolean), ...nameList.split('\n').map(s=>s.trim()).filter(Boolean)].length} names rotating</span>
-                </div>
-              )}
+              </div>
+            );
+          })}
+          {campaignList.length < 4 && (
+            <button onClick={() => setShowCreateBox(true)}
+              className="flex flex-col items-center justify-center gap-3 bg-slate-900/30 border-2 border-dashed border-white/10 hover:border-violet-500/40 rounded-2xl p-5 min-h-[180px] transition group">
+              <div className="w-12 h-12 rounded-xl bg-white/5 group-hover:bg-violet-500/10 flex items-center justify-center transition">
+                <Icon.Plus className="w-6 h-6 text-gray-500 group-hover:text-violet-400 transition" />
+              </div>
+              <span className="text-[12px] text-gray-500 group-hover:text-violet-300 font-medium transition">Add Campaign ({campaignList.length}/4)</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ═══ CREATE CAMPAIGN BOX (when shown from list) ═══ */}
+      {showCreateBox && campaignList.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => { setShowCreateBox(false); setNewCampaignName(''); }}>
+          <div className="bg-slate-900 border border-violet-500/30 rounded-2xl p-5 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2"><Icon.Layers className="w-4 h-4 text-violet-400" /> New Campaign ({campaignList.length + 1}/4)</h3>
+              <button onClick={() => { setShowCreateBox(false); setNewCampaignName(''); }} className="text-gray-500 hover:text-white"><Icon.Close className="w-5 h-5" /></button>
+            </div>
+            <input value={newCampaignName} onChange={(e) => setNewCampaignName(e.target.value)} autoFocus
+              placeholder={`Campaign-${campaignList.length + 1}`}
+              className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500 text-sm mb-3"
+              onKeyDown={(e) => { if (e.key === 'Enter') handleCreateCampaign(); }} />
+            <div className="flex gap-2">
+              <button onClick={() => { setShowCreateBox(false); setNewCampaignName(''); }} className="flex-1 px-4 py-2.5 bg-white/5 hover:bg-white/10 text-gray-400 rounded-lg text-sm font-medium transition">Cancel</button>
+              <button onClick={handleCreateCampaign}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-lg text-sm font-bold transition shadow-lg shadow-violet-600/30">
+                <Icon.Check className="w-4 h-4" /> Create
+              </button>
             </div>
           </div>
         </div>
+      )}
 
-        {/* ── CENTER: Enterprise Config (no internal scroll — everything fits) ── */}
-        <div className="flex flex-col min-h-0 overflow-hidden order-1 lg:order-2 gap-2">
-          {/* Row 1: Subject + Category + Sender Name (compact, side by side) */}
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-2 flex-shrink-0">
-            {/* Subject with Category Selector + Pick + Auto-rotate toggle */}
+      {/* ═══ NAME ROTATION GEAR MODAL (⚙) ═══ */}
+      {nameModalOpen && (
+        <NameRotationModal
+          campaign={campaignList.find(c => c.id === nameModalCampaignId)}
+          onSave={(nameList) => { updateCampaign(nameModalCampaignId, { nameList }); setNameModalOpen(false); }}
+          onClose={() => setNameModalOpen(false)}
+          Icon={Icon}
+        />
+      )}
+
+      {/* ═══ SUBJECT CATEGORY & TEMPLATE MANAGEMENT MODAL ═══ */}
+      {subjectCatModalOpen && (
+        <SubjectCategoryModal
+          campaign={getActiveCampaign()}
+          subjectCategories={subjectCategories}
+          subjectTemplates={subjectTemplates}
+          activeCat={getActiveCampaign()?.activeSubjectCat || ''}
+          onSetCat={(catId) => updateActiveCampaign({ activeSubjectCat: catId })}
+          newSubjectCat={newSubjectCat} setNewSubjectCat={setNewSubjectCat}
+          onAddCat={handleAddSubjectCat}
+          newSubjectText={newSubjectText} setNewSubjectText={setNewSubjectText}
+          onAddTemplate={handleAddSubjectTemplate}
+          onDeleteTemplate={handleDeleteSubjectTemplate}
+          onUseSubject={(text) => { updateActiveCampaign({ subject: text }); setSubjectCatModalOpen(false); onSent('Subject loaded', 'success'); }}
+          onClose={() => setSubjectCatModalOpen(false)}
+          Icon={Icon} Spinner={Spinner}
+        />
+      )}
+
+      {/* ═══ BODY TEMPLATE MANAGEMENT MODAL ═══ */}
+      {bodyModalOpen && (
+        <BodyTemplateModal
+          bodyTemplates={bodyTemplates}
+          newBodyName={newBodyName} setNewBodyName={setNewBodyName}
+          newBodyContent={newBodyContent} setNewBodyContent={setNewBodyContent}
+          newBodyMode={newBodyMode} setNewBodyMode={setNewBodyMode}
+          onAdd={handleAddBodyTemplate}
+          onDelete={handleDeleteBodyTemplate}
+          onLoad={(tplId) => { handleLoadBodyTemplate(tplId); setBodyModalOpen(false); }}
+          onClose={() => setBodyModalOpen(false)}
+          Icon={Icon} Spinner={Spinner}
+        />
+      )}
+
+      {/* ═══ EMAIL PREVIEW OVERLAY ═══ */}
+      {showPreview && (
+        <PreviewModal
+          campaign={campaignList.find(c => c.id === previewCampaignId)}
+          onClose={() => setShowPreview(false)}
+          Icon={Icon}
+        />
+      )}
+
+      {/* ═══ BOUNCE RESULT VIEWER ═══ */}
+      {showBounceResult && (
+        <BounceResultModal
+          campaign={campaignList.find(c => c.id === bounceCampaignId)}
+          onReplace={() => { handleReplaceBounced(bounceCampaignId); setShowBounceResult(false); }}
+          onClose={() => setShowBounceResult(false)}
+          Icon={Icon}
+        />
+      )}
+
+      {/* ═══ ALL TAG PICKER MODAL ═══ */}
+      {tagPickerOpen && (
+        <TagPickerModal
+          allTags={allTags}
+          tagTarget={tagTarget} setTagTarget={setTagTarget}
+          onInsert={insertTag}
+          onClose={() => setTagPickerOpen(false)}
+          Icon={Icon}
+        />
+      )}
+    </div>
+  );
+}
+
+
+// ================================================================
+// CAMPAIGN EDITOR — full per-campaign config UI
+// ================================================================
+function CampaignEditor({
+  campaign, updateCampaign, onBack, onSend, onStop, onPause, onTestMail,
+  onCheckBounce, onReplaceBounced, onPasteEmails, onBulkImport, onConnectGmail,
+  onAiSuggest, onApplyAi, onSpamCheck, onGenerateAiNames, onPickSubject, onLoadBodyTemplate,
+  onDeleteCampaign, openNameModal, openSubjectCatModal, openBodyModal, openPreview, openTagPicker, openBounceResult,
+  Icon, Spinner, MiniToggle, contentTypes, speedModes, campaignStatusColors,
+  subjectCategories, subjectTemplates, bodyTemplates, senderAccounts, remaining, stats,
+  validationSteps, allCampaigns, onSelectCampaign,
+}) {
+  const c = campaign;
+  const u = (updates) => updateCampaign(c.id, updates);
+  const parsedEmails = (c.numbersText || '').split(/[\n,\s]/).map(n => n.trim()).filter(Boolean);
+  const totalTarget = parsedEmails.length;
+  const emails = c.numbersText || '';
+
+  // Connect Gmail file input ref
+  const fileInputRef = useRef(null);
+
+  return (
+    <div className="flex flex-col gap-2">
+      {/* HEADER: Back + Campaign Name + Status + Quick campaign switcher */}
+      <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-violet-500/20 bg-slate-900/50 flex-shrink-0 flex-wrap">
+        <button onClick={onBack} className="flex items-center gap-1 px-2.5 py-1.5 bg-white/5 hover:bg-white/10 text-gray-300 rounded-lg text-[11px] font-medium transition flex-shrink-0">
+          <Icon.ChevronLeft className="w-3.5 h-3.5" /> Campaigns
+        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-lg">
+            <Icon.Rocket className="w-3.5 h-3.5 text-white" />
+          </div>
+          <input value={c.name} onChange={(e) => u({ name: e.target.value })}
+            className="px-2 py-1 bg-white/5 border border-white/10 rounded-lg text-gray-100 text-sm font-bold focus:outline-none focus:ring-1 focus:ring-violet-500 min-w-[120px]" />
+        </div>
+        <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold flex-shrink-0 ${campaignStatusColors[c.status] || ''}`}>{c.status}</span>
+        {/* Quick switcher to other campaigns */}
+        <div className="flex items-center gap-1 flex-wrap">
+          {allCampaigns.filter(o => o.id !== c.id).map(o => (
+            <button key={o.id} onClick={() => onSelectCampaign(o.id)} title={`Open ${o.name}`}
+              className="px-2 py-1 bg-white/5 hover:bg-violet-500/15 text-gray-400 hover:text-violet-300 rounded-md text-[9px] font-medium transition flex items-center gap-1">
+              {o.name}
+              {o.status === 'running' && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />}
+            </button>
+          ))}
+        </div>
+        <button onClick={() => { if (confirm(`Delete campaign "${c.name}"?`)) onDeleteCampaign(c.id); }}
+          className="ml-auto flex items-center gap-1 px-2 py-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-md text-[10px] font-medium transition flex-shrink-0">
+          <Icon.Trash className="w-3.5 h-3.5" /> Delete
+        </button>
+      </div>
+
+      {/* CREDENTIAL.JSON CONNECT BAR — per campaign */}
+      <div className="relative overflow-hidden rounded-xl border border-white/5 bg-gradient-to-r from-violet-600/10 to-transparent px-3 py-2 flex-shrink-0">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg">
+              <Icon.Key className="w-3.5 h-3.5 text-white" />
+            </div>
+            <div className="leading-none">
+              <p className="text-[8px] text-violet-300/80 uppercase tracking-widest font-semibold">Credentials</p>
+              <p className="text-[11px] text-white mt-0.5">{senderAccounts.length} connected</p>
+            </div>
+          </div>
+          {/* Connect via credential.json — accepts ANY .json filename */}
+          <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition flex-shrink-0 ${c.connectingGmail ? 'bg-slate-700 text-gray-400' : 'bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-600/30'}`}>
+            {c.connectingGmail ? <Spinner size={12} /> : <Icon.Upload className="w-3.5 h-3.5" />}
+            {c.connectingGmail ? 'Connecting…' : 'Upload credential.json'}
+            <input ref={fileInputRef} type="file" accept=".json,application/json" onChange={(e) => onConnectGmail(e, c.id)} className="hidden" disabled={c.connectingGmail} />
+          </label>
+          <span className="text-[9px] text-gray-500 flex-shrink-0">Any <code className="text-violet-300">.json</code> file from Google Cloud Console</span>
+          {/* Sender select */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <select value={c.activeSenderIdx} onChange={(e) => u({ activeSenderIdx: Number(e.target.value) })}
+              className="px-2 py-1 bg-white/5 border border-white/10 rounded-md text-gray-200 text-[10px] focus:outline-none focus:ring-1 focus:ring-violet-500 min-w-[140px]">
+              {senderAccounts.length === 0 && <option value={0}>No accounts — Upload credential.json</option>}
+              {senderAccounts.map((s, i) => (<option key={i} value={i}>{s.email}</option>))}
+            </select>
+            <button onClick={() => u({ senderRotate: !c.senderRotate })}
+              className={`flex items-center gap-0.5 px-2 py-1 rounded-md text-[9px] font-medium border transition flex-shrink-0 ${c.senderRotate ? 'bg-violet-500/15 text-violet-300 border-violet-500/30' : 'bg-white/5 text-gray-500 border-white/5'}`}
+              title="Auto-rotate sender accounts">
+              <Icon.Refresh className={`w-2.5 h-2.5 ${c.senderRotate ? 'animate-spin' : ''}`} style={c.senderRotate ? { animationDuration: '3s' } : {}} /> Rotate
+            </button>
+          </div>
+        </div>
+        {/* Gmail connect message (OAuth guidance / errors) */}
+        {c.gmailConnectMsg && (
+          <div className={`mt-1.5 px-2.5 py-1.5 rounded-lg text-[10px] flex items-start gap-1.5 ${c.gmailConnectMsg.type === 'success' ? 'bg-green-500/10 text-green-300 border border-green-500/20' : 'bg-red-500/10 text-red-300 border border-red-500/20'}`}>
+            <span className="flex-shrink-0">{c.gmailConnectMsg.type === 'success' ? '✓' : '✕'}</span>
+            <span className="leading-snug" dangerouslySetInnerHTML={{ __html: c.gmailConnectMsg.text }} />
+          </div>
+        )}
+      </div>
+
+      {/* MAIN GRID: Center config (left) + Receiver List (right) */}
+      <div className="grid lg:grid-cols-[1fr_280px] gap-2">
+        {/* ── CENTER CONFIG (all options visible, no hidden overflow) ── */}
+        <div className="flex flex-col gap-2">
+          {/* Row 1: Subject + Sender Name */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
+            {/* Subject */}
             <div className="bg-slate-900/50 border border-violet-500/20 rounded-xl p-2.5">
               <div className="flex items-center justify-between mb-1">
                 <label className="text-[11px] text-gray-200 font-semibold flex items-center gap-1"><Icon.Mail className="w-3 h-3 text-violet-400" /> Subject</label>
                 <div className="flex items-center gap-1.5">
-                  <button onClick={() => { setTagTarget('subject'); setTagPickerOpen(true); }}
-                    className="text-[9px] text-amber-300 hover:text-amber-200 flex items-center gap-0.5"><Icon.Tag className="w-2.5 h-2.5" /> Tags</button>
-                  <button onClick={() => setSubjectCatModalOpen(true)}
-                    className="text-[9px] text-violet-300 hover:text-violet-200 flex items-center gap-0.5 bg-violet-500/10 px-1.5 py-0.5 rounded-md border border-violet-500/20 transition"><Icon.Folder className="w-2.5 h-2.5" /> Manage</button>
+                  <button onClick={() => openTagPicker(c.id, 'subject')} className="text-[9px] text-amber-300 hover:text-amber-200 flex items-center gap-0.5"><Icon.Tag className="w-2.5 h-2.5" /> Tags</button>
+                  <button onClick={openSubjectCatModal} className="text-[9px] text-violet-300 hover:text-violet-200 flex items-center gap-0.5 bg-violet-500/10 px-1.5 py-0.5 rounded-md border border-violet-500/20 transition"><Icon.Folder className="w-2.5 h-2.5" /> Manage</button>
                 </div>
               </div>
-              <input value={subject} onChange={(e) => setSubject(e.target.value)}
+              <input value={c.subject} onChange={(e) => u({ subject: e.target.value })}
                 placeholder="Enter subject or use category rotation…"
                 className="w-full px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 text-[11px]"
                 maxLength={120} />
-              {/* Category selector + pick + auto-rotate — compact inline row */}
               <div className="flex items-center gap-1.5 mt-1.5">
-                <select value={activeSubjectCat} onChange={(e) => setActiveSubjectCat(e.target.value)}
+                <select value={c.activeSubjectCat} onChange={(e) => u({ activeSubjectCat: e.target.value })}
                   className="flex-1 px-2 py-1 bg-white/5 border border-white/10 rounded-md text-gray-300 text-[10px] focus:outline-none focus:ring-1 focus:ring-violet-500 min-w-0">
                   <option value="">Category…</option>
-                  {subjectCategories.map(c => <option key={c._id} value={c._id}>{c.name} ({c.count || 0})</option>)}
+                  {subjectCategories.map(cat => <option key={cat._id} value={cat._id}>{cat.name} ({cat.count || 0})</option>)}
                 </select>
-                <button onClick={handlePickSubject} disabled={!activeSubjectCat || loadingSubjects}
+                <button onClick={() => onPickSubject(c.id)} disabled={!c.activeSubjectCat}
                   className="flex items-center gap-0.5 px-2 py-1 bg-violet-500/15 hover:bg-violet-500/25 text-violet-300 rounded-md text-[9px] font-medium border border-violet-500/20 transition disabled:opacity-40 flex-shrink-0">
-                  {loadingSubjects ? <Spinner size={8} /> : <Icon.Refresh className="w-2.5 h-2.5" />} Pick
+                  <Icon.Refresh className="w-2.5 h-2.5" /> Pick
                 </button>
-                <button onClick={() => setAutoChangeSubject(!autoChangeSubject)}
-                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-medium border transition flex-shrink-0 ${autoChangeSubject ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-white/5 text-gray-500 border-white/5'}`}
+                <button onClick={() => u({ autoChangeSubject: !c.autoChangeSubject })}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-medium border transition flex-shrink-0 ${c.autoChangeSubject ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-white/5 text-gray-500 border-white/5'}`}
                   title="Auto-rotate subject per batch">
-                  <Icon.Refresh className={`w-2.5 h-2.5 ${autoChangeSubject ? 'animate-spin' : ''}`} style={autoChangeSubject ? { animationDuration: '4s' } : {}} /> Auto
+                  <Icon.Refresh className={`w-2.5 h-2.5 ${c.autoChangeSubject ? 'animate-spin' : ''}`} style={c.autoChangeSubject ? { animationDuration: '4s' } : {}} /> Auto
                 </button>
               </div>
-              <p className="text-[9px] text-gray-500 mt-0.5">{subject.length}/120 {autoChangeSubject && subjectTemplates.length > 0 && <span className="text-amber-300">· {subjectTemplates.length} rotating</span>}</p>
+              <p className="text-[9px] text-gray-500 mt-0.5">{c.subject.length}/120 {c.autoChangeSubject && subjectTemplates.length > 0 && <span className="text-amber-300">· {subjectTemplates.length} rotating</span>}</p>
             </div>
 
-            {/* Sender Name with Gear icon (⚙) + From Name + Connected Senders */}
+            {/* Sender Name + Gear */}
             <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5">
               <div className="grid grid-cols-2 gap-2">
-                {/* From Name with gear icon */}
                 <div>
                   <label className="flex items-center gap-1 text-[10px] text-gray-300 mb-1">
                     <Icon.User className="w-3 h-3 text-green-400" /> From Name
-                    <button onClick={() => setNameModalOpen(true)}
-                      className="ml-auto text-green-400 hover:text-green-300 transition" title="Manage name rotation list">
+                    <button onClick={() => openNameModal(c.id)} className="ml-auto text-green-400 hover:text-green-300 transition" title="Manage name rotation list">
                       <Icon.Gear className="w-3.5 h-3.5" />
                     </button>
                   </label>
-                  <input value={fromName} onChange={(e) => setFromName(e.target.value)}
+                  <input value={c.fromName} onChange={(e) => u({ fromName: e.target.value })}
                     placeholder="Support Team"
                     className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-green-500 text-[11px]" />
                 </div>
-                {/* Name Variants (comma-sep) */}
                 <div>
                   <label className="block text-[10px] text-gray-300 mb-1 flex items-center gap-1"><Icon.Refresh className="w-3 h-3 text-green-400" /> Variants <span className="text-gray-600 text-[9px]">(comma)</span></label>
-                  <input value={fromNameVariants} onChange={(e) => setFromNameVariants(e.target.value)}
+                  <input value={c.fromNameVariants} onChange={(e) => u({ fromNameVariants: e.target.value })}
                     placeholder="Support, Sales, Billing"
                     className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-green-500 text-[11px]" />
                 </div>
               </div>
-              {/* Compact auto-change toggle + interval + sender select in one row */}
               <div className="flex items-center gap-1.5 mt-2">
-                <button onClick={() => setAutoChangeName(!autoChangeName)}
-                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-medium border transition flex-shrink-0 ${autoChangeName ? 'bg-green-500/15 text-green-300 border-green-500/30' : 'bg-white/5 text-gray-500 border-white/5'}`}
+                <button onClick={() => u({ autoChangeName: !c.autoChangeName })}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-medium border transition flex-shrink-0 ${c.autoChangeName ? 'bg-green-500/15 text-green-300 border-green-500/30' : 'bg-white/5 text-gray-500 border-white/5'}`}
                   title="Auto-change sender name per N emails">
-                  <Icon.Refresh className={`w-2.5 h-2.5 ${autoChangeName ? 'animate-spin' : ''}`} style={autoChangeName ? { animationDuration: '3s' } : {}} /> Auto-Name
+                  <Icon.Refresh className={`w-2.5 h-2.5 ${c.autoChangeName ? 'animate-spin' : ''}`} style={c.autoChangeName ? { animationDuration: '3s' } : {}} /> Auto-Name
                 </button>
-                {autoChangeName && (
+                {c.autoChangeName && (
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <span className="text-[9px] text-gray-500">every</span>
-                    <input type="number" min="1" max="999" value={autoNameInterval} onChange={(e) => setAutoNameInterval(Math.max(1, Number(e.target.value)))}
+                    <input type="number" min="1" max="999" value={c.autoNameInterval} onChange={(e) => u({ autoNameInterval: Math.max(1, Number(e.target.value)) })}
                       className="w-12 px-1.5 py-0.5 bg-white/5 border border-white/10 rounded-md text-gray-100 text-[10px] font-mono focus:outline-none focus:ring-1 focus:ring-green-500" />
                   </div>
                 )}
-                {autoChangeName && (
+                {c.autoChangeName && (
                   <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-green-500/10 border border-green-500/20 flex-1 min-w-0">
-                    {aiNameGenLoading ? <Spinner size={9} /> : <Icon.Sparkle className="w-2.5 h-2.5 text-green-400 flex-shrink-0" />}
-                    <span className="text-[9px] text-green-300 truncate">{aiNameGenLoading ? 'AI generating…' : `${aiNamePool.length - aiNameUsed} AI names`}</span>
-                    <button onClick={generateAiNames} disabled={aiNameGenLoading}
-                      className="text-[8px] text-green-300 hover:text-green-200 ml-auto flex-shrink-0 disabled:opacity-40">↻</button>
+                    {c.aiNameGenLoading ? <Spinner size={9} /> : <Icon.Sparkle className="w-2.5 h-2.5 text-green-400 flex-shrink-0" />}
+                    <span className="text-[9px] text-green-300 truncate">{c.aiNameGenLoading ? 'AI generating…' : `${c.aiNamePool.length - c.aiNameUsed} AI names`}</span>
+                    <button onClick={() => onGenerateAiNames(c.id)} disabled={c.aiNameGenLoading} className="text-[8px] text-green-300 hover:text-green-200 ml-auto flex-shrink-0 disabled:opacity-40">↻</button>
                   </div>
                 )}
               </div>
-              {/* Sender Mail + Connected Senders dropdown */}
+              {/* Sender Mail manual override */}
               <div className="grid grid-cols-2 gap-2 mt-2">
                 <div>
                   <label className="block text-[10px] text-gray-300 mb-1 flex items-center gap-1"><Icon.Mail className="w-3 h-3 text-cyan-400" /> Sender Mail</label>
-                  <input value={senderMail} onChange={(e) => setSenderMail(e.target.value)}
+                  <input value={c.senderMail} onChange={(e) => u({ senderMail: e.target.value })}
                     placeholder="auto (empty)"
                     className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 text-[11px] font-mono" />
                 </div>
                 <div>
-                  <label className="block text-[10px] text-gray-300 mb-1 flex items-center gap-1"><Icon.Refresh className="w-3 h-3 text-violet-400" /> Senders</label>
-                  <select value={activeSenderIdx} onChange={(e) => setActiveSenderIdx(Number(e.target.value))}
-                    className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 focus:outline-none focus:ring-1 focus:ring-violet-500 text-[11px] font-mono">
-                    {senderAccounts.length === 0 && <option value={0}>No accounts — Connect</option>}
-                    {senderAccounts.map((s, i) => (<option key={i} value={i}>{s.email}</option>))}
-                  </select>
+                  <label className="block text-[10px] text-gray-300 mb-1 flex items-center gap-1"><Icon.Users className="w-3 h-3 text-amber-400" /> Recipients</label>
+                  <div className="px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-amber-300 text-[11px] font-bold tabular-nums">{parsedEmails.length}</div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Row 2: Email Body (HTML) + Body Template Management + Auto-rotate — compact */}
-          <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5 flex-shrink-0">
+          {/* Row 2: Email Body */}
+          <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5">
             <div className="flex items-center justify-between mb-1">
               <label className="text-[11px] text-gray-300 flex items-center gap-1"><Icon.FileCode className="w-3 h-3 text-violet-400" /> Email Body</label>
-              <div className="flex items-center gap-1.5">
-                {/* Body mode toggle */}
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <div className="flex gap-0.5 bg-white/5 rounded-md p-0.5">
-                  <button onClick={() => setBodyMode('html')} className={`px-1.5 py-0.5 rounded text-[9px] font-medium transition ${bodyMode === 'html' ? 'bg-violet-600 text-white' : 'text-gray-400'}`}>HTML</button>
-                  <button onClick={() => setBodyMode('hint')} className={`px-1.5 py-0.5 rounded text-[9px] font-medium transition ${bodyMode === 'hint' ? 'bg-violet-600 text-white' : 'text-gray-400'}`}>Hint</button>
+                  <button onClick={() => u({ bodyMode: 'html' })} className={`px-1.5 py-0.5 rounded text-[9px] font-medium transition ${c.bodyMode === 'html' ? 'bg-violet-600 text-white' : 'text-gray-400'}`}>HTML</button>
+                  <button onClick={() => u({ bodyMode: 'plain' })} className={`px-1.5 py-0.5 rounded text-[9px] font-medium transition ${c.bodyMode === 'plain' ? 'bg-violet-600 text-white' : 'text-gray-400'}`}>Plain</button>
                 </div>
-                {/* Body template dropdown */}
-                <select onChange={(e) => { if (e.target.value) handleLoadBodyTemplate(e.target.value); e.target.value=''; }}
+                <select onChange={(e) => { if (e.target.value) onLoadBodyTemplate(e.target.value, c.id); e.target.value=''; }}
                   className="px-1.5 py-1 bg-white/5 border border-white/10 rounded-md text-[9px] text-gray-300 focus:outline-none cursor-pointer">
                   <option value="">Load body…</option>
                   {bodyTemplates.map(t => <option key={t._id} value={t._id}>{t.name}</option>)}
                 </select>
-                <button onClick={() => setBodyModalOpen(true)}
-                  className="text-[9px] text-cyan-300 hover:text-cyan-200 flex items-center gap-0.5 bg-cyan-500/10 px-1.5 py-0.5 rounded-md border border-cyan-500/20 transition"><Icon.DocText className="w-2.5 h-2.5" /> Manage</button>
-                <button onClick={() => setAutoChangeBody(!autoChangeBody)}
-                  className={`flex items-center gap-0.5 px-1.5 py-1 rounded-md text-[9px] font-medium border transition ${autoChangeBody ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' : 'bg-white/5 text-gray-500 border-white/5'}`}
+                <button onClick={openBodyModal} className="text-[9px] text-cyan-300 hover:text-cyan-200 flex items-center gap-0.5 bg-cyan-500/10 px-1.5 py-0.5 rounded-md border border-cyan-500/20 transition"><Icon.DocText className="w-2.5 h-2.5" /> Manage</button>
+                <button onClick={() => u({ autoChangeBody: !c.autoChangeBody })}
+                  className={`flex items-center gap-0.5 px-1.5 py-1 rounded-md text-[9px] font-medium border transition ${c.autoChangeBody ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' : 'bg-white/5 text-gray-500 border-white/5'}`}
                   title="Auto-rotate body per batch">
-                  <Icon.Refresh className={`w-2.5 h-2.5 ${autoChangeBody ? 'animate-spin' : ''}`} style={autoChangeBody ? { animationDuration: '4s' } : {}} /> Auto
+                  <Icon.Refresh className={`w-2.5 h-2.5 ${c.autoChangeBody ? 'animate-spin' : ''}`} style={c.autoChangeBody ? { animationDuration: '4s' } : {}} /> Auto
                 </button>
-                <button onClick={() => { setTagTarget('body'); setTagPickerOpen(true); }}
-                  className="text-[9px] text-amber-300 hover:text-amber-200 flex items-center gap-0.5"><Icon.Tag className="w-2.5 h-2.5" /> Tags</button>
+                <button onClick={() => openTagPicker(c.id, 'body')} className="text-[9px] text-amber-300 hover:text-amber-200 flex items-center gap-0.5"><Icon.Tag className="w-2.5 h-2.5" /> Tags</button>
               </div>
             </div>
-            <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={4}
+            <textarea value={c.message} onChange={(e) => u({ message: e.target.value })} rows={6}
               placeholder="Type HTML content or load a body template… use #RANDOM#, #DATE#, #NAME# tags"
-              className="w-full px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-none text-[11px] font-mono"
+              className="w-full px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-y text-[11px] font-mono"
               maxLength={2000} />
-            <div className="flex items-center justify-between mt-1">
+            <div className="flex items-center justify-between mt-1 flex-wrap gap-1">
               <div className="flex items-center gap-2">
-                <p className="text-[9px] text-gray-500">{message.length}/2000</p>
-                {spamChecking && <p className="text-[9px] text-gray-500 animate-pulse flex items-center gap-0.5"><Spinner size={8} /> AI spam…</p>}
-                {spamPreview && !spamChecking && (
-                  <p className={`text-[9px] font-semibold flex items-center gap-0.5 ${spamPreview.level === 'high' ? 'text-red-400' : spamPreview.level === 'moderate' ? 'text-amber-400' : 'text-green-400'}`}>
-                    Spam: {spamPreview.score}/100 · {spamPreview.level}
+                <p className="text-[9px] text-gray-500">{c.message.length}/2000</p>
+                {c.spamChecking && <p className="text-[9px] text-gray-500 animate-pulse flex items-center gap-0.5"><Spinner size={8} /> AI spam…</p>}
+                {c.spamPreview && !c.spamChecking && (
+                  <p className={`text-[9px] font-semibold flex items-center gap-0.5 ${c.spamPreview.level === 'high' ? 'text-red-400' : c.spamPreview.level === 'moderate' ? 'text-amber-400' : 'text-green-400'}`}>
+                    Spam: {c.spamPreview.score}/100 · {c.spamPreview.level}
                   </p>
                 )}
-                {autoChangeBody && bodyTemplates.length > 0 && <span className="text-[9px] text-cyan-300">· {bodyTemplates.length} rotating</span>}
+                {c.autoChangeBody && bodyTemplates.length > 0 && <span className="text-[9px] text-cyan-300">· {bodyTemplates.length} rotating</span>}
               </div>
               <div className="flex items-center gap-1.5">
-                <button onClick={handleAiSuggest} disabled={aiLoading}
-                  className="flex items-center gap-0.5 px-2 py-1 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50 text-white rounded-md text-[9px] font-medium transition">
-                  {aiLoading ? <Spinner size={8} /> : <Icon.Sparkle className="w-2.5 h-2.5" />} AI
+                <button onClick={() => onSpamCheck(c.id)} disabled={c.spamChecking || !c.message.trim()}
+                  className="flex items-center gap-0.5 px-2 py-1 bg-white/5 hover:bg-white/10 disabled:opacity-40 text-gray-300 rounded-md text-[9px] font-medium transition">
+                  <Icon.Shield className="w-2.5 h-2.5" /> Spam Check
                 </button>
-                <button onClick={() => setShowPreview(true)}
+                <button onClick={() => onAiSuggest(c.id)} disabled={c.aiLoading}
+                  className="flex items-center gap-0.5 px-2 py-1 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50 text-white rounded-md text-[9px] font-medium transition">
+                  {c.aiLoading ? <Spinner size={8} /> : <Icon.Sparkle className="w-2.5 h-2.5" />} AI
+                </button>
+                <button onClick={() => openPreview(c.id)}
                   className="text-[9px] text-cyan-300 hover:text-cyan-200 flex items-center gap-0.5 bg-cyan-500/10 px-2 py-1 rounded-md border border-cyan-500/20 transition">
                   <Icon.Eye className="w-2.5 h-2.5" /> Preview
                 </button>
               </div>
             </div>
-            {aiSuggestion && (
+            {c.aiSuggestion && (
               <div className="mt-1.5 p-2 bg-indigo-500/10 border border-indigo-500/20 rounded-lg flex items-center gap-2">
-                <p className="text-[10px] text-gray-200 flex-1 truncate">{aiSuggestion}</p>
-                <button onClick={handleApplyAi} className="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md text-[9px] font-medium flex-shrink-0">Use</button>
+                <p className="text-[10px] text-gray-200 flex-1 truncate">{c.aiSuggestion}</p>
+                <button onClick={() => onApplyAi(c.id)} className="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md text-[9px] font-medium flex-shrink-0">Use</button>
               </div>
             )}
           </div>
 
-          {/* Row 3: Content Type + Speed + Anti-Detection + Options — all compact in one card */}
-          <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5 flex-shrink-0">
+          {/* Row 3: Content Type + Speed + Anti-Detect + Options */}
+          <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
               {/* Content Type */}
               <div>
@@ -2156,10 +2316,10 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
                   {contentTypes.map(ct => {
                     const Ic = Icon[ct.icon] || Icon.Layers;
                     return (
-                      <button key={ct.key} onClick={() => setContentMode(ct.key)}
-                        className={`flex flex-col items-center gap-0.5 p-1 rounded-md border transition ${contentMode === ct.key ? 'border-violet-500 bg-violet-500/10' : 'border-white/5 bg-white/[0.02] hover:border-white/10'}`}>
-                        <Ic className={`w-3 h-3 ${contentMode === ct.key ? 'text-violet-300' : 'text-gray-400'}`} />
-                        <span className={`text-[8px] font-medium ${contentMode === ct.key ? 'text-violet-300' : 'text-gray-400'}`}>{ct.label}</span>
+                      <button key={ct.key} onClick={() => u({ contentMode: ct.key })}
+                        className={`flex flex-col items-center gap-0.5 p-1 rounded-md border transition ${c.contentMode === ct.key ? 'border-violet-500 bg-violet-500/10' : 'border-white/5 bg-white/[0.02] hover:border-white/10'}`}>
+                        <Ic className={`w-3 h-3 ${c.contentMode === ct.key ? 'text-violet-300' : 'text-gray-400'}`} />
+                        <span className={`text-[8px] font-medium ${c.contentMode === ct.key ? 'text-violet-300' : 'text-gray-400'}`}>{ct.label}</span>
                       </button>
                     );
                   })}
@@ -2170,116 +2330,115 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
                 <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-1"><Icon.Zap className="w-2.5 h-2.5 text-amber-400" /> Speed</p>
                 <div className="flex gap-0.5">
                   {speedModes.map(sp => (
-                    <button key={sp.key} onClick={() => setSpeedMode(sp.key)}
-                      className={`flex-1 px-1 py-1 rounded-md text-[9px] font-medium transition ${speedMode === sp.key ? 'bg-amber-600 text-white' : 'bg-white/5 text-gray-400 hover:text-white'}`}>{sp.label}</button>
+                    <button key={sp.key} onClick={() => u({ speedMode: sp.key })}
+                      className={`flex-1 px-1 py-1 rounded-md text-[9px] font-medium transition ${c.speedMode === sp.key ? 'bg-amber-600 text-white' : 'bg-white/5 text-gray-400 hover:text-white'}`}>{sp.label}</button>
                   ))}
                 </div>
                 <div className="flex items-center gap-1 mt-1">
                   <span className="text-[8px] text-gray-500">After</span>
-                  <input type="number" min="1" max="999" value={changeAfterStart} onChange={(e) => setChangeAfterStart(Number(e.target.value))}
+                  <input type="number" min="1" max="999" value={c.changeAfterStart} onChange={(e) => u({ changeAfterStart: Number(e.target.value) })}
                     className="w-12 px-1 py-0.5 bg-white/5 border border-white/10 rounded-md text-gray-100 text-[9px] font-mono focus:outline-none focus:ring-1 focus:ring-violet-500" />
                 </div>
               </div>
-              {/* Anti-Detection toggles */}
+              {/* Anti-Detection */}
               <div>
                 <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-1"><Icon.Shield className="w-2.5 h-2.5 text-green-400" /> Anti-Detect</p>
                 <div className="grid grid-cols-2 gap-1">
-                  <MiniToggle label="Detect" value={antiDetect} onChange={setAntiDetect} icon="Shield" accent="green" />
-                  <MiniToggle label="Color" value={colorShift} onChange={setColorShift} icon="Palette" accent="violet" />
-                  <MiniToggle label="Text" value={textShift} onChange={setTextShift} icon="Sparkle" accent="violet" />
-                  <MiniToggle label="Unsub" value={addUnsubscribe} onChange={setAddUnsubscribe} icon="Link" accent="cyan" />
+                  <MiniToggle label="Detect" value={c.antiDetect} onChange={(v) => u({ antiDetect: v })} icon="Shield" accent="green" />
+                  <MiniToggle label="Color" value={c.colorShift} onChange={(v) => u({ colorShift: v })} icon="Palette" accent="violet" />
+                  <MiniToggle label="Text" value={c.textShift} onChange={(v) => u({ textShift: v })} icon="Sparkle" accent="violet" />
+                  <MiniToggle label="Unsub" value={c.addUnsubscribe} onChange={(v) => u({ addUnsubscribe: v })} icon="Link" accent="cyan" />
                 </div>
               </div>
-              {/* Options & Flags */}
+              {/* Options */}
               <div>
                 <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1">Options</p>
                 <div className="grid grid-cols-2 gap-1">
-                  <MiniToggle label="Name" value={useName} onChange={setUseName} icon="User" accent="yellow" />
-                  <MiniToggle label="Pixel" value={trackPixel} onChange={setTrackPixel} icon="Eye" accent="cyan" />
-                  <MiniToggle label="Bounce" value={checkBounce} onChange={setCheckBounce} icon="Shield" accent="green" />
-                  <MiniToggle label="Reply" value={autoReply} onChange={setAutoReply} icon="Reply" accent="yellow" />
-                  <MiniToggle label="Save" value={autoSave} onChange={setAutoSave} icon="Save" accent="cyan" />
-                  <MiniToggle label="Random" value={randomText} onChange={setRandomText} icon="Sparkle" accent="yellow" />
+                  <MiniToggle label="Name" value={c.useName} onChange={(v) => u({ useName: v })} icon="User" accent="yellow" />
+                  <MiniToggle label="Pixel" value={c.trackPixel} onChange={(v) => u({ trackPixel: v })} icon="Eye" accent="cyan" />
+                  <MiniToggle label="Bounce" value={c.checkBounce} onChange={(v) => u({ checkBounce: v })} icon="Shield" accent="green" />
+                  <MiniToggle label="Reply" value={c.autoReply} onChange={(v) => u({ autoReply: v })} icon="Reply" accent="yellow" />
+                  <MiniToggle label="Save" value={c.autoSave} onChange={(v) => u({ autoSave: v })} icon="Save" accent="cyan" />
+                  <MiniToggle label="Random" value={c.randomText} onChange={(v) => u({ randomText: v })} icon="Sparkle" accent="yellow" />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Row 4: Batch/Delay/Jitter + Extra Options + Test Mail + Import — compact bottom row */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-2 flex-shrink-0">
-            {/* Batch / Delay / Jitter */}
+          {/* Row 4: Send Rate + Extra Flags + Test Mail */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
+            {/* Send Rate */}
             <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5">
               <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1.5 flex items-center gap-1"><Icon.Bolt className="w-3 h-3 text-amber-400" /> Send Rate</p>
               <div className="grid grid-cols-3 gap-1.5">
                 <div>
-                  <label className="text-[8px] text-gray-400 flex justify-between"><span>Batch</span><span className="text-violet-300 font-medium">{batchSize}</span></label>
-                  <input type="range" min="1" max="20" value={batchSize} onChange={(e) => setBatchSize(Number(e.target.value))} className="w-full accent-violet-500 mt-0.5" />
+                  <label className="text-[8px] text-gray-400 flex justify-between"><span>Batch</span><span className="text-violet-300 font-medium">{c.batchSize}</span></label>
+                  <input type="range" min="1" max="20" value={c.batchSize} onChange={(e) => u({ batchSize: Number(e.target.value) })} className="w-full accent-violet-500 mt-0.5" />
                 </div>
                 <div>
-                  <label className="text-[8px] text-gray-400 flex justify-between"><span>Delay</span><span className="text-violet-300 font-medium">{delayMs}ms</span></label>
-                  <input type="number" min="100" max="10000" step="100" value={delayMs} onChange={(e) => setDelayMs(Math.max(100, Number(e.target.value) || 100))}
+                  <label className="text-[8px] text-gray-400 flex justify-between"><span>Delay</span><span className="text-violet-300 font-medium">{c.delayMs}ms</span></label>
+                  <input type="number" min="100" max="10000" step="100" value={c.delayMs} onChange={(e) => u({ delayMs: Math.max(100, Number(e.target.value) || 100) })}
                     className="w-full px-1 py-0.5 bg-white/5 border border-white/10 rounded-md text-gray-100 text-[9px] font-mono focus:outline-none focus:ring-1 focus:ring-violet-500 mt-0.5" />
                 </div>
                 <div>
-                  <label className="text-[8px] text-gray-400 flex justify-between"><span>Jitter</span><span className="text-violet-300 font-medium">{jitterPct}%</span></label>
-                  <input type="range" min="0" max="100" value={jitterPct} onChange={(e) => setJitterPct(Number(e.target.value))} className="w-full accent-violet-500 mt-0.5" />
+                  <label className="text-[8px] text-gray-400 flex justify-between"><span>Jitter</span><span className="text-violet-300 font-medium">{c.jitterPct}%</span></label>
+                  <input type="range" min="0" max="100" value={c.jitterPct} onChange={(e) => u({ jitterPct: Number(e.target.value) })} className="w-full accent-violet-500 mt-0.5" />
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-1 mt-1.5">
-                <MiniToggle label="Humanize" value={humanize} onChange={setHumanize} icon="Shield" accent="green" />
-                <MiniToggle label="Drip" value={dripMode} onChange={setDripMode} icon="Clock" accent="cyan" />
-                <MiniToggle label="Polymorph" value={polymorph} onChange={setPolymorph} icon="Sparkle" accent="violet" />
+                <MiniToggle label="Humanize" value={c.humanize} onChange={(v) => u({ humanize: v })} icon="Shield" accent="green" />
+                <MiniToggle label="Drip" value={c.dripMode} onChange={(v) => u({ dripMode: v })} icon="Clock" accent="cyan" />
+                <MiniToggle label="Polymorph" value={c.polymorph} onChange={(v) => u({ polymorph: v })} icon="Sparkle" accent="violet" />
               </div>
             </div>
             {/* Extra Flags */}
             <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5">
               <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1.5">Extra Flags</p>
               <div className="grid grid-cols-2 gap-1">
-                <MiniToggle label="Confirmed" value={confirmedShipping} onChange={setConfirmedShipping} icon="Check" accent="green" />
-                <MiniToggle label="Priority" value={prioritySend} onChange={setPrioritySend} icon="Star" accent="yellow" />
-                <MiniToggle label="Humanize" value={humanize} onChange={setHumanize} icon="Shield" accent="green" />
-                <MiniToggle label="Polymorph" value={polymorph} onChange={setPolymorph} icon="Sparkle" accent="violet" />
+                <MiniToggle label="Confirmed" value={c.confirmedShipping} onChange={(v) => u({ confirmedShipping: v })} icon="Check" accent="green" />
+                <MiniToggle label="Priority" value={c.prioritySend} onChange={(v) => u({ prioritySend: v })} icon="Star" accent="yellow" />
+                <MiniToggle label="Humanize" value={c.humanize} onChange={(v) => u({ humanize: v })} icon="Shield" accent="green" />
+                <MiniToggle label="Polymorph" value={c.polymorph} onChange={(v) => u({ polymorph: v })} icon="Sparkle" accent="violet" />
               </div>
-              {/* Import + All Tags buttons */}
               <div className="flex items-center gap-1.5 mt-1.5">
                 <label className="flex items-center gap-0.5 px-2 py-1 bg-white/5 hover:bg-white/10 text-gray-300 rounded-md text-[9px] font-medium cursor-pointer transition border border-white/5">
                   <Icon.Upload className="w-2.5 h-2.5" /> Import
-                  <input type="file" accept=".csv,.txt" onChange={handleBulkImport} className="hidden" />
+                  <input type="file" accept=".csv,.txt" onChange={(e) => onBulkImport(e, c.id)} className="hidden" />
                 </label>
-                <button onClick={() => { setTagPickerOpen(true); setTagTarget('subject'); }}
+                <button onClick={() => openTagPicker(c.id, 'subject')}
                   className="flex items-center gap-0.5 px-2 py-1 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 rounded-md text-[9px] font-medium transition border border-amber-500/20">
                   <Icon.Tag className="w-2.5 h-2.5" /> All Tags
                 </button>
               </div>
             </div>
             {/* Test Mail */}
-            <div className={`rounded-xl p-2.5 border transition ${testResult?.ok ? 'border-cyan-500/40 bg-cyan-500/5' : 'border-white/5 bg-slate-900/50'}`}>
+            <div className={`rounded-xl p-2.5 border transition ${c.testResult?.ok ? 'border-cyan-500/40 bg-cyan-500/5' : 'border-white/5 bg-slate-900/50'}`}>
               <p className="text-[9px] text-gray-300 font-semibold flex items-center gap-1 mb-1.5"><Icon.Eye className="w-3 h-3 text-cyan-400" /> Test Mail</p>
               <div className="flex gap-1.5">
-                <input value={testRecipient} onChange={(e) => setTestRecipient(e.target.value)}
+                <input value={c.testRecipient} onChange={(e) => u({ testRecipient: e.target.value })}
                   placeholder="test@example.com"
                   className="flex-1 px-2 py-1.5 bg-white/5 border border-white/10 rounded-md text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 text-[10px] font-mono min-w-0" />
-                <button onClick={handleTestMail} disabled={testing || !testRecipient.trim() || !message.trim()}
+                <button onClick={() => onTestMail(c.id)} disabled={c.testing || !c.testRecipient.trim() || !c.message.trim()}
                   className="flex items-center gap-1 px-2.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 text-white rounded-md text-[10px] font-medium transition flex-shrink-0">
-                  {testing ? <Spinner size={10} /> : <Icon.Send className="w-3 h-3" />} Test
+                  {c.testing ? <Spinner size={10} /> : <Icon.Send className="w-3 h-3" />} Test
                 </button>
               </div>
-              {testResult && (
-                <p className={`text-[9px] px-2 py-1 rounded-md mt-1.5 ${testResult.ok ? 'bg-green-500/10 text-green-300' : 'bg-red-500/10 text-red-300'}`}>
-                  {testResult.ok ? `✓ ${testResult.recipient} via ${testResult.sender || 'auto'}` : testResult.blocked ? `✕ Blocked (${testResult.score})` : `✕ ${testResult.error || 'Failed'}`}
+              {c.testResult && (
+                <p className={`text-[9px] px-2 py-1 rounded-md mt-1.5 ${c.testResult.ok ? 'bg-green-500/10 text-green-300' : 'bg-red-500/10 text-red-300'}`}>
+                  {c.testResult.ok ? `✓ ${c.testResult.recipient} via ${c.testResult.sender || 'auto'}` : c.testResult.blocked ? `✕ Blocked (${c.testResult.score})` : `✕ ${c.testResult.error || 'Failed'}`}
                 </p>
               )}
             </div>
           </div>
 
-          {/* Row 5: Live progress (compact, only visible during/after send) */}
-          {progress && (
-            <div className="bg-gradient-to-r from-violet-600/10 to-indigo-600/5 border border-violet-500/20 rounded-xl p-2.5 flex-shrink-0">
+          {/* Row 5: Live progress (per campaign) */}
+          {c.progress && (
+            <div className="bg-gradient-to-r from-violet-600/10 to-indigo-600/5 border border-violet-500/20 rounded-xl p-2.5">
               <div className="flex items-center justify-between mb-1">
                 <h4 className="text-[11px] font-bold text-white flex items-center gap-1.5"><Icon.Activity className="w-3.5 h-3.5 text-violet-400" /> Campaign Progress</h4>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${progress.status === 'sent' ? 'bg-green-500/20 text-green-300' : progress.status === 'partial' ? 'bg-amber-500/20 text-amber-300' : progress.status === 'failed' ? 'bg-red-500/20 text-red-300' : 'bg-blue-500/20 text-blue-300 animate-pulse'}`}>{progress.status === 'pending' ? 'Ready' : progress.status === 'running' ? 'Sending…' : progress.status === 'sent' ? 'Success' : progress.status}</span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${c.progress.status === 'sent' ? 'bg-green-500/20 text-green-300' : c.progress.status === 'partial' ? 'bg-amber-500/20 text-amber-300' : c.progress.status === 'failed' ? 'bg-red-500/20 text-red-300' : 'bg-blue-500/20 text-blue-300 animate-pulse'}`}>{c.progress.status === 'pending' ? 'Ready' : c.progress.status === 'running' ? 'Sending…' : c.progress.status === 'sent' ? 'Success' : c.progress.status}</span>
               </div>
-              {limitExhausted && (
+              {c.limitExhausted && (
                 <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-red-500/15 border border-red-500/30 mb-1.5 animate-pulse">
                   <Icon.Alert className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
                   <p className="text-[10px] font-bold text-red-300">Sending Limit Exhausted — Account Sign-Out Detected. Connect another email or wait for reset.</p>
@@ -2289,53 +2448,104 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
                 <span className="text-[10px] text-violet-300 font-semibold flex-shrink-0">Sent</span>
                 <div className="flex-1 bg-slate-800 rounded-full h-1.5 overflow-hidden">
                   <div className="bg-gradient-to-r from-violet-500 to-indigo-500 h-full rounded-full transition-all duration-500"
-                    style={{ width: `${progress.totalSent > 0 ? Math.round((progress.totalSent / Math.max(progress.totalSent + progress.totalUndelivered, 1)) * 100) : 0}%` }} />
+                    style={{ width: `${c.progress.totalSent > 0 ? Math.round((c.progress.totalSent / Math.max(c.progress.totalSent + c.progress.totalUndelivered, 1)) * 100) : 0}%` }} />
                 </div>
-                <span className="text-[11px] font-black text-white tabular-nums flex-shrink-0">{progress.totalSent || 0}<span className="text-gray-500 text-[9px] font-normal">/{(progress.totalSent || 0) + (progress.totalUndelivered || 0) || totalTarget}</span></span>
+                <span className="text-[11px] font-black text-white tabular-nums flex-shrink-0">{c.progress.totalSent || 0}<span className="text-gray-500 text-[9px] font-normal">/{(c.progress.totalSent || 0) + (c.progress.totalUndelivered || 0) || totalTarget}</span></span>
               </div>
               <div className="grid grid-cols-3 gap-1.5">
-                <div className="bg-white/5 rounded-md p-1 text-center"><div className="text-xs font-bold text-white">{progress.totalSent || 0}</div><div className="text-[8px] text-gray-500">Sent</div></div>
-                <div className="bg-white/5 rounded-md p-1 text-center"><div className="text-xs font-bold text-green-400">{progress.totalDelivered || 0}</div><div className="text-[8px] text-gray-500">Delivered</div></div>
-                <div className="bg-white/5 rounded-md p-1 text-center"><div className="text-xs font-bold text-red-400">{progress.totalUndelivered || 0}</div><div className="text-[8px] text-gray-500">Undel.</div></div>
+                <div className="bg-white/5 rounded-md p-1 text-center"><div className="text-xs font-bold text-white">{c.progress.totalSent || 0}</div><div className="text-[8px] text-gray-500">Sent</div></div>
+                <div className="bg-white/5 rounded-md p-1 text-center"><div className="text-xs font-bold text-green-400">{c.progress.totalDelivered || 0}</div><div className="text-[8px] text-gray-500">Delivered</div></div>
+                <div className="bg-white/5 rounded-md p-1 text-center"><div className="text-xs font-bold text-red-400">{c.progress.totalUndelivered || 0}</div><div className="text-[8px] text-gray-500">Undel.</div></div>
               </div>
-              {progress.senderApiName && (
+              {c.progress.senderApiName && (
                 <div className="flex items-center gap-1.5 text-[9px] text-gray-500 mt-1">
                   <Icon.Refresh className="w-3 h-3 text-violet-400" />
-                  Sender: <span className="text-cyan-400">{progress.senderApiName}</span> · Batch: {progress.batchSize} · Delay: {(progress.delayMs / 1000).toFixed(1)}s{senderRotate && <span className="text-violet-300"> · auto-rotating</span>}
+                  Sender: <span className="text-cyan-400">{c.progress.senderApiName}</span> · Batch: {c.progress.batchSize} · Delay: {(c.progress.delayMs / 1000).toFixed(1)}s{c.senderRotate && <span className="text-violet-300"> · auto-rotating</span>}
                 </div>
               )}
             </div>
           )}
-          {/* Blocked result (compact) */}
-          {result && result.blocked && !progress && (
-            <div className="p-2.5 bg-red-500/10 border border-red-500/20 rounded-xl flex-shrink-0">
-              <p className="text-[11px] font-bold text-red-300 mb-0.5">⚠ Message Blocked — Spam Protection (Score: {result.spamScore}/100)</p>
-              {result.spamReasons && (
+          {/* Blocked result */}
+          {c.result && c.result.blocked && !c.progress && (
+            <div className="p-2.5 bg-red-500/10 border border-red-500/20 rounded-xl">
+              <p className="text-[11px] font-bold text-red-300 mb-0.5">⚠ Message Blocked — Spam Protection (Score: {c.result.spamScore}/100)</p>
+              {c.result.spamReasons && (
                 <div className="flex flex-wrap gap-1">
-                  {result.spamReasons.map((r, i) => <span key={i} className="text-[9px] bg-red-500/10 px-1.5 py-0.5 rounded text-red-300">{r}</span>)}
+                  {c.result.spamReasons.map((r, i) => <span key={i} className="text-[9px] bg-red-500/10 px-1.5 py-0.5 rounded text-red-300">{r}</span>)}
                 </div>
               )}
             </div>
           )}
         </div>
 
-        {/* ── RIGHT: Received List + Paste + Import + Send/Stop ── */}
-        <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5 flex flex-col min-h-0 overflow-hidden order-3">
+        {/* ── RIGHT: RECEIVER LIST (LARGER BOX + advanced loading) ── */}
+        <div className="bg-slate-900/50 border border-amber-500/20 rounded-xl p-2.5 flex flex-col order-3 lg:order-2 min-h-[400px]">
           <div className="flex items-center justify-between mb-1.5 flex-shrink-0">
-            <p className="text-[10px] text-amber-400 uppercase tracking-wider flex items-center gap-1 font-semibold"><Icon.Users className="w-3 h-3" /> Received List</p>
+            <p className="text-[10px] text-amber-400 uppercase tracking-wider flex items-center gap-1 font-semibold"><Icon.Users className="w-3 h-3" /> Receiver List</p>
             <div className="flex items-center gap-1">
-              <button onClick={handlePasteEmails} className="flex items-center gap-0.5 text-[9px] text-violet-300 hover:text-violet-200 bg-violet-500/10 px-1.5 py-0.5 rounded-md border border-violet-500/20 transition">
+              <button onClick={() => onPasteEmails(c.id)} className="flex items-center gap-0.5 text-[9px] text-violet-300 hover:text-violet-200 bg-violet-500/10 px-1.5 py-0.5 rounded-md border border-violet-500/20 transition">
                 <Icon.Clipboard className="w-2.5 h-2.5" /> Paste
               </button>
               <label className="flex items-center gap-0.5 text-[9px] text-cyan-300 hover:text-cyan-200 bg-cyan-500/10 px-1.5 py-0.5 rounded-md border border-cyan-500/20 cursor-pointer transition">
                 <Icon.Upload className="w-2.5 h-2.5" /> Import
-                <input type="file" accept=".csv,.txt" onChange={handleBulkImport} className="hidden" />
+                <input type="file" accept=".csv,.txt" onChange={(e) => onBulkImport(e, c.id)} className="hidden" />
               </label>
             </div>
           </div>
-          <textarea data-recipient-textarea value={numbersText} onChange={(e) => setNumbersText(e.target.value)} rows={2}
-            placeholder={"user1@gmail.com\nuser2@yahoo.com\n…"}
-            className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-none text-[10px] font-mono flex-shrink-0 mb-1.5" />
+          {/* LARGE textarea — much bigger than the old 2-row box */}
+          <textarea data-recipient-textarea value={c.numbersText} onChange={(e) => u({ numbersText: e.target.value })} rows={10}
+            placeholder={"user1@gmail.com\nuser2@yahoo.com\nuser3@outlook.com\n…"}
+            className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-y text-[10px] font-mono flex-shrink-0 mb-2 min-h-[160px]" />
+          {/* CHECK BOUNCE — per campaign, with advanced loading animation */}
+          <div className="flex-shrink-0 mb-2">
+            <button onClick={() => onCheckBounce(c.id)} disabled={c.checkingBounce || parsedEmails.length === 0}
+              className={`w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-bold transition ${c.checkBounce ? 'bg-green-600 hover:bg-green-500 text-white' : 'bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10'} disabled:opacity-40`}>
+              {c.checkingBounce ? <Spinner size={12} /> : <Icon.Shield className="w-3.5 h-3.5" />} Check Bounce
+            </button>
+            {/* Advanced loading animation — rotating status text ~3s each */}
+            {c.checkingBounce && (
+              <div className="mt-1.5 px-2.5 py-2 rounded-lg bg-violet-500/10 border border-violet-500/20">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Spinner size={10} />
+                  <span key={c.validationStep} className="text-[11px] text-violet-200 font-medium truncate animate-pulse flex-1">
+                    {validationSteps[c.validationStep] || 'Processing…'}
+                    <span className="inline-block w-1 h-1 rounded-full bg-violet-400 ml-1 animate-ping" />
+                  </span>
+                </div>
+                {/* Progress bar for validation steps */}
+                <div className="w-full bg-slate-800 rounded-full h-1 overflow-hidden">
+                  <div className="bg-gradient-to-r from-violet-500 to-green-500 h-full rounded-full transition-all duration-700"
+                    style={{ width: `${((c.validationStep + 1) / validationSteps.length) * 100}%` }} />
+                </div>
+                <p className="text-[8px] text-gray-500 mt-1 text-center">Step {c.validationStep + 1} of {validationSteps.length}</p>
+              </div>
+            )}
+            {/* Bounce results summary */}
+            {c.bounceResults && !c.checkingBounce && (
+              <div className="mt-1.5 space-y-1">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] text-green-300 bg-green-500/10 px-2 py-1 rounded-md border border-green-500/20 flex items-center gap-1"><Icon.CheckCircle className="w-3 h-3" /> {c.bounceResults.valid.length} valid</span>
+                  {c.bounceResults.bounced.length > 0 && (
+                    <span className="text-[10px] text-red-300 bg-red-500/10 px-2 py-1 rounded-md border border-red-500/20 flex items-center gap-1"><Icon.XCircle className="w-3 h-3" /> {c.bounceResults.bounced.length} bounced</span>
+                  )}
+                  {c.bounceResults.duplicates && c.bounceResults.duplicates.length > 0 && (
+                    <span className="text-[10px] text-amber-300 bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/20 flex items-center gap-1"><Icon.Copy className="w-3 h-3" /> {c.bounceResults.duplicates.length} dupes</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => openBounceResult(c.id)} className="flex-1 text-[9px] text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 px-2 py-1 rounded-md border border-cyan-500/20 flex items-center justify-center gap-1 font-medium transition">
+                    <Icon.Eye className="w-2.5 h-2.5" /> View Result
+                  </button>
+                  {c.bounceResults.bounced.length > 0 && (
+                    <button onClick={() => onReplaceBounced(c.id)} className="flex-1 text-[9px] text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-1 rounded-md border border-amber-500/20 flex items-center justify-center gap-1 font-medium transition">
+                      <Icon.Refresh className="w-2.5 h-2.5" /> Replace
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          {/* Recipient list view */}
           <div className="flex-1 overflow-y-auto min-h-0 pr-1 -mr-1">
             {parsedEmails.length === 0 ? (
               <div className="text-center py-6">
@@ -2344,13 +2554,13 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
               </div>
             ) : (
               <div className="space-y-0.5">
-                {parsedEmails.slice(0, 80).map((em, i) => {
-                  const v = emailValidation[em];
-                  const sr = sendResults[em];
+                {parsedEmails.slice(0, 120).map((em, i) => {
+                  const v = c.emailValidation[em];
+                  const sr = c.sendResults[em];
                   return (
                     <div key={i} className="flex items-center gap-1.5 px-1.5 py-1 rounded-md bg-white/[0.02] border border-white/5">
                       <span className="text-[8px] text-gray-600 w-4 flex-shrink-0 tabular-nums">{i + 1}</span>
-                      {loading || progress ? (
+                      {c.loading || c.progress ? (
                         sr === 'sent' ? (
                           <Icon.Check className="w-2.5 h-2.5 text-blue-400 flex-shrink-0" />
                         ) : sr === 'failed' ? (
@@ -2365,310 +2575,312 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
                       ) : v && !v.valid ? (
                         <Icon.XCircle className="w-2.5 h-2.5 text-red-400 flex-shrink-0" />
                       ) : (
-                        <span className="w-2.5 h-2.5 rounded-full bg-gray-600 flex-shrink-0 animate-pulse" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-gray-600 flex-shrink-0" />
                       )}
                       <span className={`text-[9px] truncate flex-1 ${(v && !v.valid) || sr === 'failed' ? 'text-red-400' : sr === 'sent' ? 'text-blue-300' : 'text-gray-300'}`} title={em}>{em}</span>
                     </div>
                   );
                 })}
-                {parsedEmails.length > 80 && (
-                  <p className="text-[9px] text-gray-600 text-center pt-1">+{parsedEmails.length - 80} more</p>
+                {parsedEmails.length > 120 && (
+                  <p className="text-[9px] text-gray-600 text-center pt-1">+{parsedEmails.length - 120} more</p>
                 )}
               </div>
             )}
           </div>
-          <div className="flex-shrink-0 pt-1.5 mt-1 border-t border-white/5">
-            <div className="flex items-center justify-between mb-1.5 text-[9px]">
+          {/* Count summary + Send/Stop */}
+          <div className="flex-shrink-0 pt-2 mt-2 border-t border-white/5 space-y-1.5">
+            <div className="flex items-center justify-between text-[9px]">
               <span className="text-gray-500">{parsedEmails.length} total</span>
-              <span className="text-green-400">{Object.values(emailValidation).filter(v => v && v.valid).length} valid</span>
-              <span className="text-blue-400">{Object.values(sendResults).filter(s => s === 'sent').length} sent</span>
+              <span className="text-green-400">{Object.values(c.emailValidation).filter(v => v && v.valid).length} valid</span>
+              <span className="text-blue-400">{Object.values(c.sendResults).filter(s => s === 'sent').length} sent</span>
             </div>
-            {!loading && !progress && (
-              <button onClick={handleSend}
-                disabled={remaining <= 0 || parsedEmails.length === 0 || (spamPreview && spamPreview.level === 'high')}
+            {!c.loading && !c.progress && (
+              <button onClick={() => onSend(c.id)}
+                disabled={remaining <= 0 || parsedEmails.length === 0}
                 className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-[12px] font-bold transition shadow-lg shadow-violet-600/30">
                 <Icon.Rocket className="w-4 h-4" /> Start Campaign
               </button>
             )}
-            {(loading || progress) && (
+            {(c.loading || c.progress) && (
               <div className="space-y-1">
-                <button onClick={handleStop}
+                <button onClick={() => onStop(c.id)}
                   className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-lg text-[12px] font-bold transition shadow-lg shadow-red-600/30">
                   <Icon.Stop className="w-4 h-4" /> Stop
                 </button>
-                <button onClick={handlePause}
-                  className={`w-full flex items-center justify-center gap-1 px-3 py-1.5 rounded-md text-[11px] font-bold transition ${paused ? 'bg-green-600 hover:bg-green-500 text-white' : 'bg-amber-600 hover:bg-amber-500 text-white'}`}>
-                  {paused ? <><Icon.Play className="w-3 h-3" /> Resume</> : <><Icon.Pause className="w-3 h-3" /> Pause</>}
+                <button onClick={() => onPause(c.id)}
+                  className={`w-full flex items-center justify-center gap-1 px-3 py-1.5 rounded-md text-[11px] font-bold transition ${c.paused ? 'bg-green-600 hover:bg-green-500 text-white' : 'bg-amber-600 hover:bg-amber-500 text-white'}`}>
+                  {c.paused ? <><Icon.Play className="w-3 h-3" /> Resume</> : <><Icon.Pause className="w-3 h-3" /> Pause</>}
                 </button>
-                <p className="text-[8px] text-gray-500 text-center leading-tight">Stop preserves your position — resume continues from where you stopped</p>
+                {c.paused && (
+                  <p className="text-[9px] text-amber-300 text-center">⏸ Paused at {c.progress?.totalSent || 0} sent — press Resume to continue</p>
+                )}
               </div>
             )}
           </div>
         </div>
       </div>
-
-      {/* ═══ Name Rotation Gear Modal (⚙) — compact popover ═══ */}
-      {nameModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setNameModalOpen(false)}>
-          <div className="bg-slate-900 border border-green-500/30 rounded-2xl p-5 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2"><Icon.Gear className="w-4 h-4 text-green-400" /> Sender Name Rotation</h3>
-              <button onClick={() => setNameModalOpen(false)} className="text-gray-500 hover:text-white"><Icon.Close className="w-5 h-5" /></button>
-            </div>
-            <p className="text-[11px] text-gray-500 mb-3">Enter one name per line. These rotate automatically per batch along with comma-separated variants above. Leave empty to use From Name only.</p>
-            <textarea value={nameList} onChange={(e) => setNameList(e.target.value)} rows={8}
-              placeholder={"John Smith\nSarah Johnson\nMichael Brown\nEmily Davis\n…"}
-              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-green-500 text-[12px] font-mono resize-none" />
-            <div className="flex items-center justify-between mt-3">
-              <p className="text-[10px] text-gray-500">{nameList.split('\n').map(s => s.trim()).filter(Boolean).length} names in rotation</p>
-              <div className="flex gap-2">
-                <button onClick={() => setNameList('')} className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-400 rounded-lg text-[11px] font-medium transition">Clear</button>
-                <button onClick={() => setNameModalOpen(false)} className="px-4 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded-lg text-[11px] font-bold transition flex items-center gap-1"><Icon.Check className="w-3.5 h-3.5" /> Save</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══ Subject Category & Template Management Modal ═══ */}
-      {subjectCatModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setSubjectCatModalOpen(false)}>
-          <div className="bg-slate-900 border border-violet-500/30 rounded-2xl p-5 max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-3 flex-shrink-0">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2"><Icon.Folder className="w-4 h-4 text-violet-400" /> Subject Categories & Templates</h3>
-              <button onClick={() => setSubjectCatModalOpen(false)} className="text-gray-500 hover:text-white"><Icon.Close className="w-5 h-5" /></button>
-            </div>
-            {/* Category tabs */}
-            <div className="flex flex-wrap gap-1.5 mb-3 flex-shrink-0">
-              {subjectCategories.map(c => (
-                <button key={c._id} onClick={() => setActiveSubjectCat(c._id)}
-                  className={`px-2.5 py-1 rounded-md text-[10px] font-medium transition ${activeSubjectCat === c._id ? 'bg-violet-600 text-white' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}>
-                  {c.name} <span className="text-[8px] opacity-60">({c.count || 0})</span>
-                </button>
-              ))}
-            </div>
-            {/* Add new category */}
-            <div className="flex gap-1.5 mb-3 flex-shrink-0">
-              <input value={newSubjectCat} onChange={(e) => setNewSubjectCat(e.target.value)} placeholder="New category name…"
-                className="flex-1 px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 text-[11px]" />
-              <button onClick={handleAddSubjectCat} className="px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-[11px] font-medium transition flex items-center gap-1"><Icon.Plus className="w-3 h-3" /> Add</button>
-            </div>
-            {/* Add template */}
-            <div className="flex gap-1.5 mb-2 flex-shrink-0">
-              <input value={newSubjectText} onChange={(e) => setNewSubjectText(e.target.value)} placeholder="New subject line for this category…" disabled={!activeSubjectCat}
-                className="flex-1 px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 text-[11px] disabled:opacity-40" />
-              <button onClick={handleAddSubjectTemplate} disabled={!activeSubjectCat || !newSubjectText.trim()} className="px-3 py-1.5 bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 rounded-lg text-[11px] font-medium transition disabled:opacity-40 flex items-center gap-1"><Icon.Plus className="w-3 h-3" /> Add</button>
-            </div>
-            {/* Template list */}
-            <div className="overflow-y-auto flex-1 min-h-0 pr-1 space-y-1">
-              {loadingSubjects ? (
-                <div className="text-center py-4"><Spinner size={14} /> <p className="text-[11px] text-gray-500 mt-1">Loading…</p></div>
-              ) : subjectTemplates.length === 0 ? (
-                <p className="text-[11px] text-gray-600 text-center py-4">{activeSubjectCat ? 'No templates yet — add one above' : 'Select a category'}</p>
-              ) : (
-                subjectTemplates.map(t => (
-                  <div key={t._id} className="group flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.02] border border-white/5 hover:border-white/10 transition">
-                    <Icon.Mail className="w-3 h-3 text-violet-400 flex-shrink-0" />
-                    <span className="text-[11px] text-gray-300 truncate flex-1">{t.text}</span>
-                    <button onClick={() => { setSubject(t.text); setSubjectCatModalOpen(false); onSent('Subject loaded', 'success'); }}
-                      className="text-[9px] text-violet-300 hover:text-violet-200 opacity-0 group-hover:opacity-100 transition flex-shrink-0">Use</button>
-                    <button onClick={() => handleDeleteSubjectTemplate(t._id)}
-                      className="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition flex-shrink-0"><Icon.Close className="w-3 h-3" /></button>
-                  </div>
-                ))
-              )}
-            </div>
-            <button onClick={() => setSubjectCatModalOpen(false)} className="mt-3 w-full px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-sm font-medium transition flex-shrink-0">Done</button>
-          </div>
-        </div>
-      )}
-
-      {/* ═══ Body Template Management Modal ═══ */}
-      {bodyModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setBodyModalOpen(false)}>
-          <div className="bg-slate-900 border border-cyan-500/30 rounded-2xl p-5 max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-3 flex-shrink-0">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2"><Icon.DocText className="w-4 h-4 text-cyan-400" /> Body Template Manager</h3>
-              <button onClick={() => setBodyModalOpen(false)} className="text-gray-500 hover:text-white"><Icon.Close className="w-5 h-5" /></button>
-            </div>
-            {/* Add new body template */}
-            <div className="space-y-2 mb-3 flex-shrink-0">
-              <div className="flex gap-1.5">
-                <input value={newBodyName} onChange={(e) => setNewBodyName(e.target.value)} placeholder="Template name (e.g. Invoice Template)…"
-                  className="flex-1 px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 text-[11px]" />
-                <div className="flex gap-0.5 bg-white/5 rounded-lg p-0.5">
-                  <button onClick={() => setNewBodyMode('html')} className={`px-2 py-1 rounded text-[10px] font-medium transition ${newBodyMode === 'html' ? 'bg-cyan-600 text-white' : 'text-gray-400'}`}>HTML</button>
-                  <button onClick={() => setNewBodyMode('plain')} className={`px-2 py-1 rounded text-[10px] font-medium transition ${newBodyMode === 'plain' ? 'bg-cyan-600 text-white' : 'text-gray-400'}`}>Plain</button>
-                </div>
-              </div>
-              <textarea value={newBodyContent} onChange={(e) => setNewBodyContent(e.target.value)} rows={4}
-                placeholder="Paste HTML or plain text body content here… use #RANDOM#, #DATE#, #NAME# tags"
-                className="w-full px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 text-[11px] font-mono resize-none" />
-              <button onClick={handleAddBodyTemplate} disabled={!newBodyName.trim() || !newBodyContent.trim()}
-                className="w-full px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 text-white rounded-lg text-[11px] font-medium transition flex items-center justify-center gap-1"><Icon.Plus className="w-3 h-3" /> Save Body Template</button>
-            </div>
-            {/* Saved body templates list */}
-            <div className="overflow-y-auto flex-1 min-h-0 pr-1 space-y-1">
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Saved Templates ({bodyTemplates.length})</p>
-              {loadingBodies ? (
-                <div className="text-center py-4"><Spinner size={14} /> <p className="text-[11px] text-gray-500 mt-1">Loading…</p></div>
-              ) : bodyTemplates.length === 0 ? (
-                <p className="text-[11px] text-gray-600 text-center py-4">No body templates saved yet — create one above</p>
-              ) : (
-                bodyTemplates.map(t => (
-                  <div key={t._id} className="group flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.02] border border-white/5 hover:border-white/10 transition">
-                    <Icon.DocText className="w-3 h-3 text-cyan-400 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[11px] text-gray-300 truncate">{t.name}</p>
-                      <p className="text-[9px] text-gray-600 truncate">{(t.content || '').substring(0, 60)}…</p>
-                    </div>
-                    <span className="text-[8px] text-gray-600 uppercase flex-shrink-0">{t.mode || 'html'}</span>
-                    <button onClick={() => { handleLoadBodyTemplate(t._id); setBodyModalOpen(false); }}
-                      className="text-[9px] text-cyan-300 hover:text-cyan-200 opacity-0 group-hover:opacity-100 transition flex-shrink-0">Load</button>
-                    <button onClick={() => handleDeleteBodyTemplate(t._id)}
-                      className="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition flex-shrink-0"><Icon.Close className="w-3 h-3" /></button>
-                  </div>
-                ))
-              )}
-            </div>
-            <button onClick={() => setBodyModalOpen(false)} className="mt-3 w-full px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-sm font-medium transition flex-shrink-0">Done</button>
-          </div>
-        </div>
-      )}
-
-      {/* ═══ Email Preview Overlay (in-page, close + fullscreen) ═══ */}
-      {showPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => { setShowPreview(false); setPreviewFullscreen(false); }}>
-          <div className={`bg-slate-900 border border-violet-500/30 rounded-2xl shadow-2xl flex flex-col overflow-hidden ${previewFullscreen ? 'w-full h-full max-w-none max-h-none rounded-none' : 'w-full max-w-2xl max-h-[85vh] rounded-2xl'}`} onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-slate-950/50 flex-shrink-0">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2"><Icon.Eye className="w-4 h-4 text-violet-400" /> Email Preview</h3>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setPreviewFullscreen(!previewFullscreen)} className="text-[10px] text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 px-2 py-1 rounded-md transition flex items-center gap-1">
-                  <Icon.Activity className="w-3 h-3" /> {previewFullscreen ? 'Exit Full' : 'Fullscreen'}
-                </button>
-                <button onClick={() => { setShowPreview(false); setPreviewFullscreen(false); }} className="text-gray-500 hover:text-white"><Icon.Close className="w-5 h-5" /></button>
-              </div>
-            </div>
-            <div className="overflow-y-auto flex-1 p-4 space-y-3">
-              <div className="bg-white/5 rounded-lg p-3 space-y-1.5 border border-white/5">
-                <div className="flex items-start gap-2"><span className="text-[10px] text-gray-500 w-12 flex-shrink-0">From:</span><span className="text-[11px] text-gray-200">{fromName || senderMail || 'sender@gmail.com'} <span className="text-gray-500">&lt;{senderMail || 'auto-selected sender'}&gt;</span></span></div>
-                <div className="flex items-start gap-2"><span className="text-[10px] text-gray-500 w-12 flex-shrink-0">To:</span><span className="text-[11px] text-gray-200">{parsedEmails[0] || 'recipient@example.com'}{parsedEmails.length > 1 && <span className="text-gray-500"> +{parsedEmails.length - 1} more</span>}</span></div>
-                <div className="flex items-start gap-2"><span className="text-[10px] text-gray-500 w-12 flex-shrink-0">Subject:</span><span className="text-[11px] text-violet-300 font-medium">{subject || '(no subject)'}</span></div>
-              </div>
-              <div className="bg-white rounded-lg p-4 min-h-[200px] border border-white/10">
-                {bodyMode === 'html' ? (
-                  <div className="text-gray-800 text-sm" dangerouslySetInnerHTML={{ __html: message || '<p style="color:#999;font-style:italic">(empty body - type content in the Content field)</p>' }} />
-                ) : (
-                  <pre className="text-gray-800 text-sm whitespace-pre-wrap font-sans">{message || '(empty body - type content in the Content field)'}</pre>
-                )}
-                {trackPixel && <img src="https://track.example.com/pixel.gif" alt="" width="1" height="1" className="opacity-10" />}
-                {addUnsubscribe && <p style={{ marginTop: '20px', fontSize: '11px', color: '#999', borderTop: '1px solid #eee', paddingTop: '10px' }}><a href="#" style={{ color: '#999' }}>Unsubscribe</a> from these emails.</p>}
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                <span className="text-[9px] px-2 py-0.5 rounded-md bg-violet-500/10 text-violet-300 border border-violet-500/20">{contentTypes.find(c => c.key === contentMode)?.label || 'HTML'}</span>
-                {trackPixel && <span className="text-[9px] px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">Track Pixel ON</span>}
-                {autoChangeName && <span className="text-[9px] px-2 py-0.5 rounded-md bg-green-500/10 text-green-300 border border-green-500/20">Auto Name every {autoNameInterval}</span>}
-                {antiDetect && <span className="text-[9px] px-2 py-0.5 rounded-md bg-green-500/10 text-green-300 border border-green-500/20">Anti-Detect ON</span>}
-                {colorShift && <span className="text-[9px] px-2 py-0.5 rounded-md bg-violet-500/10 text-violet-300 border border-violet-500/20">Color Shift</span>}
-                {textShift && <span className="text-[9px] px-2 py-0.5 rounded-md bg-violet-500/10 text-violet-300 border border-violet-500/20">Text Shift</span>}
-                {addUnsubscribe && <span className="text-[9px] px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">Unsub Link</span>}
-                {senderRotate && <span className="text-[9px] px-2 py-0.5 rounded-md bg-violet-500/10 text-violet-300 border border-violet-500/20">Sender Rotate</span>}
-                <span className="text-[9px] px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20">Delay {delayMs}ms</span>
-              </div>
-            </div>
-            <div className="px-4 py-3 border-t border-white/10 bg-slate-950/50 flex-shrink-0">
-              <button onClick={() => { setShowPreview(false); setPreviewFullscreen(false); }}
-                className="w-full px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-sm font-medium transition">Close Preview</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══ Bounce Result Viewer ═══ */}
-      {showBounceResult && bounceResults && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setShowBounceResult(false)}>
-          <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 max-w-lg w-full max-h-[80vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2"><Icon.Shield className="w-4 h-4 text-green-400" /> Validation Results</h3>
-              <button onClick={() => setShowBounceResult(false)} className="text-gray-500 hover:text-white"><Icon.Close className="w-5 h-5" /></button>
-            </div>
-            <div className="grid grid-cols-3 gap-2 mb-4">
-              <div className="bg-white/5 rounded-lg p-3 text-center border border-white/5"><div className="text-xl font-bold text-white">{bounceResults.checked}</div><div className="text-[9px] text-gray-500 uppercase">Checked</div></div>
-              <div className="bg-green-500/10 rounded-lg p-3 text-center border border-green-500/20"><div className="text-xl font-bold text-green-400">{bounceResults.valid.length}</div><div className="text-[9px] text-gray-500 uppercase">Valid</div></div>
-              <div className="bg-red-500/10 rounded-lg p-3 text-center border border-red-500/20"><div className="text-xl font-bold text-red-400">{bounceResults.bounced.length}</div><div className="text-[9px] text-gray-500 uppercase">Bounced</div></div>
-            </div>
-            {bounceResults.duplicates && bounceResults.duplicates.length > 0 && (
-              <div className="mb-3 p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                <p className="text-[11px] text-amber-300 font-medium mb-1">{bounceResults.duplicates.length} duplicates removed</p>
-                <div className="flex flex-wrap gap-1">
-                  {bounceResults.duplicates.slice(0, 10).map((d, i) => <span key={i} className="text-[9px] bg-amber-500/10 px-1.5 py-0.5 rounded text-amber-300">{d}</span>)}
-                  {bounceResults.duplicates.length > 10 && <span className="text-[9px] text-amber-400">+{bounceResults.duplicates.length - 10} more</span>}
-                </div>
-              </div>
-            )}
-            {bounceResults.bounced.length > 0 && (
-              <div className="mb-3">
-                <p className="text-[11px] text-red-300 font-medium mb-1">Bounced / Invalid emails:</p>
-                <div className="flex flex-wrap gap-1 max-h-40 overflow-y-auto">
-                  {bounceResults.bounced.map((b, i) => <span key={i} className="text-[9px] bg-red-500/10 border border-red-500/20 px-1.5 py-0.5 rounded text-red-300">{b}</span>)}
-                </div>
-              </div>
-            )}
-            {bounceResults.bounced.length > 0 && (
-              <button onClick={handleReplaceBounced}
-                className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-sm font-bold transition">
-                <Icon.Refresh className="w-4 h-4" /> Replace Bounced (keep valid only)
-              </button>
-            )}
-            <p className="text-[9px] text-gray-600 mt-3 text-center">Replace removes ONLY bounced/duplicate emails — your valid emails are preserved.</p>
-          </div>
-        </div>
-      )}
-
-      {/* ═══ All Tag Picker Modal ═══ */}
-      {tagPickerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setTagPickerOpen(false)}>
-          <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-2"><Icon.Tag className="w-4 h-4 text-amber-400" /> All Tags</h3>
-                <p className="text-[11px] text-gray-500 mt-0.5">Click any tag to insert into the <span className="text-amber-300 font-medium">{tagTarget === 'subject' ? 'Subject' : 'Body'}</span> field</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="flex gap-1 bg-white/5 rounded-lg p-1">
-                  <button onClick={() => setTagTarget('subject')} className={`px-3 py-1 rounded-md text-[11px] font-medium transition ${tagTarget === 'subject' ? 'bg-violet-600 text-white' : 'text-gray-400'}`}>Subject</button>
-                  <button onClick={() => setTagTarget('body')} className={`px-3 py-1 rounded-md text-[11px] font-medium transition ${tagTarget === 'body' ? 'bg-violet-600 text-white' : 'text-gray-400'}`}>Body</button>
-                </div>
-                <button onClick={() => setTagPickerOpen(false)} className="text-gray-500 hover:text-white"><Icon.Close className="w-5 h-5" /></button>
-              </div>
-            </div>
-            <div className="grid sm:grid-cols-2 gap-2">
-              {allTags.map((t, i) => (
-                <button key={i} onClick={() => insertTag(t.tag)}
-                  className="flex items-start gap-3 p-3 bg-white/[0.03] hover:bg-amber-500/10 border border-white/5 hover:border-amber-500/30 rounded-xl text-left transition group">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-amber-500/10 group-hover:bg-amber-500/20 flex items-center justify-center">
-                    <Icon.Tag className="w-4 h-4 text-amber-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-mono font-semibold text-amber-300">{t.tag}</p>
-                    <p className="text-[10px] text-gray-500 leading-tight mt-0.5">{t.desc}</p>
-                    <p className="text-[9px] text-gray-600 mt-0.5">e.g. {t.sample}</p>
-                  </div>
-                  <Icon.Copy className="w-3.5 h-3.5 text-gray-600 group-hover:text-amber-400 flex-shrink-0 mt-1" />
-                </button>
-              ))}
-            </div>
-            <button onClick={() => setTagPickerOpen(false)}
-              className="mt-4 w-full px-4 py-2.5 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-sm font-medium transition">
-              Done
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
+// ================================================================
+// NAME ROTATION MODAL (gear icon)
+// ================================================================
+function NameRotationModal({ campaign, onSave, onClose, Icon }) {
+  const [list, setList] = useState(campaign?.nameList || '');
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-slate-900 border border-green-500/30 rounded-2xl p-5 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2"><Icon.Gear className="w-4 h-4 text-green-400" /> Sender Name Rotation</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-white"><Icon.Close className="w-5 h-5" /></button>
+        </div>
+        <p className="text-[11px] text-gray-500 mb-3">Enter one name per line. These rotate automatically per batch along with comma-separated variants above. Leave empty to use From Name only.</p>
+        <textarea value={list} onChange={(e) => setList(e.target.value)} rows={10}
+          placeholder={"John Smith\nSarah Johnson\nMichael Brown\nEmily Davis\n…"}
+          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-green-500 text-[12px] font-mono resize-none" />
+        <div className="flex items-center justify-between mt-3">
+          <p className="text-[10px] text-gray-500">{list.split('\n').map(s => s.trim()).filter(Boolean).length} names in rotation</p>
+          <div className="flex gap-2">
+            <button onClick={() => setList('')} className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-400 rounded-lg text-[11px] font-medium transition">Clear</button>
+            <button onClick={() => onSave(list)} className="px-4 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded-lg text-[11px] font-bold transition flex items-center gap-1"><Icon.Check className="w-3.5 h-3.5" /> Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ================================================================
+// SUBJECT CATEGORY MODAL
+// ================================================================
+function SubjectCategoryModal({ campaign, subjectCategories, subjectTemplates, activeCat, onSetCat, newSubjectCat, setNewSubjectCat, onAddCat, newSubjectText, setNewSubjectText, onAddTemplate, onDeleteTemplate, onUseSubject, onClose, Icon, Spinner }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-slate-900 border border-violet-500/30 rounded-2xl p-5 max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3 flex-shrink-0">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2"><Icon.Folder className="w-4 h-4 text-violet-400" /> Subject Categories & Templates</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-white"><Icon.Close className="w-5 h-5" /></button>
+        </div>
+        <div className="flex flex-wrap gap-1.5 mb-3 flex-shrink-0">
+          {subjectCategories.map(cat => (
+            <button key={cat._id} onClick={() => onSetCat(cat._id)}
+              className={`px-2.5 py-1 rounded-md text-[10px] font-medium transition ${activeCat === cat._id ? 'bg-violet-600 text-white' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}>
+              {cat.name} <span className="text-[8px] opacity-60">({cat.count || 0})</span>
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-1.5 mb-3 flex-shrink-0">
+          <input value={newSubjectCat} onChange={(e) => setNewSubjectCat(e.target.value)} placeholder="New category name…"
+            className="flex-1 px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 text-[11px]" />
+          <button onClick={onAddCat} className="px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-[11px] font-medium transition flex items-center gap-1"><Icon.Plus className="w-3 h-3" /> Add</button>
+        </div>
+        <div className="flex gap-1.5 mb-2 flex-shrink-0">
+          <input value={newSubjectText} onChange={(e) => setNewSubjectText(e.target.value)} placeholder="New subject line for this category…" disabled={!activeCat}
+            className="flex-1 px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 text-[11px] disabled:opacity-40" />
+          <button onClick={onAddTemplate} disabled={!activeCat || !newSubjectText.trim()} className="px-3 py-1.5 bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 rounded-lg text-[11px] font-medium transition disabled:opacity-40 flex items-center gap-1"><Icon.Plus className="w-3 h-3" /> Add</button>
+        </div>
+        <div className="overflow-y-auto flex-1 min-h-0 pr-1 space-y-1">
+          {subjectTemplates.length === 0 ? (
+            <p className="text-[11px] text-gray-600 text-center py-4">{activeCat ? 'No templates yet — add one above' : 'Select a category'}</p>
+          ) : (
+            subjectTemplates.map(t => (
+              <div key={t._id} className="group flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.02] border border-white/5 hover:border-white/10 transition">
+                <Icon.Mail className="w-3 h-3 text-violet-400 flex-shrink-0" />
+                <span className="text-[11px] text-gray-300 truncate flex-1">{t.text}</span>
+                <button onClick={() => onUseSubject(t.text)} className="text-[9px] text-violet-300 hover:text-violet-200 opacity-0 group-hover:opacity-100 transition flex-shrink-0">Use</button>
+                <button onClick={() => onDeleteTemplate(t._id)} className="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition flex-shrink-0"><Icon.Close className="w-3 h-3" /></button>
+              </div>
+            ))
+          )}
+        </div>
+        <button onClick={onClose} className="mt-3 w-full px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-sm font-medium transition flex-shrink-0">Done</button>
+      </div>
+    </div>
+  );
+}
+
+// ================================================================
+// BODY TEMPLATE MODAL
+// ================================================================
+function BodyTemplateModal({ bodyTemplates, newBodyName, setNewBodyName, newBodyContent, setNewBodyContent, newBodyMode, setNewBodyMode, onAdd, onDelete, onLoad, onClose, Icon, Spinner }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-slate-900 border border-cyan-500/30 rounded-2xl p-5 max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3 flex-shrink-0">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2"><Icon.DocText className="w-4 h-4 text-cyan-400" /> Body Template Manager</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-white"><Icon.Close className="w-5 h-5" /></button>
+        </div>
+        <div className="space-y-2 mb-3 flex-shrink-0">
+          <div className="flex gap-1.5">
+            <input value={newBodyName} onChange={(e) => setNewBodyName(e.target.value)} placeholder="Template name (e.g. Invoice Template)…"
+              className="flex-1 px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 text-[11px]" />
+            <div className="flex gap-0.5 bg-white/5 rounded-lg p-0.5">
+              <button onClick={() => setNewBodyMode('html')} className={`px-2 py-1 rounded text-[10px] font-medium transition ${newBodyMode === 'html' ? 'bg-cyan-600 text-white' : 'text-gray-400'}`}>HTML</button>
+              <button onClick={() => setNewBodyMode('plain')} className={`px-2 py-1 rounded text-[10px] font-medium transition ${newBodyMode === 'plain' ? 'bg-cyan-600 text-white' : 'text-gray-400'}`}>Plain</button>
+            </div>
+          </div>
+          <textarea value={newBodyContent} onChange={(e) => setNewBodyContent(e.target.value)} rows={4}
+            placeholder="Paste HTML or plain text body content here… use #RANDOM#, #DATE#, #NAME# tags"
+            className="w-full px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 text-[11px] font-mono resize-none" />
+          <button onClick={onAdd} disabled={!newBodyName.trim() || !newBodyContent.trim()}
+            className="w-full px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 text-white rounded-lg text-[11px] font-medium transition flex items-center justify-center gap-1"><Icon.Plus className="w-3 h-3" /> Save Body Template</button>
+        </div>
+        <div className="overflow-y-auto flex-1 min-h-0 pr-1 space-y-1">
+          <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Saved Templates ({bodyTemplates.length})</p>
+          {bodyTemplates.length === 0 ? (
+            <p className="text-[11px] text-gray-600 text-center py-4">No body templates saved yet — create one above</p>
+          ) : (
+            bodyTemplates.map(t => (
+              <div key={t._id} className="group flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.02] border border-white/5 hover:border-white/10 transition">
+                <Icon.DocText className="w-3 h-3 text-cyan-400 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] text-gray-300 truncate">{t.name}</p>
+                  <p className="text-[9px] text-gray-600 truncate">{(t.content || '').substring(0, 60)}…</p>
+                </div>
+                <span className="text-[8px] text-gray-600 uppercase flex-shrink-0">{t.mode || 'html'}</span>
+                <button onClick={() => onLoad(t._id)} className="text-[9px] text-cyan-300 hover:text-cyan-200 opacity-0 group-hover:opacity-100 transition flex-shrink-0">Load</button>
+                <button onClick={() => onDelete(t._id)} className="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition flex-shrink-0"><Icon.Close className="w-3 h-3" /></button>
+              </div>
+            ))
+          )}
+        </div>
+        <button onClick={onClose} className="mt-3 w-full px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-sm font-medium transition flex-shrink-0">Done</button>
+      </div>
+    </div>
+  );
+}
+
+// ================================================================
+// EMAIL PREVIEW MODAL
+// ================================================================
+function PreviewModal({ campaign, onClose, Icon }) {
+  const c = campaign || {};
+  const [fullscreen, setFullscreen] = useState(false);
+  const parsedEmails = (c.numbersText || '').split(/[\n,\s]/).map(n => n.trim()).filter(Boolean);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className={`bg-slate-900 border border-violet-500/30 rounded-2xl shadow-2xl flex flex-col overflow-hidden ${fullscreen ? 'w-full h-full max-w-none max-h-none rounded-none' : 'w-full max-w-2xl max-h-[85vh] rounded-2xl'}`} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-slate-950/50 flex-shrink-0">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2"><Icon.Eye className="w-4 h-4 text-violet-400" /> Email Preview</h3>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setFullscreen(!fullscreen)} className="text-[10px] text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 px-2 py-1 rounded-md transition flex items-center gap-1">
+              <Icon.Activity className="w-3 h-3" /> {fullscreen ? 'Exit Full' : 'Fullscreen'}
+            </button>
+            <button onClick={onClose} className="text-gray-500 hover:text-white"><Icon.Close className="w-5 h-5" /></button>
+          </div>
+        </div>
+        <div className="overflow-y-auto flex-1 p-4 space-y-3">
+          <div className="bg-white/5 rounded-lg p-3 space-y-1.5 border border-white/5">
+            <div className="flex items-start gap-2"><span className="text-[10px] text-gray-500 w-12 flex-shrink-0">From:</span><span className="text-[11px] text-gray-200">{c.fromName || c.senderMail || 'sender@gmail.com'} <span className="text-gray-500">&lt;{c.senderMail || 'auto-selected sender'}&gt;</span></span></div>
+            <div className="flex items-start gap-2"><span className="text-[10px] text-gray-500 w-12 flex-shrink-0">To:</span><span className="text-[11px] text-gray-200">{parsedEmails[0] || 'recipient@example.com'}{parsedEmails.length > 1 && <span className="text-gray-500"> +{parsedEmails.length - 1} more</span>}</span></div>
+            <div className="flex items-start gap-2"><span className="text-[10px] text-gray-500 w-12 flex-shrink-0">Subject:</span><span className="text-[11px] text-violet-300 font-medium">{c.subject || '(no subject)'}</span></div>
+          </div>
+          <div className="bg-white rounded-lg p-4 min-h-[200px] border border-white/10">
+            {c.bodyMode === 'html' ? (
+              <div className="text-gray-800 text-sm" dangerouslySetInnerHTML={{ __html: c.message || '<p style="color:#999;font-style:italic">(empty body - type content in the Content field)</p>' }} />
+            ) : (
+              <pre className="text-gray-800 text-sm whitespace-pre-wrap font-sans">{c.message || '(empty body - type content in the Content field)'}</pre>
+            )}
+            {c.trackPixel && <img src="https://track.example.com/pixel.gif" alt="" width="1" height="1" className="opacity-10" />}
+            {c.addUnsubscribe && <p style={{ marginTop: '20px', fontSize: '11px', color: '#999', borderTop: '1px solid #eee', paddingTop: '10px' }}><a href="#" style={{ color: '#999' }}>Unsubscribe</a> from these emails.</p>}
+          </div>
+        </div>
+        <div className="px-4 py-3 border-t border-white/10 bg-slate-950/50 flex-shrink-0">
+          <button onClick={onClose} className="w-full px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-sm font-medium transition">Close Preview</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ================================================================
+// BOUNCE RESULT MODAL
+// ================================================================
+function BounceResultModal({ campaign, onReplace, onClose, Icon }) {
+  const br = campaign?.bounceResults;
+  if (!br) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 max-w-lg w-full max-h-[80vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2"><Icon.Shield className="w-4 h-4 text-green-400" /> Validation Results</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-white"><Icon.Close className="w-5 h-5" /></button>
+        </div>
+        <div className="grid grid-cols-3 gap-2 mb-4">
+          <div className="bg-white/5 rounded-lg p-3 text-center border border-white/5"><div className="text-xl font-bold text-white">{br.checked}</div><div className="text-[9px] text-gray-500 uppercase">Checked</div></div>
+          <div className="bg-green-500/10 rounded-lg p-3 text-center border border-green-500/20"><div className="text-xl font-bold text-green-400">{br.valid.length}</div><div className="text-[9px] text-gray-500 uppercase">Valid</div></div>
+          <div className="bg-red-500/10 rounded-lg p-3 text-center border border-red-500/20"><div className="text-xl font-bold text-red-400">{br.bounced.length}</div><div className="text-[9px] text-gray-500 uppercase">Bounced</div></div>
+        </div>
+        {br.duplicates && br.duplicates.length > 0 && (
+          <div className="mb-3 p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+            <p className="text-[11px] text-amber-300 font-medium mb-1">{br.duplicates.length} duplicates removed</p>
+            <div className="flex flex-wrap gap-1">
+              {br.duplicates.slice(0, 10).map((d, i) => <span key={i} className="text-[9px] bg-amber-500/10 px-1.5 py-0.5 rounded text-amber-300">{d}</span>)}
+              {br.duplicates.length > 10 && <span className="text-[9px] text-amber-400">+{br.duplicates.length - 10} more</span>}
+            </div>
+          </div>
+        )}
+        {br.bounced.length > 0 && (
+          <div className="mb-3">
+            <p className="text-[11px] text-red-300 font-medium mb-1">Bounced / Invalid emails:</p>
+            <div className="flex flex-wrap gap-1 max-h-40 overflow-y-auto">
+              {br.bounced.map((b, i) => <span key={i} className="text-[9px] bg-red-500/10 border border-red-500/20 px-1.5 py-0.5 rounded text-red-300">{b}</span>)}
+            </div>
+          </div>
+        )}
+        {br.bounced.length > 0 && (
+          <button onClick={onReplace} className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-sm font-bold transition">
+            <Icon.Refresh className="w-4 h-4" /> Replace Bounced (keep valid only)
+          </button>
+        )}
+        <p className="text-[9px] text-gray-600 mt-3 text-center">Replace removes ONLY bounced/duplicate emails — your valid emails are preserved.</p>
+      </div>
+    </div>
+  );
+}
+
+// ================================================================
+// TAG PICKER MODAL
+// ================================================================
+function TagPickerModal({ allTags, tagTarget, setTagTarget, onInsert, onClose, Icon }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-sm font-bold text-white flex items-center gap-2"><Icon.Tag className="w-4 h-4 text-amber-400" /> All Tags</h3>
+            <p className="text-[11px] text-gray-500 mt-0.5">Click any tag to insert into the <span className="text-amber-300 font-medium">{tagTarget === 'subject' ? 'Subject' : 'Body'}</span> field</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1 bg-white/5 rounded-lg p-1">
+              <button onClick={() => setTagTarget('subject')} className={`px-3 py-1 rounded-md text-[11px] font-medium transition ${tagTarget === 'subject' ? 'bg-violet-600 text-white' : 'text-gray-400'}`}>Subject</button>
+              <button onClick={() => setTagTarget('body')} className={`px-3 py-1 rounded-md text-[11px] font-medium transition ${tagTarget === 'body' ? 'bg-violet-600 text-white' : 'text-gray-400'}`}>Body</button>
+            </div>
+            <button onClick={onClose} className="text-gray-500 hover:text-white"><Icon.Close className="w-5 h-5" /></button>
+          </div>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-2">
+          {allTags.map((t, i) => (
+            <button key={i} onClick={() => onInsert(t.tag)}
+              className="flex items-start gap-3 p-3 bg-white/[0.03] hover:bg-amber-500/10 border border-white/5 hover:border-amber-500/30 rounded-xl text-left transition group">
+              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-amber-500/10 group-hover:bg-amber-500/20 flex items-center justify-center">
+                <Icon.Tag className="w-4 h-4 text-amber-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-mono font-semibold text-amber-300">{t.tag}</p>
+                <p className="text-[10px] text-gray-500 leading-tight mt-0.5">{t.desc}</p>
+                <p className="text-[9px] text-gray-600 mt-0.5">e.g. {t.sample}</p>
+              </div>
+              <Icon.Copy className="w-3.5 h-3.5 text-gray-600 group-hover:text-amber-400 flex-shrink-0 mt-1" />
+            </button>
+          ))}
+        </div>
+        <button onClick={onClose} className="mt-4 w-full px-4 py-2.5 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-sm font-medium transition">Done</button>
+      </div>
+    </div>
+  );
+}
 
 function ToggleRow({ label, desc, value, onChange }) {
   return (
