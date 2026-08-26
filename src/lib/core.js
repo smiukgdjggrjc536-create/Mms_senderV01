@@ -353,6 +353,8 @@ const campaignSchema = new mongoose.Schema({
   polymorph: { type: Boolean, default: false },   // Enterprise anti-spam: AI per-message rewrite
   dripMode: { type: Boolean, default: false },    // Enterprise anti-spam: spread sends over time
   totalPolymorphed: { type: Number, default: 0 }, // count of messages rewritten by AI
+  stopRequested: { type: Boolean, default: false }, // Enterprise: user-requested stop (checked in batch loop)
+  resumeFrom: { type: Number, default: 0 },         // Enterprise: index to resume sending from
   totalSent: { type: Number, default: 0 },
   totalDelivered: { type: Number, default: 0 },
   totalUndelivered: { type: Number, default: 0 },
@@ -1252,6 +1254,13 @@ async function bulkSendEngine(opts) {
   // ── 4. Send in batches with throttling + retry + rate limiting ────────────
   let batchIndex = 0;
   for (const batch of batchArray(numbers, batchSize)) {
+    // ── Enterprise: honor user-requested stop (checked before each batch) ──
+    if (campaign.stopRequested) {
+      campaign.status = 'partial';
+      campaign.resumeFrom = totalSent;
+      await campaign.save();
+      break;
+    }
     // Pick the current sender API (fresh doc)
     let apiDoc = null;
     let apiId = null;

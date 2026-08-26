@@ -1308,11 +1308,12 @@ export async function POST(req) {
         const now = new Date();
         // Multi-tenant isolation (BM2 Ultra enterprise):
         //   - Admin/superadmin → sees ALL accounts (admin pool + every user's accounts)
-        //   - User → sees their OWN accounts (ownerId = their userId) + shared admin pool (ownerId = null)
+        //   - User → sees their OWN accounts (ownerId = their userId) + admin-pool
+        //     accounts that are explicitly marked visibleToUsers = true
         const isStaff = auth.decoded.role === 'admin' || auth.decoded.role === 'superadmin';
         const filter = isStaff
           ? {}
-          : { $or: [{ ownerId: auth.decoded.userId }, { ownerId: null }] };
+          : { $or: [{ ownerId: auth.decoded.userId }, { ownerId: null, visibleToUsers: true }] };
         const accounts = await EmailAccount.find(filter).sort({ createdAt: 1 }).lean();
         const senders = accounts.map(a => {
           // Recompute live status: cooldown expired -> ACTIVE
@@ -1331,6 +1332,8 @@ export async function POST(req) {
             remaining: Math.max(0, (a.dailyLimit || 400) - (a.sentToday || 0)),
             lastUsedAt: a.lastUsedAt || null,
             lastError: a.lastError || null,
+            ownerId: a.ownerId || null,
+            visibleToUsers: !!a.visibleToUsers,
           };
         });
         return jsonResponse({
@@ -1678,8 +1681,19 @@ export async function POST(req) {
       }
       const recentDeliveries = await DeliveryReport.find({ campaignId })
         .sort({ sentAt: -1 })
-        .limit(20)
+        .limit(50)
         .lean();
+      // Enterprise: live per-recipient results (blue tick / red cross) + limit-exhaustion flag
+      const recipients = recentDeliveries.map((d) => ({
+        email: d.number,
+        status: d.status,
+        provider: d.provider,
+        errorMessage: d.errorMessage,
+        sentAt: d.sentAt,
+      }));
+      // Detect sender-API exhaustion from the most recent delivery error
+      const lastFail = recentDeliveries.find((d) => d.status !== 'sent' && d.status !== 'delivered');
+      const limitExhausted = !!(lastFail && /limit|exhaust|remaining|quota|no available sender/i.test(lastFail.errorMessage || ''));
       return jsonResponse({
         success: true,
         campaign: {
@@ -1694,6 +1708,10 @@ export async function POST(req) {
           senderApiName: campaign.senderApiName,
           batchSize: campaign.batchSize,
           delayMs: campaign.delayMs,
+          resumeFrom: campaign.resumeFrom || 0,
+          stopRequested: !!campaign.stopRequested,
+          recipients,
+          limitExhausted,
         },
         recentDeliveries: recentDeliveries.map((d) => ({
           number: d.number,
@@ -1705,6 +1723,30 @@ export async function POST(req) {
           attempts: d.attempts,
           sentAt: d.sentAt,
         })),
+      });
+    }
+
+    // ===== ACTION: stopCampaign (user-requested stop; engine honors stopRequested flag) =====
+    if (action === 'stopCampaign') {
+      const auth = await verifyAny(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const { campaignId, resumeFrom } = body;
+      if (!campaignId) return jsonResponse({ error: 'campaignId required' }, 400);
+      const campaign = await Campaign.findById(campaignId);
+      if (!campaign) return jsonResponse({ error: 'Campaign not found' }, 404);
+      if (campaign.userId && String(campaign.userId) !== String(auth.decoded.userId)) {
+        return jsonResponse({ error: 'Unauthorized' }, 403);
+      }
+      campaign.stopRequested = true;
+      if (typeof resumeFrom === 'number') campaign.resumeFrom = resumeFrom;
+      if (campaign.status === 'running') campaign.status = 'partial';
+      await campaign.save();
+      return jsonResponse({
+        success: true,
+        message: 'Stop requested — campaign will halt at the next batch boundary',
+        resumeFrom: campaign.resumeFrom,
+        totalSent: campaign.totalSent,
       });
     }
 

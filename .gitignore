@@ -53,3 +53,5 @@ next-env.d.ts
 config-database.js
 config-gemini.js
 config-sending.js
+*.bak
+node_modules/

@@ -2989,6 +2989,17 @@ function GatewayAccounts() {
     if (d.success) load();
   };
 
+  // Enterprise: toggle whether an admin-pool account is visible to user-panel senders.
+  // When ticked, users can send through this shared account; when unticked, it is hidden.
+  const toggleVisibility = async (a) => {
+    const next = !a.visibleToUsers;
+    const d = await gatewayApi('/admin/gateway', { method: 'POST', body: JSON.stringify({ resource: 'accounts', action: 'toggleVisibility', accountId: a._id, visibleToUsers: next }) });
+    if (d.success) {
+      // optimistic local update so the tick reflects instantly
+      setAccounts(prev => prev.map(x => x._id === a._id ? { ...x, visibleToUsers: next } : x));
+    }
+  };
+
   // Send a REAL test email from the configured email account to a destination
   // email address (e.g. the admin's own Gmail) to verify the account can send.
   const sendTestEmail = async () => {
@@ -3055,6 +3066,12 @@ function GatewayAccounts() {
                     <p className="text-white font-bold">{a.sentToday || 0}/{a.dailyLimit || 400}</p>
                     <p className="text-slate-500 text-[9px]">sent today</p>
                   </div>
+                  <button
+                    onClick={() => toggleVisibility(a)}
+                    title={a.visibleToUsers ? 'Visible to users — click to hide from user panel' : 'Hidden from users — click to show in user panel'}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold transition ${a.visibleToUsers ? 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30' : 'bg-white/5 text-slate-500 hover:bg-white/10 border border-white/10'}`}>
+                    {a.visibleToUsers ? '✓ Users' : '◦ Hidden'}
+                  </button>
                   <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${a.status === 'ACTIVE' ? 'bg-emerald-500/20 text-emerald-300' : a.status === 'COOLDOWN' ? 'bg-amber-500/20 text-amber-300' : 'bg-rose-500/20 text-rose-300'}`}>{a.status}</span>
                   {testResult[a._id] === 'testing' && <BtnSpinner />}
                   {testResult[a._id] === 'ok' && <span className="text-emerald-400 text-xs">✓</span>}

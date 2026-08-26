@@ -93,6 +93,15 @@ const emailAccountSchema = new mongoose.Schema({
     index: { unique: false, sparse: true },
   },
 
+  // Admin-controlled visibility (enterprise upgrade):
+  // When true, this admin-pool account (ownerId = null) shows in the USER panel
+  // so users can send from it. When false, it's hidden from users (admin-only).
+  // User-connected accounts (ownerId set) ignore this — they always show for their owner.
+  visibleToUsers: {
+    type: Boolean,
+    default: false,
+  },
+
   // Tracks the most recent send for ordering and rotation logic.
   lastUsedAt: {
     type: Date,

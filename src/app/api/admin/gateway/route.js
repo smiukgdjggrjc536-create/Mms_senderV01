@@ -429,6 +429,15 @@ export async function POST(req) {
         return jsonResponse({ success: true, message: 'Cooldown reset' });
       }
 
+      // TOGGLE VISIBILITY — admin controls whether an admin-pool account shows
+      // in the user panel. User-connected accounts always show for their owner.
+      // Body: { resource: 'accounts', action: 'toggleVisibility', accountId, visibleToUsers: bool }
+      if (action === 'toggleVisibility' && accountId) {
+        const visible = !!body.visibleToUsers;
+        await EmailAccount.findByIdAndUpdate(accountId, { visibleToUsers: visible, updatedAt: new Date() });
+        return jsonResponse({ success: true, message: `Account ${visible ? 'is now visible' : 'hidden'} in user panel`, visibleToUsers: visible });
+      }
+
       // CREATE / UPDATE (upsert by email)
       const { provider, email, credentials, dailyLimit, label } = acc;
 
