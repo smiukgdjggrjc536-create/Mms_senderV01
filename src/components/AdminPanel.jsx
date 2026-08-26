@@ -49,6 +49,9 @@ const Icon = {
   Info: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.852l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"/></svg>),
   Chart: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"/></svg>),
   Message: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"/></svg>),
+  Calendar: () => (<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0V11.25A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>),
+  Clock: () => (<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>),
+  Play: () => (<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" /></svg>),
 };
 
 // Wrapper component: <IconByName name="bolt" size={18} className="..." />
@@ -61,6 +64,7 @@ const ICON_MAP = {
   globe: Icon.Globe, phone: Icon.Phone, server: Icon.Server, bolt: Icon.Bolt, mail: Icon.Mail,
   key: Icon.Key, rocket: Icon.Rocket, list: Icon.List, x: Icon.X, edit: Icon.Edit, save: Icon.Save,
   alert: Icon.Alert, info: Icon.Info, chart: Icon.Chart, message: Icon.Message,
+  calendar: Icon.Calendar, clock: Icon.Clock, play: Icon.Play,
 };
 function IconByName({ name, size, className }) {
   const C = ICON_MAP[name] || Icon.Info;
@@ -347,6 +351,7 @@ function AdminDashboard({ user, onLogout, onRefresh }) {
     { id: 'apis', label: 'API Management', icon: <Icon.Api /> },
     { id: 'users', label: 'User Management', icon: <Icon.Users /> },
     { id: 'campaigns', label: 'Campaigns', icon: <Icon.Campaign /> },
+    { id: 'scheduled', label: 'Scheduled Sends', icon: <Icon.Calendar /> },
     { id: 'content', label: 'Content & Templates', icon: <Icon.Content /> },
     { id: 'subadmins', label: 'Sub-Admins', icon: <Icon.Shield /> },
     { id: 'database', label: 'Database', icon: <Icon.Database /> },
@@ -396,6 +401,7 @@ function AdminDashboard({ user, onLogout, onRefresh }) {
         {tab === 'apis' && <ApiManagementTab />}
         {tab === 'users' && <UserManagementTab />}
         {tab === 'campaigns' && <CampaignsTab />}
+        {tab === 'scheduled' && <ScheduledSendsTab />}
         {tab === 'content' && <ContentTab />}
         {tab === 'subadmins' && <SubAdminTab />}
         {tab === 'database' && <DatabaseTab />}
@@ -3882,6 +3888,129 @@ function GatewayKeepAlive() {
           </div>
         </div>
       </DetailBox>
+    </div>
+  );
+}
+
+// ============================================================================
+// SCHEDULED SENDS TAB (Admin Panel only)
+// ============================================================================
+function ScheduledSendsTab() {
+  const [scheduled, setScheduled] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const data = await api('getAllScheduledSends');
+      if (data.success) setScheduled(data.scheduledSends || []);
+    } catch (e) { console.error('Failed to load scheduled sends:', e); }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const handleDelete = async (sendId) => {
+    if (!confirm('Delete this scheduled send? This cannot be undone.')) return;
+    setDeleting(sendId);
+    try {
+      const data = await api('deleteScheduledSend', { sendId });
+      if (data.success) { load(); } else { alert(data.error || 'Failed to delete'); }
+    } catch (e) { alert('Network error'); }
+    setDeleting(null);
+  };
+
+  if (loading) return <Spinner label="Loading scheduled sends..." />;
+
+  const now = new Date();
+  const upcoming = scheduled.filter(s => new Date(s.scheduledAt) > now);
+  const overdue = scheduled.filter(s => new Date(s.scheduledAt) <= now);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-white flex items-center gap-2"><Icon.Calendar className="w-6 h-6 text-blue-400" /> Scheduled Sends</h2>
+          <p className="text-sm text-gray-500 mt-1">Manage all scheduled email campaigns across all users</p>
+        </div>
+        <div className="flex gap-3">
+          <div className="bg-slate-900/50 border border-slate-800 rounded-xl px-4 py-2 text-center">
+            <div className="text-xl font-bold text-blue-400">{upcoming.length}</div>
+            <div className="text-xs text-gray-500">Upcoming</div>
+          </div>
+          <div className="bg-slate-900/50 border border-slate-800 rounded-xl px-4 py-2 text-center">
+            <div className="text-xl font-bold text-amber-400">{overdue.length}</div>
+            <div className="text-xs text-gray-500">Overdue</div>
+          </div>
+          <div className="bg-slate-900/50 border border-slate-800 rounded-xl px-4 py-2 text-center">
+            <div className="text-xl font-bold text-white">{scheduled.length}</div>
+            <div className="text-xs text-gray-500">Total</div>
+          </div>
+        </div>
+      </div>
+
+      {scheduled.length === 0 ? (
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-12 text-center">
+          <Icon.Calendar className="w-12 h-12 text-gray-700 mx-auto mb-3" />
+          <p className="text-gray-500 text-sm">No scheduled sends found. Users can schedule sends from their panel.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {scheduled.map((s) => {
+            const sendDate = new Date(s.scheduledAt);
+            const isOverdue = sendDate <= now;
+            const timeUntil = sendDate - now;
+            const hoursUntil = Math.floor(timeUntil / (1000 * 60 * 60));
+            const daysUntil = Math.floor(hoursUntil / 24);
+            return (
+              <div key={s._id} className={`bg-slate-900/50 border rounded-xl p-4 transition ${isOverdue ? 'border-amber-500/30' : 'border-slate-800 hover:border-slate-700'}`}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={`text-sm font-semibold flex items-center gap-1.5 ${isOverdue ? 'text-amber-400' : 'text-blue-400'}`}>
+                        <Icon.Clock className="w-4 h-4" /> {sendDate.toLocaleString()}
+                      </span>
+                      {isOverdue ? (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-medium">Overdue</span>
+                      ) : (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-medium">
+                          {daysUntil > 0 ? `in ${daysUntil}d` : hoursUntil > 0 ? `in ${hoursUntil}h` : 'soon'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-gray-500 mb-2">
+                      <span className="flex items-center gap-1"><Icon.Users className="w-3.5 h-3.5" /> {s.numbers?.length || 0} recipients</span>
+                      {s.userEmail && <span className="flex items-center gap-1"><Icon.Mail className="w-3.5 h-3.5" /> {s.userEmail}</span>}
+                      {s.templateUsed && <span className="flex items-center gap-1"><Icon.Content className="w-3.5 h-3.5" /> {s.templateUsed}</span>}
+                    </div>
+                    <div className="bg-slate-800/50 rounded-lg p-3 max-h-24 overflow-y-auto">
+                      <p className="text-sm text-gray-300 whitespace-pre-wrap break-words">{s.message?.substring(0, 300)}{(s.message?.length || 0) > 300 ? '…' : ''}</p>
+                    </div>
+                    {s.numbers && s.numbers.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {s.numbers.slice(0, 10).map((n, i) => (
+                          <span key={i} className="text-xs bg-slate-800 text-gray-400 px-2 py-0.5 rounded font-mono">{n}</span>
+                        ))}
+                        {s.numbers.length > 10 && <span className="text-xs text-gray-600 px-1 py-0.5">+{s.numbers.length - 10} more</span>}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => handleDelete(s._id)}
+                      disabled={deleting === s._id}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg text-xs font-medium transition disabled:opacity-40 border border-red-500/20"
+                    >
+                      {deleting === s._id ? <Spinner size={12} /> : <Icon.Trash className="w-3.5 h-3.5" />} Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

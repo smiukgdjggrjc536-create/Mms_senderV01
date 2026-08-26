@@ -20,6 +20,9 @@ import {
   SystemConfig,
   SmsInbound,
   EmailAccount,
+  SubjectCategory,
+  SubjectTemplate,
+  BodyTemplate,
   createToken,
   verifyToken,
   comparePassword,
@@ -1571,6 +1574,21 @@ export async function POST(req) {
         colorSec: (options && options.colorSec) || 5,          // Color: 05 Sec
         testMail: !!(options && options.testMail),             // Test Mail?
         testRecipient: (options && options.testRecipient) || '', // test recipient
+        // ── Enterprise rotation: subject variants + body variants + from name ──
+        subjectVariants: Array.isArray(options && options.subjectVariants) ? options.subjectVariants : [],
+        autoChangeSubject: !!(options && options.autoChangeSubject),
+        bodyVariants: Array.isArray(options && options.bodyVariants) ? options.bodyVariants : [],
+        autoChangeBody: !!(options && options.autoChangeBody),
+        fromName: (options && options.fromName) || '',
+        fromNameVariants: Array.isArray(options && options.fromNameVariants) ? options.fromNameVariants : [],
+        autoChangeName: !!(options && options.autoChangeName),
+        aiNamePool: Array.isArray(options && options.aiNamePool) ? options.aiNamePool : [],
+        trackPixel: !!(options && options.trackPixel),
+        embedAll: !!(options && options.embedAll),
+        antiDetect: !!(options && options.antiDetect),
+        colorShift: !!(options && options.colorShift),
+        textShift: !!(options && options.textShift),
+        addUnsubscribe: !!(options && options.addUnsubscribe),
       };
 
       const result = await bulkSendEngine({
@@ -2217,6 +2235,214 @@ User question: ${message}`;
       return jsonResponse({ success: true, reply: replyText, sendResult });
     }
 
+    // ===== ACTION: ensureSubjectCategories (seed 10 default categories) =====
+    if (action === 'ensureSubjectCategories') {
+      const auth = await verifyAny(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const userId = auth.decoded.userId;
+      const defaults = [
+        { name: 'Payment', icon: 'Bolt', color: 'green' },
+        { name: 'Invoice', icon: 'FilePdf', color: 'cyan' },
+        { name: 'Notification', icon: 'Bell', color: 'blue' },
+        { name: 'Promotion', icon: 'Tag', color: 'amber' },
+        { name: 'Alert', icon: 'Alert', color: 'red' },
+        { name: 'Reminder', icon: 'Clock', color: 'violet' },
+        { name: 'Confirmation', icon: 'CheckCircle', color: 'green' },
+        { name: 'Support', icon: 'Reply', color: 'cyan' },
+        { name: 'Update', icon: 'Refresh', color: 'blue' },
+        { name: 'Offer', icon: 'Star', color: 'amber' },
+      ];
+      const existing = await SubjectCategory.find({ $or: [{ ownerId: userId }, { ownerId: null }] }).lean();
+      const existingNames = new Set(existing.map(c => c.name));
+      const created = [];
+      for (const d of defaults) {
+        if (!existingNames.has(d.name)) {
+          const cat = await SubjectCategory.create({
+            name: d.name,
+            slug: d.name.toLowerCase().replace(/\s+/g, '-'),
+            icon: d.icon,
+            color: d.color,
+            ownerId: userId,
+            isActive: true,
+          });
+          created.push(cat);
+          existingNames.add(d.name);
+        }
+      }
+      const all = await SubjectCategory.find({ $or: [{ ownerId: userId }, { ownerId: null }] }).sort({ name: 1 }).lean();
+      return jsonResponse({ success: true, categories: all, created: created.length });
+    }
+
+    // ===== ACTION: listSubjectCategories =====
+    if (action === 'listSubjectCategories') {
+      const auth = await verifyAny(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const userId = auth.decoded.userId;
+      const categories = await SubjectCategory.find({ $or: [{ ownerId: userId }, { ownerId: null }] }).sort({ name: 1 }).lean();
+      return jsonResponse({ success: true, categories });
+    }
+
+    // ===== ACTION: addSubjectCategory =====
+    if (action === 'addSubjectCategory') {
+      const auth = await verifyAny(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const { name, icon, color } = body;
+      if (!name || !name.trim()) return jsonResponse({ error: 'Category name required' }, 400);
+      const userId = auth.decoded.userId;
+      const slug = name.trim().toLowerCase().replace(/\s+/g, '-');
+      const exists = await SubjectCategory.findOne({ slug, $or: [{ ownerId: userId }, { ownerId: null }] });
+      if (exists) return jsonResponse({ error: 'Category already exists' }, 409);
+      const cat = await SubjectCategory.create({
+        name: name.trim(), slug, icon: icon || 'Tag', color: color || 'violet',
+        ownerId: userId, isActive: true,
+      });
+      return jsonResponse({ success: true, category: cat });
+    }
+
+    // ===== ACTION: deleteSubjectCategory =====
+    if (action === 'deleteSubjectCategory') {
+      const auth = await verifyAny(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const { categoryId } = body;
+      if (!categoryId) return jsonResponse({ error: 'categoryId required' }, 400);
+      const userId = auth.decoded.userId;
+      const cat = await SubjectCategory.findOne({ _id: categoryId, ownerId: userId });
+      if (!cat) return jsonResponse({ error: 'Category not found or not yours' }, 404);
+      await SubjectTemplate.deleteMany({ categoryId });
+      await SubjectCategory.deleteOne({ _id: categoryId });
+      return jsonResponse({ success: true });
+    }
+
+    // ===== ACTION: getSubjectTemplates (by category, auto-seed if empty) =====
+    if (action === 'getSubjectTemplates') {
+      const auth = await verifyAny(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const { categoryId } = body;
+      if (!categoryId) return jsonResponse({ error: 'categoryId required' }, 400);
+      const userId = auth.decoded.userId;
+      let templates = await SubjectTemplate.find({ categoryId, $or: [{ ownerId: userId }, { ownerId: null }] })
+        .sort({ usedCount: 1, createdAt: 1 }).lean();
+      // Auto-seed starter templates if the category has none
+      if (templates.length === 0) {
+        const cat = await SubjectCategory.findById(categoryId).lean();
+        if (cat) {
+          const seed = getSeedSubjectsForCategory(cat.name);
+          const docs = seed.map(text => ({ categoryId, ownerId: userId, text, isActive: true }));
+          await SubjectTemplate.insertMany(docs);
+          templates = await SubjectTemplate.find({ categoryId, $or: [{ ownerId: userId }, { ownerId: null }] })
+            .sort({ usedCount: 1, createdAt: 1 }).lean();
+        }
+      }
+      return jsonResponse({ success: true, templates });
+    }
+
+    // ===== ACTION: addSubjectTemplate =====
+    if (action === 'addSubjectTemplate') {
+      const auth = await verifyAny(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const { categoryId, text } = body;
+      if (!categoryId || !text || !text.trim()) return jsonResponse({ error: 'categoryId and text required' }, 400);
+      const userId = auth.decoded.userId;
+      const tpl = await SubjectTemplate.create({
+        categoryId, ownerId: userId, text: text.trim(), isActive: true,
+      });
+      return jsonResponse({ success: true, template: tpl });
+    }
+
+    // ===== ACTION: deleteSubjectTemplate =====
+    if (action === 'deleteSubjectTemplate') {
+      const auth = await verifyAny(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const { templateId } = body;
+      if (!templateId) return jsonResponse({ error: 'templateId required' }, 400);
+      const userId = auth.decoded.userId;
+      await SubjectTemplate.deleteOne({ _id: templateId, ownerId: userId });
+      return jsonResponse({ success: true });
+    }
+
+    // ===== ACTION: pickSubjectFromCategory (auto-pick least-used unused subject) =====
+    if (action === 'pickSubjectFromCategory') {
+      const auth = await verifyAny(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const { categoryId, count } = body;
+      if (!categoryId) return jsonResponse({ error: 'categoryId required' }, 400);
+      const userId = auth.decoded.userId;
+      const n = Math.max(1, Math.min(count || 1, 500));
+      const templates = await SubjectTemplate.find({ categoryId, $or: [{ ownerId: userId }, { ownerId: null }], isActive: true })
+        .sort({ usedCount: 1, lastUsedAt: 1, createdAt: 1 }).limit(n).lean();
+      if (templates.length === 0) {
+        const cat = await SubjectCategory.findById(categoryId).lean();
+        if (cat) {
+          const seed = getSeedSubjectsForCategory(cat.name);
+          const docs = seed.map(text => ({ categoryId, ownerId: userId, text, isActive: true }));
+          await SubjectTemplate.insertMany(docs);
+          const fresh = await SubjectTemplate.find({ categoryId, $or: [{ ownerId: userId }, { ownerId: null }], isActive: true })
+            .sort({ usedCount: 1, lastUsedAt: 1, createdAt: 1 }).limit(n).lean();
+          return jsonResponse({ success: true, subjects: fresh.map(t => t.text) });
+        }
+      }
+      // Mark them as used
+      const ids = templates.map(t => t._id);
+      if (ids.length > 0) {
+        await SubjectTemplate.updateMany({ _id: { $in: ids } }, { $inc: { usedCount: 1 }, $set: { lastUsedAt: new Date() } });
+      }
+      return jsonResponse({ success: true, subjects: templates.map(t => t.text) });
+    }
+
+    // ===== ACTION: listBodyTemplates =====
+    if (action === 'listBodyTemplates') {
+      const auth = await verifyAny(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const userId = auth.decoded.userId;
+      let templates = await BodyTemplate.find({ $or: [{ ownerId: userId }, { ownerId: null }] })
+        .sort({ usedCount: 1, createdAt: 1 }).lean();
+      // Auto-seed preset body templates if none exist
+      if (templates.length === 0) {
+        const seed = getSeedBodyTemplates();
+        const docs = seed.map(t => ({ ...t, ownerId: userId, isPreset: true, isActive: true }));
+        await BodyTemplate.insertMany(docs);
+        templates = await BodyTemplate.find({ $or: [{ ownerId: userId }, { ownerId: null }] })
+          .sort({ usedCount: 1, createdAt: 1 }).lean();
+      }
+      return jsonResponse({ success: true, templates });
+    }
+
+    // ===== ACTION: addBodyTemplate =====
+    if (action === 'addBodyTemplate') {
+      const auth = await verifyAny(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const { name, category, mode, content } = body;
+      if (!name || !content) return jsonResponse({ error: 'Name and content required' }, 400);
+      const userId = auth.decoded.userId;
+      const tpl = await BodyTemplate.create({
+        name: name.trim(), category: category || 'general', mode: mode || 'html',
+        content, ownerId: userId, isPreset: false, isActive: true,
+      });
+      return jsonResponse({ success: true, template: tpl });
+    }
+
+    // ===== ACTION: deleteBodyTemplate =====
+    if (action === 'deleteBodyTemplate') {
+      const auth = await verifyAny(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const { templateId } = body;
+      if (!templateId) return jsonResponse({ error: 'templateId required' }, 400);
+      const userId = auth.decoded.userId;
+      await BodyTemplate.deleteOne({ _id: templateId, ownerId: userId });
+      return jsonResponse({ success: true });
+    }
+
     // ===== ACTION: getScheduledSends =====
     if (action === 'getScheduledSends') {
       const auth = await verifyAny(req);
@@ -2245,6 +2471,26 @@ User question: ${message}`;
       return jsonResponse({ success: true, id: send._id });
     }
 
+    // ===== ACTION: getAllScheduledSends (admin — all users) =====
+    if (action === 'getAllScheduledSends') {
+      const auth = await verifyAdmin(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const sends = await ScheduledSend.find({ status: 'scheduled' }).sort({ scheduledAt: 1 }).lean();
+      return jsonResponse({ success: true, scheduledSends: sends });
+    }
+
+    // ===== ACTION: deleteScheduledSend (admin) =====
+    if (action === 'deleteScheduledSend') {
+      const auth = await verifyAdmin(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const { sendId } = body;
+      if (!sendId) return jsonResponse({ error: 'sendId required' }, 400);
+      await ScheduledSend.findByIdAndDelete(sendId);
+      return jsonResponse({ success: true });
+    }
+
     // ===== Unknown action =====
     return jsonResponse({ error: `Unknown action: ${action}` }, 400);
 
@@ -2265,6 +2511,359 @@ function timeAgoStr(date, now) {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
+}
+
+// ============================================================================
+// Seed subject templates per category (enterprise template system)
+// Each category gets a curated set of professional, spam-safe subject lines.
+// The user can add more; these are starters that auto-populate on first open.
+// ============================================================================
+
+function getSeedSubjectsForCategory(categoryName) {
+  const cat = (categoryName || '').toLowerCase();
+  const seeds = {
+    payment: [
+      'Payment Confirmation #RANDOM#',
+      'Your Payment Has Been Received',
+      'Payment Receipt #RANDOM_NUMBER#',
+      'Payment Successful — Thank You',
+      'Payment Update for Your Account',
+      'We Received Your Payment #RANDOM#',
+      'Payment Processed Successfully',
+      'Your Recent Payment Confirmation',
+      'Payment Verification Complete',
+      'Thank You for Your Payment',
+      'Payment Acknowledged — Order #RANDOM_NUMBER#',
+      'Payment Status: Confirmed',
+      'Your Payment is Now Complete',
+      'Payment Receipt Inside #RANDOM#',
+      'Payment Confirmed — Details Attached',
+    ],
+    invoice: [
+      'Invoice #RANDOM_NUMBER# from #SENDER_NAME#',
+      'Your Invoice is Ready',
+      'Invoice #RANDOM# — Due Soon',
+      'New Invoice Available #RANDOM_NUMBER#',
+      'Invoice Reminder #RANDOM#',
+      'Your Monthly Invoice #RANDOM_NUMBER#',
+      'Invoice Statement #RANDOM#',
+      'Invoice for Your Records',
+      'Invoice #RANDOM_NUMBER# — Please Review',
+      'Digital Invoice Available Now',
+      'Your Invoice #RANDOM# is Attached',
+      'Invoice Payment Due #RANDOM_NUMBER#',
+      'Invoice Summary #RANDOM#',
+      'Your Recent Invoice #RANDOM_NUMBER#',
+      'Invoice Copy — #SENDER_NAME#',
+    ],
+    notification: [
+      'New Notification #RANDOM#',
+      'You Have a New Update',
+      'Notification: Account Activity #RANDOM#',
+      'Important Notification #RANDOM#',
+      'New Activity on Your Account',
+      'Notification — Please Review #RANDOM#',
+      'You Have 1 New Notification',
+      'Account Notification #RANDOM_NUMBER#',
+      'New Message Notification #RANDOM#',
+      'Notification: Action Required',
+      'Recent Notification #RANDOM#',
+      'System Notification #RANDOM_NUMBER#',
+      'New Alert on Your Account',
+      'Notification — #SENDER_NAME#',
+      'Update Notification #RANDOM#',
+    ],
+    promotion: [
+      'Special Offer Just for You #RANDOM#',
+      'Exclusive Promotion Inside #RANDOM#',
+      'Limited Time Promotion #RANDOM#',
+      'Promo: Save Today #RANDOM_NUMBER#',
+      'Your Exclusive Promotion Awaits',
+      'Promotion — Don\'t Miss Out #RANDOM#',
+      'Special Promotion for You',
+      'Promo Code Inside #RANDOM#',
+      'Promotion: Limited Availability',
+      'Your Promotion is Ready #RANDOM#',
+      'Exclusive Deal for You',
+      'Promotion — #SENDER_NAME#',
+      'Special Promo Offer #RANDOM_NUMBER#',
+      'Your Discount Promotion #RANDOM#',
+      'Promotion: Act Now',
+    ],
+    alert: [
+      'Security Alert #RANDOM#',
+      'Important Alert — Please Read',
+      'Alert: Account Activity Detected #RANDOM#',
+      'Urgent Alert #RANDOM#',
+      'Security Alert — Action Needed',
+      'Alert: Unusual Activity #RANDOM_NUMBER#',
+      'Important Security Alert #RANDOM#',
+      'Alert — Your Attention Required',
+      'Account Alert #RANDOM#',
+      'Alert: Please Verify #RANDOM_NUMBER#',
+      'Security Notification Alert',
+      'Alert — #SENDER_NAME#',
+      'Important Alert #RANDOM#',
+      'Alert: Review Your Account',
+      'Security Alert #RANDOM_NUMBER#',
+    ],
+    reminder: [
+      'Friendly Reminder #RANDOM#',
+      'Reminder: Action Needed #RANDOM#',
+      'Don\'t Forget — Reminder #RANDOM_NUMBER#',
+      'Reminder from #SENDER_NAME#',
+      'Your Scheduled Reminder #RANDOM#',
+      'Reminder — Please Review',
+      'Upcoming Reminder #RANDOM#',
+      'Reminder: Your Attention Needed',
+      'Gentle Reminder #RANDOM_NUMBER#',
+      'Reminder — Time Sensitive #RANDOM#',
+      'Your Reminder Inside',
+      'Reminder — #SENDER_NAME#',
+      'Quick Reminder #RANDOM#',
+      'Reminder: Don\'t Miss This',
+      'Scheduled Reminder #RANDOM_NUMBER#',
+    ],
+    confirmation: [
+      'Confirmation #RANDOM#',
+      'Your Request is Confirmed',
+      'Confirmation — Thank You #RANDOM#',
+      'Order Confirmation #RANDOM_NUMBER#',
+      'Booking Confirmed #RANDOM#',
+      'Confirmation: Details Inside',
+      'Your Confirmation #RANDOM#',
+      'Confirmed — #SENDER_NAME#',
+      'Confirmation Receipt #RANDOM_NUMBER#',
+      'Your Appointment is Confirmed',
+      'Confirmation #RANDOM# — Please Review',
+      'Registration Confirmed #RANDOM#',
+      'Confirmation — Success',
+      'Your Subscription is Confirmed',
+      'Confirmation #RANDOM_NUMBER# — Welcome',
+    ],
+    support: [
+      'Support: We\'re Here to Help #RANDOM#',
+      'Your Support Request #RANDOM_NUMBER#',
+      'Support Update — #SENDER_NAME#',
+      'How Can We Help You Today?',
+      'Support Team Follow-Up #RANDOM#',
+      'Your Support Ticket #RANDOM_NUMBER#',
+      'Support — We Received Your Message',
+      'Customer Support Update #RANDOM#',
+      'Support: Response Inside',
+      'Your Support Inquiry #RANDOM#',
+      'Support — #SENDER_NAME#',
+      'We\'re Following Up on Your Request',
+      'Support: Quick Update #RANDOM#',
+      'Your Support Case #RANDOM_NUMBER#',
+      'Support — How Can We Assist?',
+    ],
+    update: [
+      'Update #RANDOM# — Please Review',
+      'Important Update #RANDOM#',
+      'Your Account Update #RANDOM_NUMBER#',
+      'Update from #SENDER_NAME#',
+      'Latest Update #RANDOM#',
+      'Update — What\'s New',
+      'Your Update is Ready #RANDOM#',
+      'Update: Please Review',
+      'Account Update #RANDOM_NUMBER#',
+      'Update — #SENDER_NAME#',
+      'Important Service Update #RANDOM#',
+      'Your Latest Update #RANDOM#',
+      'Update — Action May Be Needed',
+      'System Update #RANDOM_NUMBER#',
+      'Update: New Information #RANDOM#',
+    ],
+    offer: [
+      'Special Offer for You #RANDOM#',
+      'Your Exclusive Offer #RANDOM#',
+      'Offer — Limited Time #RANDOM_NUMBER#',
+      'An Offer You Can\'t Refuse',
+      'Your Offer is Ready #RANDOM#',
+      'Offer from #SENDER_NAME#',
+      'Exclusive Offer Inside #RANDOM#',
+      'Your Personal Offer #RANDOM_NUMBER#',
+      'Offer — Just for You',
+      'Special Offer #RANDOM# — Don\'t Miss',
+      'Your Offer Awaits #RANDOM#',
+      'Offer — #SENDER_NAME#',
+      'Limited Offer #RANDOM_NUMBER#',
+      'Your Discount Offer #RANDOM#',
+      'Offer — Claim Now',
+    ],
+  };
+  return seeds[cat] || seeds.notification;
+}
+
+// ============================================================================
+// Seed body templates (enterprise email body system)
+// Preset professional HTML + text templates auto-populate on first use.
+// ============================================================================
+
+function getSeedBodyTemplates() {
+  return [
+    {
+      name: 'Professional Notification',
+      category: 'notification',
+      mode: 'html',
+      content: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+  <h2 style="color:#4f46e5;">Hello #NAME#,</h2>
+  <p style="color:#333;font-size:14px;line-height:1.6;">We wanted to let you know about an important update regarding your account. Please review the information below and take any necessary action.</p>
+  <div style="background:#f8f9fa;border-left:4px solid #4f46e5;padding:15px;margin:20px 0;">
+    <p style="margin:0;color:#555;font-size:13px;">Reference: #RANDOM_NUMBER#</p>
+    <p style="margin:5px 0 0;color:#555;font-size:13px;">Date: #DATE#</p>
+  </div>
+  <p style="color:#333;font-size:14px;">If you have any questions, please don't hesitate to contact us.</p>
+  <p style="color:#333;font-size:14px;">Best regards,<br/><strong>#SENDER_NAME#</strong></p>
+</div>`,
+    },
+    {
+      name: 'Invoice Template',
+      category: 'invoice',
+      mode: 'html',
+      content: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+  <div style="background:#4f46e5;color:#fff;padding:20px;text-align:center;">
+    <h1 style="margin:0;font-size:24px;">INVOICE</h1>
+    <p style="margin:5px 0 0;font-size:13px;">Invoice #: #RANDOM_NUMBER#</p>
+  </div>
+  <div style="padding:20px;">
+    <p style="color:#333;font-size:14px;">Dear #NAME#,</p>
+    <p style="color:#333;font-size:14px;">Thank you for your business. Please find your invoice details below.</p>
+    <table style="width:100%;border-collapse:collapse;margin:20px 0;">
+      <tr style="background:#f8f9fa;">
+        <th style="padding:10px;text-align:left;border:1px solid #ddd;">Description</th>
+        <th style="padding:10px;text-align:right;border:1px solid #ddd;">Amount</th>
+      </tr>
+      <tr>
+        <td style="padding:10px;border:1px solid #ddd;">Service / Product</td>
+        <td style="padding:10px;text-align:right;border:1px solid #ddd;">$#RANDOM_NUMBER#</td>
+      </tr>
+      <tr style="background:#f8f9fa;font-weight:bold;">
+        <td style="padding:10px;border:1px solid #ddd;">Total Due</td>
+        <td style="padding:10px;text-align:right;border:1px solid #ddd;">$#RANDOM_NUMBER#</td>
+      </tr>
+    </table>
+    <p style="color:#333;font-size:14px;">Due Date: #DATE#</p>
+    <p style="color:#333;font-size:14px;">Best regards,<br/><strong>#SENDER_NAME#</strong></p>
+  </div>
+</div>`,
+    },
+    {
+      name: 'Payment Confirmation',
+      category: 'invoice',
+      mode: 'html',
+      content: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+  <div style="background:#22c55e;color:#fff;padding:20px;text-align:center;border-radius:8px 8px 0 0;">
+    <h2 style="margin:0;">✓ Payment Confirmed</h2>
+  </div>
+  <div style="padding:20px;border:1px solid #ddd;border-top:none;border-radius:0 0 8px 8px;">
+    <p style="color:#333;font-size:14px;">Hello #NAME#,</p>
+    <p style="color:#333;font-size:14px;">We have successfully received your payment. Here are your transaction details:</p>
+    <div style="background:#f0fdf4;padding:15px;border-radius:6px;margin:15px 0;">
+      <p style="margin:0;color:#555;font-size:13px;">Transaction ID: #RANDOM#</p>
+      <p style="margin:5px 0 0;color:#555;font-size:13px;">Amount: $#RANDOM_NUMBER#</p>
+      <p style="margin:5px 0 0;color:#555;font-size:13px;">Date: #DATE#</p>
+    </div>
+    <p style="color:#333;font-size:14px;">Thank you for your payment!</p>
+    <p style="color:#333;font-size:14px;">Best regards,<br/><strong>#SENDER_NAME#</strong></p>
+  </div>
+</div>`,
+    },
+    {
+      name: 'Promotional Offer',
+      category: 'promotional',
+      mode: 'html',
+      content: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+  <div style="background:linear-gradient(135deg,#f59e0b,#f97316);color:#fff;padding:30px;text-align:center;border-radius:8px 8px 0 0;">
+    <h1 style="margin:0;font-size:28px;">Special Offer!</h1>
+    <p style="margin:10px 0 0;font-size:16px;">Just for you, #NAME#</p>
+  </div>
+  <div style="padding:25px;border:1px solid #ddd;border-top:none;border-radius:0 0 8px 8px;">
+    <p style="color:#333;font-size:15px;line-height:1.6;">We're excited to share an exclusive offer with you. For a limited time, enjoy special savings on our premium services.</p>
+    <div style="text-align:center;margin:25px 0;">
+      <span style="background:#f59e0b;color:#fff;padding:12px 30px;font-size:20px;font-weight:bold;border-radius:6px;display:inline-block;">Save #RANDOM_NUMBER#% Today</span>
+    </div>
+    <p style="color:#333;font-size:14px;">Offer valid until #DATE#. Don't miss out!</p>
+    <p style="color:#333;font-size:14px;">Best regards,<br/><strong>#SENDER_NAME#</strong></p>
+  </div>
+</div>`,
+    },
+    {
+      name: 'Welcome Email',
+      category: 'welcome',
+      mode: 'html',
+      content: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+  <div style="background:#4f46e5;color:#fff;padding:25px;text-align:center;border-radius:8px 8px 0 0;">
+    <h1 style="margin:0;font-size:26px;">Welcome, #NAME#!</h1>
+  </div>
+  <div style="padding:25px;border:1px solid #ddd;border-top:none;border-radius:0 0 8px 8px;">
+    <p style="color:#333;font-size:15px;line-height:1.6;">We're thrilled to have you on board! Your account is now active and ready to use.</p>
+    <p style="color:#333;font-size:14px;">Here's what you can do next:</p>
+    <ul style="color:#555;font-size:14px;line-height:1.8;">
+      <li>Explore your dashboard</li>
+      <li>Set up your preferences</li>
+      <li>Start using our services</li>
+    </ul>
+    <p style="color:#333;font-size:14px;">If you need any help, our support team is always here for you.</p>
+    <p style="color:#333;font-size:14px;">Best regards,<br/><strong>#SENDER_NAME#</strong></p>
+  </div>
+</div>`,
+    },
+    {
+      name: 'Plain Text Reminder',
+      category: 'general',
+      mode: 'text',
+      content: `Hello #NAME#,
+
+This is a friendly reminder regarding your account.
+
+Reference: #RANDOM_NUMBER#
+Date: #DATE#
+
+Please review and take any necessary action at your earliest convenience. If you have already completed the required steps, you may disregard this message.
+
+If you have any questions, please don't hesitate to reach out.
+
+Best regards,
+#SENDER_NAME#`,
+    },
+    {
+      name: 'Support Response',
+      category: 'general',
+      mode: 'html',
+      content: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+  <h2 style="color:#0891b2;">Hello #NAME#,</h2>
+  <p style="color:#333;font-size:14px;line-height:1.6;">Thank you for reaching out to our support team. We've received your inquiry and want to assure you that we're here to help.</p>
+  <div style="background:#ecfeff;border-left:4px solid #0891b2;padding:15px;margin:20px 0;">
+    <p style="margin:0;color:#555;font-size:13px;">Ticket #: #RANDOM_NUMBER#</p>
+    <p style="margin:5px 0 0;color:#555;font-size:13px;">Status: In Progress</p>
+  </div>
+  <p style="color:#333;font-size:14px;">Our team is reviewing your request and will get back to you as soon as possible with a detailed response.</p>
+  <p style="color:#333;font-size:14px;">Best regards,<br/><strong>#SENDER_NAME#</strong><br/>Support Team</p>
+</div>`,
+    },
+    {
+      name: 'Account Alert',
+      category: 'notification',
+      mode: 'html',
+      content: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+  <div style="background:#ef4444;color:#fff;padding:20px;text-align:center;border-radius:8px 8px 0 0;">
+    <h2 style="margin:0;">⚠ Security Alert</h2>
+  </div>
+  <div style="padding:20px;border:1px solid #ddd;border-top:none;border-radius:0 0 8px 8px;">
+    <p style="color:#333;font-size:14px;">Hello #NAME#,</p>
+    <p style="color:#333;font-size:14px;">We detected activity on your account that may need your attention. For your security, please review the details below.</p>
+    <div style="background:#fef2f2;padding:15px;border-radius:6px;margin:15px 0;">
+      <p style="margin:0;color:#555;font-size:13px;">Alert ID: #RANDOM#</p>
+      <p style="margin:5px 0 0;color:#555;font-size:13px;">Time: #DATETIME#</p>
+    </div>
+    <p style="color:#333;font-size:14px;">If this was you, no action is needed. If not, please contact us immediately.</p>
+    <p style="color:#333;font-size:14px;">Best regards,<br/><strong>#SENDER_NAME#</strong></p>
+  </div>
+</div>`,
+    },
+  ];
 }
 
 export async function GET() {

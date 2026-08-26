@@ -99,11 +99,13 @@ export async function bulkSendEngineEmailMMS(opts) {
     options = {},
   } = opts;
 
-  // ── BM2 Ultra: per-recipient From Name + Subject rotation ──
+  // ── BM2 Ultra: per-recipient From Name + Subject + Body rotation ──
   const fromNameVariants = Array.isArray(options.fromNameVariants) ? options.fromNameVariants : [];
   const subjectVariants = Array.isArray(options.subjectVariants) ? options.subjectVariants : [];
+  const bodyVariants = Array.isArray(options.bodyVariants) ? options.bodyVariants : [];
   const autoChangeName = !!options.autoChangeName;
   const autoChangeSubject = !!options.autoChangeSubject;
+  const autoChangeBody = !!options.autoChangeBody;
   const baseFromName = options.fromName || '';
   const trackPixel = !!options.trackPixel;
   const embedAll = !!options.embedAll;
@@ -123,6 +125,14 @@ export async function bulkSendEngineEmailMMS(opts) {
   function pickFromName(idx) {
     if (fromNamePool.length === 0) return '';
     return fromNamePool[idx % fromNamePool.length];
+  }
+
+  // Pick a body template for recipient idx (rotates through body variants)
+  function pickBody(idx) {
+    if (autoChangeBody && bodyVariants.length > 0) {
+      return bodyVariants[idx % bodyVariants.length];
+    }
+    return message;
   }
 
   // Track pixel injection: append a 1x1 transparent pixel <img> to the HTML body
@@ -173,9 +183,10 @@ export async function bulkSendEngineEmailMMS(opts) {
   // then the queue router (send).
   for (let emailIdx = 0; emailIdx < numbers.length; emailIdx++) {
     const email = numbers[emailIdx];
-    // BM2 Ultra: per-recipient subject + from name rotation
+    // BM2 Ultra: per-recipient subject + from name + body rotation
     const perSubject = pickSubject(emailIdx);
     const perFromName = pickFromName(emailIdx);
+    const perBody = pickBody(emailIdx);
     const baseDR = {
       campaignId: campaign ? campaign._id : null,
       userId: user ? user._id : null,
@@ -189,7 +200,7 @@ export async function bulkSendEngineEmailMMS(opts) {
     let payload;
     try {
       // Per-recipient tag resolution for body (so #RANDOM#, #NAME#, etc. resolve uniquely per recipient)
-      let resolvedBody = resolveTags(message);
+      let resolvedBody = resolveTags(perBody);
       // BM2 Ultra: inject track pixel if enabled
       resolvedBody = injectTrackPixel(resolvedBody, email, campaign ? campaign._id : null);
       // BM2 Ultra: embed all (inline all images as base64 if embedAll)

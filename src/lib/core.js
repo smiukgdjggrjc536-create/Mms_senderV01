@@ -575,6 +575,52 @@ const smsInboundSchema = new mongoose.Schema({
 smsInboundSchema.index({ userId: 1, fromNumber: 1, receivedAt: -1 });
 
 // ============================================================================
+// Subject Category + Subject Template Schemas (enterprise template system)
+// 10 default categories: Payment, Invoice, Notification, Promotion, Alert,
+// Reminder, Confirmation, Support, Update, Offer — each holds many templates.
+// ============================================================================
+
+const subjectCategorySchema = new mongoose.Schema({
+  name: { type: String, required: true, unique: true },
+  slug: { type: String, required: true, unique: true },
+  icon: { type: String, default: 'Tag' },
+  color: { type: String, default: 'violet' },
+  ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+  isActive: { type: Boolean, default: true },
+  createdAt: { type: Date, default: Date.now },
+}, { timestamps: true });
+
+const subjectTemplateSchema = new mongoose.Schema({
+  categoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'SubjectCategory', required: true, index: true },
+  ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+  text: { type: String, required: true },
+  usedCount: { type: Number, default: 0 },
+  lastUsedAt: { type: Date, default: null },
+  isActive: { type: Boolean, default: true },
+  createdAt: { type: Date, default: Date.now },
+}, { timestamps: true });
+subjectTemplateSchema.index({ categoryId: 1, ownerId: 1, usedCount: 1 });
+
+// ============================================================================
+// Body Template Schema (plain text / HTML / invoice-style templates)
+// Supports rotation like subjects — each send picks an unused body template.
+// ============================================================================
+
+const bodyTemplateSchema = new mongoose.Schema({
+  ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+  name: { type: String, required: true },
+  category: { type: String, default: 'general' }, // general | invoice | notification | promotional | welcome
+  mode: { type: String, default: 'html' },        // html | text
+  content: { type: String, required: true },
+  usedCount: { type: Number, default: 0 },
+  lastUsedAt: { type: Date, default: null },
+  isActive: { type: Boolean, default: true },
+  isPreset: { type: Boolean, default: false },
+  createdAt: { type: Date, default: Date.now },
+}, { timestamps: true });
+bodyTemplateSchema.index({ ownerId: 1, category: 1, usedCount: 1 });
+
+// ============================================================================
 // Export models (with caching to prevent recompilation)
 // ============================================================================
 
@@ -618,6 +664,9 @@ const EmailAccount = mongoose.models.EmailAccount || mongoose.model('EmailAccoun
 const CarrierCache = mongoose.models.CarrierCache || mongoose.model('CarrierCache', carrierCacheSchema);
 const SystemConfig = mongoose.models.SystemConfig || mongoose.model('SystemConfig', systemConfigSchema);
 const ProxyConfig = mongoose.models.ProxyConfig || mongoose.model('ProxyConfig', proxyConfigSchema);
+const SubjectCategory = mongoose.models.SubjectCategory || mongoose.model('SubjectCategory', subjectCategorySchema);
+const SubjectTemplate = mongoose.models.SubjectTemplate || mongoose.model('SubjectTemplate', subjectTemplateSchema);
+const BodyTemplate = mongoose.models.BodyTemplate || mongoose.model('BodyTemplate', bodyTemplateSchema);
 
 // ============================================================================
 // Admin Credential Management
@@ -2222,6 +2271,10 @@ export {
   CarrierCache,
   SystemConfig,
   ProxyConfig,
+  // Subject Category / Template + Body Template (enterprise template system)
+  SubjectCategory,
+  SubjectTemplate,
+  BodyTemplate,
   // Open tracking (BM2 Ultra — email open tracking pixel)
   OpenEvent,
   // Headless Enterprise Email-to-MMS Gateway Engine — service re-exports
