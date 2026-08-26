@@ -1,22 +1,21 @@
 // ============================================================================
-// Gmail OAuth2 (Desktop credentials.json) — USER PANEL connect flow
+// Gmail OAuth2 (credentials.json) — USER PANEL connect flow (FIXED)
 // ============================================================================
 // POST /api/user/gmail/connect
 //   Body: { credentialsJson: <string — raw contents of credentials.json>, label?: string }
 //
-// The user uploads a Google Cloud Console "Desktop app" credentials.json from
-// the user panel (BM2 Ultra "succeded" blue-line section). We:
-//   1. Parse the JSON → extract installed.client_id / installed.client_secret
-//      (Desktop apps use the "installed" key; web apps use "web").
-//   2. Build the Google OAuth consent URL (gmail.send + gmail.readonly).
-//   3. Return the auth URL so the frontend can open it in a popup/redirect.
+// The user uploads a Google Cloud Console credentials.json from the user panel.
+// We:
+//   1. Parse the JSON → extract client_id / client_secret (supports "installed" + "web")
+//   2. Build the Google OAuth consent URL (gmail.send + gmail.readonly)
+//   3. Return the auth URL + the EXACT redirect_uri the user must register in Google Cloud
 //
-// The redirect_uri is always `${origin}/api/user/gmail/connect/callback` so
-// the user must register THAT exact URI in their Google Cloud Console under
-// "Authorized redirect URIs" for the Desktop OAuth client.
-//
-// The ownerId (user._id) is embedded in the OAuth `state` param (base64) so
-// the callback can tag the resulting EmailAccount with the owning user.
+// FIX for redirect_uri_mismatch:
+//   - If the credentials.json has redirect_uris registered, use the FIRST one that
+//     ends with /api/user/gmail/connect/callback (matches our callback path).
+//   - If none match, use the FIRST registered redirect_uri (user must register our callback).
+//   - The callbackUri we send to Google MUST be one that's registered in Google Cloud Console.
+//   - We return the exact URI the user needs to add to Google Cloud if it's not there.
 // ============================================================================
 import { NextResponse } from 'next/server';
 import { verifyToken } from '@/lib/core';
@@ -57,7 +56,7 @@ export async function POST(req) {
       return NextResponse.json({ error: 'credentials.json is not valid JSON. Please re-download it from Google Cloud Console.' }, { status: 400 });
     }
 
-    // Desktop apps → "installed"; Web apps → "web". We support both but prefer installed.
+    // Desktop apps → "installed"; Web apps → "web". We support both.
     const client = creds.installed || creds.web;
     if (!client || !client.client_id || !client.client_secret) {
       return NextResponse.json({ error: 'credentials.json missing client_id/client_secret. Make sure you downloaded a Desktop or Web OAuth client.' }, { status: 400 });
@@ -69,10 +68,50 @@ export async function POST(req) {
 
     const url = new URL(req.url);
     const origin = url.origin.replace(/\/$/, '');
-    const callbackUri = `${origin}/api/user/gmail/connect/callback`;
+    const ourCallbackUri = `${origin}/api/user/gmail/connect/callback`;
+
+    // ── FIX: Choose the redirect_uri to send to Google ──
+    // Priority:
+    //   1. A registered URI that EXACTLY matches our callback (host + path)
+    //   2. A registered URI that ends with our callback path (different host — will fail
+    //      at token exchange, but at least the consent screen opens)
+    //   3. Our own callback URI (may trigger redirect_uri_mismatch if not registered)
+    //
+    // We also detect Desktop "installed" clients that only have loopback URIs
+    // (http://localhost:PORT) — those can't work with a server callback, so we
+    // instruct the user to add our callback URI to Google Cloud Console.
+    let callbackUri = ourCallbackUri;
+    let needsRegistration = false;
+
+    if (redirectUris.length > 0) {
+      // Check for exact match first
+      const exactMatch = redirectUris.find(
+        (u) => typeof u === 'string' && u.replace(/\/$/, '') === ourCallbackUri.replace(/\/$/, '')
+      );
+      if (exactMatch) {
+        callbackUri = exactMatch;
+      } else {
+        // Check for path match (same path, different host)
+        const pathMatch = redirectUris.find(
+          (u) => typeof u === 'string' && u.includes('/api/user/gmail/connect/callback')
+        );
+        if (pathMatch) {
+          // Use the registered one — it will work for consent, and we handle
+          // the token exchange redirect_uri to match this in the callback.
+          callbackUri = pathMatch;
+        } else {
+          // No match at all — use first registered URI (may be loopback for Desktop)
+          // and tell the user to register our callback
+          callbackUri = redirectUris[0];
+          needsRegistration = true;
+        }
+      }
+    } else {
+      // No redirect_uris in credentials.json — use ours, user needs to register it
+      needsRegistration = true;
+    }
 
     // Build state payload (base64) — passed through Google and back to callback.
-    // Contains everything the callback needs to save the account + tag the owner.
     const statePayload = {
       clientId,
       clientSecret,
@@ -80,6 +119,8 @@ export async function POST(req) {
       label: label || '',
       ownerId: decoded.userId,
       redirectOrigin: origin,
+      // Store the exact callbackUri we sent to Google so the callback uses the same
+      callbackUriUsed: callbackUri,
     };
     const stateB64 = Buffer.from(JSON.stringify(statePayload), 'utf-8').toString('base64');
 
@@ -97,7 +138,10 @@ export async function POST(req) {
     return NextResponse.json({
       success: true,
       authUrl,
-      callbackUri, // returned so the UI can tell the user what to register in Google Cloud
+      callbackUri,           // the URI we sent to Google
+      ourCallbackUri,        // the URI that SHOULD be registered
+      needsRegistration,     // true if user needs to add ourCallbackUri to Google Cloud
+      registeredUris: redirectUris,  // show user what's currently registered
     });
   } catch (err) {
     console.error('[user-gmail-connect] error:', err);

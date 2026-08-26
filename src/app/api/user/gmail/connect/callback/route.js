@@ -49,10 +49,17 @@ export async function GET(req) {
     }
 
     // Resolve redirect_uri — must EXACTLY match the one used in the initiate step.
+    // We now store the exact URI used in the state payload (callbackUriUsed).
     const origin = (cfg.redirectOrigin || url.origin).replace(/\/$/, '');
     const defaultUri = `${origin}/api/user/gmail/connect/callback`;
+
+    // Use the exact URI that was sent to Google in the initiate step (stored in state).
+    // This prevents redirect_uri_mismatch at the token exchange step.
     let redirectUri;
-    if (cfg.redirectUris && Array.isArray(cfg.redirectUris) && cfg.redirectUris.length > 0) {
+    if (cfg.callbackUriUsed) {
+      // The initiate step stored the exact URI it sent to Google — use it.
+      redirectUri = cfg.callbackUriUsed;
+    } else if (cfg.redirectUris && Array.isArray(cfg.redirectUris) && cfg.redirectUris.length > 0) {
       const hostMatch = cfg.redirectUris.find(
         (u) => typeof u === 'string' && u.includes('/api/user/gmail/connect/callback') &&
               new URL(u).host === new URL(defaultUri).host

@@ -1,49 +1,25 @@
-# MMS→Email Module Transformation Plan — BM2 Ultra Enterprise Upgrade
+# User Panel Enterprise Redesign — Current Sprint
 
-## Phase 1: UX Fixes (Sidebar + No-Scroll)  ✅
-- [x] Sidebar collapse layout bug → flex layout (no fixed+margin hack)
-- [x] Page scroll → h-screen flex, internal scroll only
-- [x] Header + mobile tab bar = flex-shrink-0
-
-## Phase 2: BM2 Ultra Config UI (SendTab)  ✅
-- [x] From Name field + From Name Variants (rotation)
-- [x] Auto-change Name / Auto-change Subject toggles
-- [x] Subject Variants textarea (one per line)
-- [x] Track Pixel toggle (open tracking)
-- [x] Embed ALL content type option
-- [x] Speed ALL/SLOW/SAFE modes
-- [x] Sender rotation dropdown (credentials.json list)
-- [x] Config chips in action bar (Track, Auto-Name, Auto-Subject, fromName)
-
-## Phase 3: Backend Support  ✅
-- [x] Auto name/subject rotation in bulkSendEmailMms engine
-- [x] Track pixel endpoint /api/track/open (1x1 GIF + OpenEvent log)
-- [x] OpenEvent schema + model in core.js + exported in barrel
-- [x] From Name injection in email MIME (buildMime → sendViaGmail → queueRouter → bulk)
-- [x] HTML content auto-detection in buildMime
-- [x] ownerId field added to EmailAccount schema (multi-tenant isolation)
-- [x] credentials.json upload endpoint (/api/user/gmail/connect) — initiate OAuth
-- [x] credentials.json callback endpoint (/api/user/gmail/connect/callback)
-- [x] "Connect Gmail" UI in SendTab (file upload → OAuth popup → result message)
-- [x] listSenders action filter by ownerId (user sees own + shared pool)
-
-## Phase 4: Build + Deploy  ✅ ALL COMPLETE
-- [x] Build test — compiled successfully (17 routes, 0 errors)
-- [x] Git push → Vercel auto-deploy (user panel) — LIVE
-- [x] Render auto-deploy (API gateway) — LIVE (track/open confirmed)
-- [x] Netlify deploy (admin panel) — LIVE on NEW site (emailengineadminaccesspanel.netlify.app)
-  - New Netlify account + new site created (old account was deleted)
-  - @netlify/plugin-nextjs added to netlify.toml for CLI deploys
-  - 3 env vars set (MONGODB_URI, JWT_SECRET, NEXT_PUBLIC_PANEL_MODE)
-  - Admin login verified: 3-layer auth → MongoDB → SUCCESS
-- [x] Verify ALL 3 platform URLs live + report
-
-## ✅ ALL TASKS COMPLETE — 3 PLATFORMS LIVE
-
-## ⚠️ Netlify Admin Panel — Needs New Token
-The Netlify auth token (nfp_WgaFR5M4gTPDmf262U4dmG33FzVtGkR19cca) has EXPIRED (HTTP 401).
-The admin panel (mmsadminpanellogin.netlify.app) is still live on the PREVIOUS deploy
-and fully functional for admin operations. To deploy the latest code to Netlify:
-  → User needs to generate a new Netlify Personal Access Token at:
-    https://app.netlify.com/user/applications#personal-access-tokens
-  → Then I can run: NETLIFY_AUTH_TOKEN="<new>" netlify deploy --site d96d1fdf-... --dir .next --prod
+## Phase A: UserPanel.jsx Complete Rewrite
+- [ ] Write new UserPanel.jsx (full_file_rewrite) — enterprise redesign
+  - No scroll, single screen fit (h-screen flex, internal scroll only)
+  - Subject line at TOP
+  - Recipient email list on RIGHT side with Paste button
+  - Removed: Task Status, Task Log, Task Report, Open, Open Task tabs
+  - Removed: Render Mail config, Auto Send, Random Test, Scheduled Task, Random HTML, Auto-Signup, PL-Rotate, Humanized, Page Format, Color 24-bit, Auto Route Sender
+  - Start Campaign button on RIGHT, Stop = pause/resume
+  - Email preview overlay (in-page, close + fullscreen)
+  - Check Bounce at top (results + Replace button)
+  - Sending limit + expiry compact in corner
+  - Connect Email small button in top corner
+  - Anti-spam config behind toggle (show/hide + Save)
+  - State persistence via localStorage (no refresh loss)
+  - Auto-change name interval selector + AI 1040 names
+  - Millisecond delay input (min 100ms)
+  - Recipient list live results (green check / red cross)
+  - Gmail OAuth credentials.json connect (fixed redirect_uri)
+- [ ] Build test — zero errors
+- [ ] Deploy to Vercel (user panel)
+- [ ] Deploy to Netlify (admin panel)
+- [ ] Deploy to Render (API gateway)
+- [ ] Verify all 3 platforms live
