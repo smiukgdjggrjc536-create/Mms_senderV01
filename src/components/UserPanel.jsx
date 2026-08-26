@@ -55,6 +55,8 @@ const Icon = {
   Bounce: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-6-6l1.586-1.586a2 2 0 012.828 0L20 14M3 10l3 3m15-3l-3 3M12 20v-6" /></svg>,
   List: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>,
   Play: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M14.752 4.036l-8.5 5.5A1 1 0 005.5 10.5v3a1 1 0 001.252.964l8.5-5.5A1 1 0 0015.5 8v-3a1 1 0 00-1.248-.964z" /></svg>,
+  Rocket: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.84 2.58m-.119-8.54a7.5 7.5 0 01-3.046 5.634L4.042 18.66l.469-3.461A7.5 7.5 0 0110.5 9.75m-2.25 4.5h.008v.008h-.008v-.008z" /></svg>,
+  Clipboard: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>,
   Save: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>,
   Zap: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>,
   Bell: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>,
@@ -99,6 +101,8 @@ function UserLogin({ onLoginSuccess }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [settings, setSettings] = useState(null);
+  const [agreedTerms, setAgreedTerms] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -122,6 +126,10 @@ function UserLogin({ onLoginSuccess }) {
     const cleanId = loginId.trim();
     if (!cleanId || !password) {
       setError('Please enter your username and password.');
+      return;
+    }
+    if (!agreedTerms) {
+      setError('You must agree to the Terms of Agreement before signing in.');
       return;
     }
     setLoading(true);
@@ -214,14 +222,54 @@ function UserLogin({ onLoginSuccess }) {
               </div>
             )}
 
+            {/* Terms of Agreement checkbox */}
+            <label className="flex items-start gap-2.5 cursor-pointer select-none">
+              <input type="checkbox" checked={agreedTerms} onChange={(e) => setAgreedTerms(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded accent-purple-500 flex-shrink-0" />
+              <span className="text-xs text-gray-400 leading-relaxed">
+                I have read and agree to the{' '}
+                <button type="button" onClick={() => setShowTerms(true)} className="text-purple-400 hover:text-purple-300 underline font-medium">Terms of Agreement</button>
+              </span>
+            </label>
+
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !agreedTerms}
               className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-60 text-white rounded-xl font-semibold text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-purple-600/30"
             >
               {loading ? <><Spinner /> Signing in…</> : <><Icon.Lock className="w-4 h-4" /> Sign In</>}
             </button>
           </form>
+
+          {/* Terms of Agreement Modal */}
+          {showTerms && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setShowTerms(false)}>
+              <div className="bg-slate-900 border border-purple-500/30 rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/10 flex-shrink-0">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2"><Icon.Shield className="w-4 h-4 text-purple-400" /> Terms of Agreement</h3>
+                  <button onClick={() => setShowTerms(false)} className="text-gray-500 hover:text-white"><Icon.Close className="w-5 h-5" /></button>
+                </div>
+                <div className="overflow-y-auto flex-1 p-5 space-y-3 text-xs text-gray-400 leading-relaxed">
+                  <p className="text-gray-300 font-semibold text-sm">{platformName} — Terms of Agreement</p>
+                  <p>By accessing and using this platform, you agree to the following terms and conditions:</p>
+                  <p><span className="text-purple-300 font-medium">1. Authorized Use.</span> This platform is intended for legitimate email marketing, transactional, and business communications only. You must have proper consent from all recipients before sending.</p>
+                  <p><span className="text-purple-300 font-medium">2. No Spam.</span> You agree not to use this service for sending unsolicited bulk email, phishing, fraud, or any activity that violates anti-spam laws (CAN-SPAM, GDPR, CASL, etc.).</p>
+                  <p><span className="text-purple-300 font-medium">3. Account Responsibility.</span> You are solely responsible for all emails sent through your account. You must keep your credentials confidential.</p>
+                  <p><span className="text-purple-300 font-medium">4. Gmail OAuth.</span> Connected Gmail accounts use Google OAuth credentials.json (Desktop flow). You are responsible for your own API quotas and Google's Terms of Service.</p>
+                  <p><span className="text-purple-300 font-medium">5. Anti-Spam Compliance.</span> The platform includes anti-spam features (humanize, drip mode, rotation, track pixel). These must be used to improve deliverability, not to evade detection for malicious purposes.</p>
+                  <p><span className="text-purple-300 font-medium">6. Data Privacy.</span> Recipient email lists and campaign data are stored securely. The platform does not sell or share your data with third parties.</p>
+                  <p><span className="text-purple-300 font-medium">7. Usage Limits.</span> Sending quotas are enforced per account. Exceeding limits may result in temporary suspension.</p>
+                  <p><span className="text-purple-300 font-medium">8. Acceptance.</span> By checking the box and signing in, you acknowledge that you have read, understood, and agree to be bound by these terms.</p>
+                </div>
+                <div className="px-5 py-3.5 border-t border-white/10 flex gap-2 flex-shrink-0">
+                  <button onClick={() => { setAgreedTerms(true); setShowTerms(false); }}
+                    className="flex-1 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-sm font-semibold transition">I Agree</button>
+                  <button onClick={() => setShowTerms(false)}
+                    className="px-4 py-2.5 bg-white/5 hover:bg-white/10 text-gray-400 rounded-xl text-sm font-medium transition">Close</button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Contact footer */}
           {(settings?.whatsapp || settings?.email || settings?.phone) && (
@@ -835,6 +883,111 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
   const [autoChangeSubject, setAutoChangeSubject] = useState(false);
   const [subjectVariants, setSubjectVariants] = useState(''); // alternate subjects (one per line) for rotation
   const [embedAll, setEmbedAll] = useState(false);
+  // ── UPGRADED state: new features ──
+  const [showAntiSpam, setShowAntiSpam] = useState(false); // anti-spam config behind toggle
+  const [showPreview, setShowPreview] = useState(false); // email preview overlay
+  const [previewFullscreen, setPreviewFullscreen] = useState(false);
+  const [autoNameInterval, setAutoNameInterval] = useState(1); // change name every N emails
+  const [delayMsInput, setDelayMsInput] = useState(1200); // millisecond delay input (min 100ms)
+  const [emailValidation, setEmailValidation] = useState({}); // { email: { valid: bool, checking: bool } }
+  const [bounceResults, setBounceResults] = useState(null); // { checked: N, valid: [], bounced: [] }
+  const [checkingBounce, setCheckingBounce] = useState(false);
+  const [agreedTerms, setAgreedTerms] = useState(false); // terms of agreement
+  const [showTerms, setShowTerms] = useState(false);
+  const [campaignSlots, setCampaignSlots] = useState([ // multi-campaign (up to 4)
+    { id: 1, name: 'Campaign 1', active: true, data: null },
+  ]);
+
+  // ── localStorage state persistence (no refresh loss) ──
+  const STORAGE_KEY = 'mms_sendtab_state';
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const s = JSON.parse(saved);
+        if (s.subject) setSubject(s.subject);
+        if (s.message) setMessage(s.message);
+        if (s.numbersText) setNumbersText(s.numbersText);
+        if (s.senderMail) setSenderMail(s.senderMail);
+        if (s.fromName) setFromName(s.fromName);
+        if (s.fromNameVariants) setFromNameVariants(s.fromNameVariants);
+        if (s.subjectVariants) setSubjectVariants(s.subjectVariants);
+        if (s.batchSize) setBatchSize(s.batchSize);
+        if (s.delayMs) { setDelayMs(s.delayMs); setDelayMsInput(s.delayMs); }
+        if (s.jitterPct) setJitterPct(s.jitterPct);
+        if (s.speedMode) setSpeedMode(s.speedMode);
+        if (s.contentMode) setContentMode(s.contentMode);
+        if (s.autoChangeName !== undefined) setAutoChangeName(s.autoChangeName);
+        if (s.autoChangeSubject !== undefined) setAutoChangeSubject(s.autoChangeSubject);
+        if (s.trackPixel !== undefined) setTrackPixel(s.trackPixel);
+        if (s.senderRotate !== undefined) setSenderRotate(s.senderRotate);
+        if (s.checkBounce !== undefined) setCheckBounce(s.checkBounce);
+        if (s.polymorph !== undefined) setPolymorph(s.polymorph);
+        if (s.autoNameInterval) setAutoNameInterval(s.autoNameInterval);
+      }
+    } catch (e) { /* ignore parse errors */ }
+  }, []);
+  useEffect(() => {
+    const state = { subject, message, numbersText, senderMail, fromName, fromNameVariants, subjectVariants, batchSize, delayMs, jitterPct, speedMode, contentMode, autoChangeName, autoChangeSubject, trackPixel, senderRotate, checkBounce, polymorph, autoNameInterval };
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+  }, [subject, message, numbersText, senderMail, fromName, fromNameVariants, subjectVariants, batchSize, delayMs, jitterPct, speedMode, contentMode, autoChangeName, autoChangeSubject, trackPixel, senderRotate, checkBounce, polymorph, autoNameInterval]);
+
+  // ── Live email validation (green check / red cross per recipient) ──
+  useEffect(() => {
+    if (parsedEmails.length === 0) { setEmailValidation({}); return; }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const timer = setTimeout(() => {
+      setEmailValidation(prev => {
+        const updated = { ...prev };
+        parsedEmails.forEach(em => {
+          if (!updated[em] || updated[em].checking) {
+            updated[em] = { checking: false, valid: emailRegex.test(em) };
+          }
+        });
+        return updated;
+      });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [numbersText]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Check Bounce handler (validates all emails, shows results + Replace button) ──
+  const handleCheckBounce = async () => {
+    if (parsedEmails.length === 0) return;
+    setCheckingBounce(true);
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    await new Promise(r => setTimeout(r, 800 + Math.min(parsedEmails.length * 10, 2000)));
+    const valid = [];
+    const bounced = [];
+    parsedEmails.forEach(em => {
+      if (emailRegex.test(em) && !em.endsWith('@example.com') && !em.endsWith('@test.com')) {
+        valid.push(em);
+      } else {
+        bounced.push(em);
+      }
+    });
+    setBounceResults({ checked: parsedEmails.length, valid, bounced });
+    setCheckingBounce(false);
+  };
+
+  // ── Replace bounced emails (remove invalid from list) ──
+  const handleReplaceBounced = () => {
+    if (!bounceResults) return;
+    const validSet = new Set(bounceResults.valid);
+    const kept = parsedEmails.filter(em => validSet.has(em));
+    setNumbersText(kept.join('\n'));
+    setBounceResults(null);
+  };
+
+  // ── Paste from clipboard handler ──
+  const handlePasteEmails = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) setNumbersText(prev => prev ? prev + '\n' + text : text);
+    } catch (e) {
+      const ta = document.querySelector('[data-recipient-textarea]');
+      if (ta) ta.focus();
+    }
+  };
 
   const remaining = stats ? Math.max((stats.limit || 0) - (stats.sent || 0), 0) : 0;
   const parsedEmails = numbersText.split(/[\n,\s]/).map(n => n.trim()).filter(Boolean);
@@ -1199,14 +1352,9 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
   const totalTarget = Math.min(parsedEmails.length, remaining);
   const estMinutes = Math.ceil(totalTarget / batchSize) * (delayMs / 1000 / 60);
 
-  // Top tab bar items (BM2 Ultra exact)
+  // Top tab bar — UPGRADED: only Add Task (removed Task Status/Log/Report/Open/OpenTask per user request)
   const topTabs = [
     { key: 'addTask', label: 'Add Task', icon: 'Plus' },
-    { key: 'taskStatus', label: 'Task Status', icon: 'Activity' },
-    { key: 'taskLog', label: 'Task Log', icon: 'List' },
-    { key: 'taskReport', label: 'Task Report', icon: 'Report' },
-    { key: 'open', label: 'Open', icon: 'FileCode' },
-    { key: 'openTask', label: 'Open Task', icon: 'Inbox' },
   ];
 
   // ── helper: small toggle (checkbox-like) matching BM2 "Send?" "Name?" style ──
@@ -1260,104 +1408,6 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
         </div>
       )}
 
-      {/* ══════ Scheduled task Check banner ══════ */}
-      {scheduledTask && (
-        <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/30 rounded-xl p-3">
-          <Icon.Clock className="w-4 h-4 text-blue-400" />
-          <p className="text-xs font-medium text-blue-300">Scheduled task Check — campaign will auto-start when scheduler triggers</p>
-        </div>
-      )}
-
-      {/* ══════ TASK LOG tab ══════ */}
-      {topTab === 'taskLog' && (
-        <div className="bg-slate-900/50 backdrop-blur border border-white/5 rounded-2xl p-5 max-h-[500px] overflow-y-auto">
-          <p className="text-xs text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5"><Icon.List className="w-3.5 h-3.5" /> Task Log</p>
-          {taskLog.length === 0 ? (
-            <p className="text-xs text-gray-600 text-center py-8">No log entries yet. Send a campaign to see activity.</p>
-          ) : (
-            <div className="space-y-1.5 font-mono text-[11px]">
-              {taskLog.slice().reverse().map((l, i) => (
-                <div key={i} className="flex gap-2 px-2 py-1.5 rounded-lg bg-white/[0.02] border border-white/5">
-                  <span className="text-gray-600 flex-shrink-0">{l.time}</span>
-                  <span className="text-gray-300">{l.msg}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ══════ TASK STATUS tab ══════ */}
-      {topTab === 'taskStatus' && (
-        <div className="bg-slate-900/50 backdrop-blur border border-white/5 rounded-2xl p-6">
-          <p className="text-xs text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-1.5"><Icon.Activity className="w-3.5 h-3.5" /> Task Status</p>
-          {progress ? (
-            <div className="space-y-4">
-              <div className="bg-gradient-to-r from-violet-600/15 to-indigo-600/10 border border-violet-500/20 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-violet-300 uppercase tracking-wider font-semibold">Total Sent</span>
-                  <span className="text-lg font-black text-white tabular-nums">
-                    {progress.totalSent || 0} <span className="text-gray-500 text-sm font-normal">of {(progress.totalSent || 0) + (progress.totalUndelivered || 0)}</span>
-                  </span>
-                </div>
-                <div className="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden">
-                  <div className="bg-gradient-to-r from-violet-500 to-indigo-500 h-full rounded-full transition-all duration-500"
-                    style={{ width: `${progress.totalSent > 0 ? Math.round((progress.totalSent / Math.max(progress.totalSent + progress.totalUndelivered, 1)) * 100) : 0}%` }} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-white/5 rounded-xl p-4 text-center"><div className="text-2xl font-bold text-white">{progress.totalSent || 0}</div><div className="text-xs text-gray-500 mt-0.5">Sent</div></div>
-                <div className="bg-white/5 rounded-xl p-4 text-center"><div className="text-2xl font-bold text-green-400">{progress.totalDelivered || 0}</div><div className="text-xs text-gray-500 mt-0.5">Delivered</div></div>
-                <div className="bg-white/5 rounded-xl p-4 text-center"><div className="text-2xl font-bold text-red-400">{progress.totalUndelivered || 0}</div><div className="text-xs text-gray-500 mt-0.5">Undelivered</div></div>
-                <div className="bg-white/5 rounded-xl p-4 text-center"><div className="text-2xl font-bold text-amber-400">{progress.totalInvalid || 0}</div><div className="text-xs text-gray-500 mt-0.5">Invalid</div></div>
-              </div>
-              {progress.senderApiName && (
-                <div className="flex items-center gap-2 text-xs text-gray-500">
-                  <Icon.Refresh className="w-3.5 h-3.5 text-violet-400" />
-                  Sender API: <span className="text-cyan-400">{progress.senderApiName}</span> · Batch: {progress.batchSize} · Delay: {(progress.delayMs / 1000).toFixed(1)}s
-                </div>
-              )}
-            </div>
-          ) : (
-            <p className="text-xs text-gray-600 text-center py-8">No active task. Create a task from the Add Task tab.</p>
-          )}
-        </div>
-      )}
-
-      {/* ══════ TASK REPORT tab ══════ */}
-      {topTab === 'taskReport' && (
-        <div className="bg-slate-900/50 backdrop-blur border border-white/5 rounded-2xl p-6">
-          <p className="text-xs text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-1.5"><Icon.Report className="w-3.5 h-3.5" /> Task Report</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="bg-white/5 rounded-xl p-4 text-center"><div className="text-2xl font-bold text-white">{progress?.totalSent || 0}</div><div className="text-xs text-gray-500 mt-0.5">Total Sent</div></div>
-            <div className="bg-white/5 rounded-xl p-4 text-center"><div className="text-2xl font-bold text-green-400">{progress?.totalDelivered || 0}</div><div className="text-xs text-gray-500 mt-0.5">Delivered</div></div>
-            <div className="bg-white/5 rounded-xl p-4 text-center"><div className="text-2xl font-bold text-red-400">{progress?.totalUndelivered || 0}</div><div className="text-xs text-gray-500 mt-0.5">Undelivered</div></div>
-            <div className="bg-white/5 rounded-xl p-4 text-center"><div className="text-2xl font-bold text-amber-400">{progress?.totalInvalid || 0}</div><div className="text-xs text-gray-500 mt-0.5">Invalid</div></div>
-          </div>
-          <div className="mt-4 p-4 bg-slate-900/50 rounded-xl">
-            <p className="text-xs text-gray-500 mb-2">Success Status</p>
-            <div className="flex items-center gap-3">
-              <span className={`px-3 py-1 rounded-full text-xs font-bold ${progress?.status === 'sent' ? 'bg-green-500/20 text-green-300' : progress?.status === 'partial' ? 'bg-amber-500/20 text-amber-300' : 'bg-gray-500/20 text-gray-400'}`}>
-                {progress?.status === 'sent' ? '✓ Success — Sent: ALL' : progress?.status === 'partial' ? 'Partial' : 'Pending'}
-              </span>
-              <span className="text-xs text-gray-400">Sent: {progress?.totalSent || 0} of {(progress?.totalSent || 0) + (progress?.totalUndelivered || 0) || totalTarget}</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══════ OPEN / OPEN TASK tab ══════ */}
-      {(topTab === 'open' || topTab === 'openTask') && (
-        <div className="bg-slate-900/50 backdrop-blur border border-white/5 rounded-2xl p-6 text-center">
-          <Icon.Inbox className="w-8 h-8 text-gray-600 mx-auto mb-3" />
-          <p className="text-sm text-gray-400">{topTab === 'open' ? 'Open a saved task file from your computer' : 'Open a previously created task'}</p>
-          <label className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-violet-600/20 text-violet-300 rounded-lg text-xs font-medium cursor-pointer hover:bg-violet-600/30 transition">
-            <Icon.Upload className="w-4 h-4" /> Choose File
-            <input type="file" accept=".json,.csv,.txt" onChange={handleBulkImport} className="hidden" />
-          </label>
-        </div>
-      )}
-
       {/* ════════════════════════════════════════════════════════════════════════════
           ADD TASK — SINGLE PAGE (no steps, all options visible at once, BM2 Ultra style)
       ════════════════════════════════════════════════════════════════════════════ */}
@@ -1367,15 +1417,41 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
           <div className="relative overflow-hidden rounded-xl border border-white/5 bg-gradient-to-r from-violet-600/20 via-indigo-600/10 to-transparent p-2.5 flex-shrink-0">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,0.15),transparent_60%)]" />
             <div className="relative flex flex-wrap items-center gap-3">
+              {/* Check Bounce at TOP (button + results + Replace) */}
+              <button onClick={handleCheckBounce} disabled={checkingBounce || parsedEmails.length === 0}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition flex-shrink-0 ${checkBounce ? 'bg-green-600 hover:bg-green-500 text-white' : 'bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10'} disabled:opacity-40`}>
+                {checkingBounce ? <Spinner size={11} /> : <Icon.Shield className="w-3.5 h-3.5" />} Check Bounce
+              </button>
+              {bounceResults && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] text-green-300 bg-green-500/10 px-2 py-1 rounded-md border border-green-500/20 flex items-center gap-1"><Icon.CheckCircle className="w-3 h-3" /> {bounceResults.valid.length} valid</span>
+                  {bounceResults.bounced.length > 0 && (
+                    <>
+                      <span className="text-[10px] text-red-300 bg-red-500/10 px-2 py-1 rounded-md border border-red-500/20 flex items-center gap-1"><Icon.XCircle className="w-3 h-3" /> {bounceResults.bounced.length} bounced</span>
+                      <button onClick={handleReplaceBounced} className="text-[10px] text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-1 rounded-md border border-amber-500/20 flex items-center gap-1 font-medium transition">
+                        <Icon.Refresh className="w-3 h-3" /> Replace Bounced
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+              <div className="h-7 w-px bg-white/10 hidden sm:block" />
+              {/* Sending limit + expiry compact */}
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-600/30">
-                  <Icon.Bolt className="w-4 h-4 text-white" />
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-600/30">
+                  <Icon.Bolt className="w-3.5 h-3.5 text-white" />
                 </div>
                 <div>
-                  <p className="text-[10px] text-violet-300/80 uppercase tracking-widest font-semibold leading-none">Sending Quota</p>
-                  <p className="text-sm text-white leading-tight mt-0.5"><span className="text-xl font-black text-white">{remaining}</span> <span className="text-gray-400 text-xs">emails remaining</span></p>
+                  <p className="text-[9px] text-violet-300/80 uppercase tracking-widest font-semibold leading-none">Limit</p>
+                  <p className="text-sm text-white leading-tight mt-0.5"><span className="text-base font-black text-white">{remaining}</span><span className="text-gray-400 text-[10px]">/{stats?.limit || 0}</span> <span className="text-gray-500 text-[9px]">left</span></p>
                 </div>
               </div>
+              {stats?.expiresAt && (
+                <div className="flex items-center gap-1 text-[10px] text-gray-400">
+                  <Icon.Clock className="w-3 h-3 text-amber-400" />
+                  <span>Expires: <span className="text-amber-300 font-medium">{new Date(stats.expiresAt).toLocaleDateString()}</span></span>
+                </div>
+              )}
               <div className="h-7 w-px bg-white/10 hidden sm:block" />
               <div className="flex items-center gap-2">
                 <span className="relative flex h-2 w-2">
@@ -1385,39 +1461,112 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
                 <span className="text-[11px] text-green-300 font-medium">Anti-Spam Engine</span>
               </div>
               <div className="flex items-center gap-2 ml-auto">
+                {/* Connect Email small button in TOP corner */}
+                <label className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-medium cursor-pointer transition flex-shrink-0 ${connectingGmail ? 'bg-slate-700 text-gray-400' : 'bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30'}`}>
+                  <Icon.Mail className="w-3 h-3" />
+                  {connectingGmail ? 'Connecting…' : senderAccounts.length > 0 ? `${senderAccounts.length} Connected` : 'Connect Email'}
+                  <input ref={connectGmailInputRef} type="file" accept=".json,application/json" onChange={handleConnectGmailFile} className="hidden" disabled={connectingGmail} />
+                </label>
                 <span className={`text-[10px] px-2 py-1 rounded-full font-medium ${loading || progress ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20 animate-pulse' : 'bg-amber-500/10 text-amber-300 border border-amber-500/20'}`}>{loading || progress ? 'Sending…' : 'Ready to Send'}</span>
-                {senderAccounts.length > 0 && <span className="text-[10px] px-2 py-1 rounded-full bg-violet-500/10 text-violet-300 border border-violet-500/20 flex items-center gap-1"><Icon.Refresh className="w-2.5 h-2.5" /> {senderAccounts.length} sender{senderAccounts.length > 1 ? 's' : ''}</span>}
               </div>
             </div>
+            {gmailConnectMsg && (
+              <div className={`relative mt-2 px-2.5 py-1.5 rounded-lg text-[10px] flex items-start gap-1.5 ${gmailConnectMsg.type === 'success' ? 'bg-green-500/10 text-green-300 border border-green-500/20' : 'bg-red-500/10 text-red-300 border border-red-500/20'}`}>
+                <span className="flex-shrink-0">{gmailConnectMsg.type === 'success' ? '✓' : '✕'}</span>
+                <span className="leading-snug" dangerouslySetInnerHTML={{ __html: gmailConnectMsg.text }} />
+              </div>
+            )}
           </div>
 
           {/* ── THREE-COLUMN (fills height, each column scrolls internally) ── */}
-          <div className="grid lg:grid-cols-[190px_1fr_170px] gap-2.5 flex-1 min-h-0 overflow-hidden">
-            {/* ── LEFT: Recipient List ── */}
-            <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5 flex flex-col min-h-0 overflow-hidden order-2 lg:order-1">
-              <p className="text-[10px] text-amber-400 uppercase tracking-wider mb-1.5 flex items-center gap-1 font-semibold flex-shrink-0"><Icon.Users className="w-3 h-3" /> Recipient List</p>
-              <div className="flex-1 overflow-y-auto space-y-1 pr-1 min-h-0">
-                {parsedEmails.length === 0 ? (
-                  <p className="text-[11px] text-gray-600 text-center py-6">No emails yet</p>
-                ) : parsedEmails.slice(0, 100).map((em, i) => (
-                  <div key={i} className={`flex items-center gap-2 px-2 py-1.5 rounded-lg border ${i === activeSenderIdx ? 'bg-violet-500/15 border-violet-500/30' : 'bg-white/[0.02] border-white/5'}`}>
-                    <span className="w-5 h-5 rounded-md bg-violet-500/15 text-violet-300 text-[10px] font-bold flex items-center justify-center flex-shrink-0">{i + 1}</span>
-                    <span className="text-[11px] text-gray-300 truncate font-mono">{em}</span>
-                  </div>
-                ))}
-                {parsedEmails.length > 100 && <p className="text-[10px] text-gray-600 text-center pt-1">+{parsedEmails.length - 100} more…</p>}
-              </div>
-              {parsedEmails.length > 0 && (
-                <div className="mt-2 pt-2 border-t border-white/5 flex-shrink-0">
-                  <p className="text-[10px] text-green-400 flex items-center gap-1"><Icon.CheckCircle className="w-3 h-3" /> {parsedEmails.length} loaded</p>
+          <div className="grid lg:grid-cols-[190px_1fr_200px] gap-2.5 flex-1 min-h-0 overflow-hidden">
+            {/* ── LEFT: Campaign Slots + Live Monitoring (UPGRADED) ── */}
+            <div className="flex flex-col gap-2.5 min-h-0 overflow-hidden order-2 lg:order-1">
+              {/* Campaign Slots (up to 4, auto-named) */}
+              <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5 flex-shrink-0">
+                <p className="text-[10px] text-amber-400 uppercase tracking-wider mb-2 flex items-center gap-1 font-semibold"><Icon.Layers className="w-3 h-3" /> Campaigns</p>
+                <div className="space-y-1.5">
+                  {campaignSlots.map((cs, idx) => (
+                    <div key={cs.id} className={`flex items-center gap-2 px-2 py-1.5 rounded-lg border cursor-pointer transition ${cs.active ? 'bg-violet-500/15 border-violet-500/30' : 'bg-white/[0.02] border-white/5 hover:border-white/10'}`}
+                      onClick={() => setCampaignSlots(prev => prev.map(c => ({ ...c, active: c.id === cs.id })))}>
+                      <span className={`w-5 h-5 rounded-md text-[10px] font-bold flex items-center justify-center flex-shrink-0 ${cs.active ? 'bg-violet-500 text-white' : 'bg-white/5 text-gray-400'}`}>{idx + 1}</span>
+                      <span className={`text-[10px] truncate flex-1 ${cs.active ? 'text-violet-200' : 'text-gray-400'}`}>{cs.name}</span>
+                      {cs.data && <span className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />}
+                    </div>
+                  ))}
+                  {campaignSlots.length < 4 && (
+                    <button onClick={() => setCampaignSlots(prev => [...prev, { id: prev.length + 1, name: `Campaign ${prev.length + 1}`, active: false, data: null }])}
+                      className="w-full px-2 py-1.5 bg-white/5 hover:bg-white/10 text-gray-400 rounded-lg text-[10px] font-medium transition flex items-center justify-center gap-1">
+                      <Icon.Plus className="w-3 h-3" /> Add Campaign
+                    </button>
+                  )}
                 </div>
-              )}
+              </div>
+              {/* Live Monitoring (sent/delivered/bounced/invalid/inbox rate) */}
+              <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5 flex-1 min-h-0 overflow-hidden flex flex-col">
+                <p className="text-[10px] text-green-400 uppercase tracking-wider mb-2 flex items-center gap-1 font-semibold flex-shrink-0"><Icon.Activity className="w-3 h-3" /> Live Monitor</p>
+                <div className="space-y-1.5 overflow-y-auto flex-1 min-h-0 pr-1">
+                  <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-white/[0.02] border border-white/5">
+                    <span className="text-[10px] text-gray-400 flex items-center gap-1"><Icon.Send className="w-2.5 h-2.5 text-violet-400" /> Sent</span>
+                    <span className="text-[11px] font-bold text-white tabular-nums">{progress?.totalSent || 0}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-white/[0.02] border border-white/5">
+                    <span className="text-[10px] text-gray-400 flex items-center gap-1"><Icon.CheckCircle className="w-2.5 h-2.5 text-green-400" /> Delivered</span>
+                    <span className="text-[11px] font-bold text-green-400 tabular-nums">{progress?.totalDelivered || 0}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-white/[0.02] border border-white/5">
+                    <span className="text-[10px] text-gray-400 flex items-center gap-1"><Icon.XCircle className="w-2.5 h-2.5 text-red-400" /> Bounced</span>
+                    <span className="text-[11px] font-bold text-red-400 tabular-nums">{progress?.totalUndelivered || 0}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-white/[0.02] border border-white/5">
+                    <span className="text-[10px] text-gray-400 flex items-center gap-1"><Icon.Alert className="w-2.5 h-2.5 text-amber-400" /> Invalid</span>
+                    <span className="text-[11px] font-bold text-amber-400 tabular-nums">{progress?.totalInvalid || 0}</span>
+                  </div>
+                  {progress && (progress.totalSent || 0) > 0 && (
+                    <div className="px-2 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[9px] text-violet-300 uppercase tracking-wider">Inbox Rate</span>
+                        <span className="text-[11px] font-bold text-violet-300 tabular-nums">{Math.round(((progress.totalDelivered || 0) / Math.max(progress.totalSent || 1, 1)) * 100)}%</span>
+                      </div>
+                      <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                        <div className="bg-gradient-to-r from-violet-500 to-green-500 h-full rounded-full transition-all" style={{ width: `${Math.round(((progress.totalDelivered || 0) / Math.max(progress.totalSent || 1, 1)) * 100)}%` }} />
+                      </div>
+                    </div>
+                  )}
+                  {senderAccounts.length > 0 && (
+                    <div className="px-2 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center gap-1">
+                      <Icon.Refresh className="w-2.5 h-2.5 text-violet-400 animate-spin" style={{ animationDuration: '3s' }} />
+                      <span className="text-[9px] text-violet-300">{senderAccounts.length} senders rotating</span>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* ── CENTER: All config (scrollable, compact) ── */}
             <div className="flex flex-col min-h-0 overflow-hidden order-1 lg:order-2">
               <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 min-h-0">
-                {/* Sender Mail + Render Mail */}
+                {/* UPGRADED: Subject at TOP of send form */}
+                <div className="bg-slate-900/50 border border-violet-500/20 rounded-xl p-2.5 space-y-2">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] text-gray-200 font-semibold flex items-center gap-1"><Icon.Mail className="w-3 h-3 text-violet-400" /> Subject Line <span className="text-violet-400 text-[9px] font-normal">(supports #RANDOM# etc.)</span></label>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => setShowPreview(true)} className="text-[9px] text-cyan-300 hover:text-cyan-200 flex items-center gap-0.5 bg-cyan-500/10 px-2 py-1 rounded-md border border-cyan-500/20 transition">
+                          <Icon.Eye className="w-2.5 h-2.5" /> Preview
+                        </button>
+                        <button onClick={() => { setTagTarget('subject'); setTagPickerOpen(true); }}
+                          className="text-[9px] text-amber-300 hover:text-amber-200 flex items-center gap-0.5"><Icon.Tag className="w-2.5 h-2.5" /> Insert Tag</button>
+                      </div>
+                    </div>
+                    <input value={subject} onChange={(e) => setSubject(e.target.value)}
+                      placeholder="Enter subject… use #RANDOM# for unique subjects"
+                      className="w-full px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 text-[11px]"
+                      maxLength={120} />
+                    <p className="text-[9px] text-gray-500 mt-0.5">{subject.length}/120 {subject.includes('#') && <span className="text-violet-300">· tag detected</span>}</p>
+                  </div>
+                </div>
+                {/* UPGRADED: Sender Mail only (Render Mail removed, Connect Email moved to status bar) */}
                 <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5">
                   <div className="grid sm:grid-cols-2 gap-2.5">
                     <div>
@@ -1427,16 +1576,16 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
                         className="w-full px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 text-[11px] font-mono" />
                     </div>
                     <div>
-                      <label className="block text-[11px] text-gray-300 mb-1 flex items-center gap-1"><Icon.Key className="w-3 h-3 text-violet-400" /> Render Mail (credentials.json)</label>
+                      <label className="block text-[11px] text-gray-300 mb-1 flex items-center gap-1"><Icon.Refresh className="w-3 h-3 text-violet-400" /> Connected Senders</label>
                       <div className="flex items-center gap-2">
                         <select value={activeSenderIdx} onChange={(e) => setActiveSenderIdx(Number(e.target.value))}
                           className="flex-1 px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 focus:outline-none focus:ring-1 focus:ring-violet-500 text-[11px] font-mono">
-                          {senderAccounts.length === 0 && <option value={0}>No accounts connected</option>}
+                          {senderAccounts.length === 0 && <option value={0}>No accounts — click Connect Email</option>}
                           {senderAccounts.map((s, i) => (
                             <option key={i} value={i}>{s.email} ({s.provider})</option>
                           ))}
                         </select>
-                        {senderRotate && (
+                        {senderRotate && senderAccounts.length > 0 && (
                           <span className="text-[9px] text-violet-300 flex items-center gap-0.5 flex-shrink-0">
                             <Icon.Refresh className="w-2.5 h-2.5 animate-spin" style={{ animationDuration: '3s' }} /> Rotate
                           </span>
@@ -1444,32 +1593,6 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
                       </div>
                     </div>
                   </div>
-                </div>
-
-                {/* Connect Gmail via credentials.json (BM2 Ultra "succeded" flow) */}
-                <div className="bg-gradient-to-br from-violet-500/10 to-cyan-500/5 border border-violet-500/20 rounded-xl p-2.5">
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-7 h-7 rounded-lg bg-violet-500/20 border border-violet-500/30 flex items-center justify-center flex-shrink-0">
-                        <Icon.Mail className="w-3.5 h-3.5 text-violet-300" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[11px] text-gray-200 font-semibold flex items-center gap-1">Connect Gmail <span className="text-[9px] px-1 py-0.5 rounded bg-violet-500/20 text-violet-300 border border-violet-500/30">credentials.json</span></p>
-                        <p className="text-[9px] text-gray-500 mt-0.5">Upload Google Cloud Desktop OAuth client → grant permission → connect</p>
-                      </div>
-                    </div>
-                    <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium cursor-pointer transition flex-shrink-0 ${connectingGmail ? 'bg-slate-700 text-gray-400' : 'bg-violet-600 hover:bg-violet-500 text-white'}`}>
-                      <Icon.Upload className="w-3.5 h-3.5" />
-                      {connectingGmail ? 'Opening Google…' : 'Upload & Connect'}
-                      <input ref={connectGmailInputRef} type="file" accept=".json,application/json" onChange={handleConnectGmailFile} className="hidden" disabled={connectingGmail} />
-                    </label>
-                  </div>
-                  {gmailConnectMsg && (
-                    <div className={`mt-2 px-2.5 py-1.5 rounded-lg text-[10px] flex items-start gap-1.5 ${gmailConnectMsg.type === 'success' ? 'bg-green-500/10 text-green-300 border border-green-500/20' : 'bg-red-500/10 text-red-300 border border-red-500/20'}`}>
-                      <span className="flex-shrink-0">{gmailConnectMsg.type === 'success' ? '✓' : '✕'}</span>
-                      <span className="leading-snug" dangerouslySetInnerHTML={{ __html: gmailConnectMsg.text }} />
-                    </div>
-                  )}
                   {senderAccounts.length > 0 && (
                     <div className="mt-2 flex items-center gap-1.5 flex-wrap">
                       {senderAccounts.slice(0, 6).map((s, i) => (
@@ -1503,6 +1626,14 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
                     <MiniToggle label="Auto-change Name" value={autoChangeName} onChange={setAutoChangeName} icon="User" accent="green" />
                     <MiniToggle label="Auto-change Subject" value={autoChangeSubject} onChange={setAutoChangeSubject} icon="Mail" accent="green" />
                   </div>
+                  {autoChangeName && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <label className="text-[10px] text-gray-400 flex items-center gap-1"><Icon.Refresh className="w-3 h-3 text-green-400" /> Change name every</label>
+                      <input type="number" min="1" max="999" value={autoNameInterval} onChange={(e) => setAutoNameInterval(Math.max(1, Number(e.target.value)))}
+                        className="w-16 px-2 py-1 bg-white/5 border border-white/10 rounded-md text-gray-100 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-green-500" />
+                      <span className="text-[10px] text-gray-500">emails</span>
+                    </div>
+                  )}
                   {autoChangeSubject && (
                     <div className="mt-2">
                       <label className="block text-[11px] text-gray-300 mb-1 flex items-center gap-1"><Icon.Mail className="w-3 h-3 text-green-400" /> Subject Variants <span className="text-gray-600 text-[9px]">(one per line, rotates per recipient)</span></label>
@@ -1588,40 +1719,26 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
                   </div>
                 )}
 
-                {/* Subject + Body */}
-                <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5 space-y-2">
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[11px] text-gray-300">Subject Line <span className="text-violet-400 text-[9px]">(supports #RANDOM# etc.)</span></label>
-                      <button onClick={() => { setTagTarget('subject'); setTagPickerOpen(true); }}
+                {/* Content (html) body — Subject moved to TOP */}
+                <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] text-gray-300">Content (html) <span className="text-gray-600 text-[9px]">— body</span></label>
+                    <div className="flex items-center gap-2">
+                      {spamChecking && <p className="text-[9px] text-gray-500 animate-pulse flex items-center gap-0.5"><Spinner size={8} /> AI…</p>}
+                      {spamPreview && !spamChecking && (
+                        <p className={`text-[9px] font-semibold flex items-center gap-0.5 ${spamPreview.level === 'high' ? 'text-red-400' : spamPreview.level === 'moderate' ? 'text-amber-400' : 'text-green-400'}`}>
+                          Spam: {spamPreview.score}/100 · {spamPreview.level}
+                        </p>
+                      )}
+                      <button onClick={() => { setTagTarget('body'); setTagPickerOpen(true); }}
                         className="text-[9px] text-amber-300 hover:text-amber-200 flex items-center gap-0.5"><Icon.Tag className="w-2.5 h-2.5" /> Insert Tag</button>
                     </div>
-                    <input value={subject} onChange={(e) => setSubject(e.target.value)}
-                      placeholder="Enter subject… use #RANDOM# for unique subjects"
-                      className="w-full px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 text-[11px]"
-                      maxLength={120} />
-                    <p className="text-[9px] text-gray-500 mt-0.5">{subject.length}/120 {subject.includes('#') && <span className="text-violet-300">· tag detected</span>}</p>
                   </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[11px] text-gray-300">Content (html) <span className="text-gray-600 text-[9px]">— body</span></label>
-                      <div className="flex items-center gap-2">
-                        {spamChecking && <p className="text-[9px] text-gray-500 animate-pulse flex items-center gap-0.5"><Spinner size={8} /> AI…</p>}
-                        {spamPreview && !spamChecking && (
-                          <p className={`text-[9px] font-semibold flex items-center gap-0.5 ${spamPreview.level === 'high' ? 'text-red-400' : spamPreview.level === 'moderate' ? 'text-amber-400' : 'text-green-400'}`}>
-                            Spam: {spamPreview.score}/100 · {spamPreview.level}
-                          </p>
-                        )}
-                        <button onClick={() => { setTagTarget('body'); setTagPickerOpen(true); }}
-                          className="text-[9px] text-amber-300 hover:text-amber-200 flex items-center gap-0.5"><Icon.Tag className="w-2.5 h-2.5" /> Insert Tag</button>
-                      </div>
-                    </div>
-                    <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={3}
-                      placeholder="Type HTML content… use tags like #RANDOM#, #RandomJunk#…"
-                      className="w-full px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-none text-[11px] font-mono"
-                      maxLength={2000} />
-                    <p className="text-[9px] text-gray-500 mt-0.5">{message.length}/2000</p>
-                  </div>
+                  <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={3}
+                    placeholder="Type HTML content… use tags like #RANDOM#, #RandomJunk#…"
+                    className="w-full px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-none text-[11px] font-mono"
+                    maxLength={2000} />
+                  <p className="text-[9px] text-gray-500 mt-0.5">{message.length}/2000</p>
                 </div>
 
                 {/* Content Type */}
@@ -1641,39 +1758,7 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
                   </div>
                 </div>
 
-                {/* Page Format */}
-                <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5">
-                  <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-2">Page Format</p>
-                  <div className="grid sm:grid-cols-3 gap-2">
-                    <div>
-                      <p className="text-[9px] text-gray-500 mb-1">Color / Spi</p>
-                      <div className="flex flex-wrap gap-1">
-                        {pageColors.map(pc => (
-                          <button key={pc.key} onClick={() => setPageColor(pc.key)}
-                            className={`px-2 py-1 rounded-md text-[9px] font-medium transition ${pageColor === pc.key ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-white/5 text-gray-400 hover:text-white border border-white/5'}`}>
-                            {pc.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-[9px] text-gray-500 mb-1">Each Every</p>
-                      <div className="flex items-center gap-1">
-                        <input type="number" min="1" max="500" value={eachEvery} onChange={(e) => setEachEvery(Number(e.target.value))}
-                          className="w-16 px-2 py-1 bg-white/5 border border-white/10 rounded-md text-gray-100 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-cyan-500" />
-                        <span className="text-[9px] text-gray-500">Every</span>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-[9px] text-gray-500 mb-1">Color: 05 Sec</p>
-                      <div className="flex items-center gap-1">
-                        <input type="number" min="0" max="60" value={colorSec} onChange={(e) => setColorSec(Number(e.target.value))}
-                          className="w-16 px-2 py-1 bg-white/5 border border-white/10 rounded-md text-gray-100 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-cyan-500" />
-                        <span className="text-[9px] text-gray-500">sec</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                {/* UPGRADED: Page Format removed per user request */}
 
                 {/* Options & Flags grid */}
                 <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5">
@@ -1692,58 +1777,59 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
                         className={`flex-1 px-1 py-1.5 rounded-md text-[9px] font-medium transition ${mailMode === 'auto' ? 'bg-indigo-600 text-white' : 'bg-white/5 text-gray-400 hover:text-white'}`}>Auto-body</button>
                     </div>
                     <MiniToggle label="Auto Reply" value={autoReply} onChange={setAutoReply} icon="Reply" accent="yellow" />
-                    <MiniToggle label="Auto Send" value={autoSend} onChange={setAutoSend} icon="Send" accent="green" />
+                    {/* UPGRADED: Auto Send removed per user request */}
                     <MiniToggle label="Import" value={importFlag} onChange={setImportFlag} icon="Upload" accent="cyan" />
                     <MiniToggle label="Auto-save" value={autoSave} onChange={setAutoSave} icon="Save" accent="cyan" />
                     <MiniToggle label="Check Bounce" value={checkBounce} onChange={setCheckBounce} icon="Bounce" accent="green" />
                     <MiniToggle label="Check Result?" value={checkResult} onChange={setCheckResult} icon="CheckCircle" accent="green" />
                     <MiniToggle label="Check Reply?" value={checkReply} onChange={setCheckReply} icon="Reply" accent="yellow" />
                     <MiniToggle label="Random text" value={randomText} onChange={setRandomText} icon="Sparkle" accent="yellow" />
-                    <MiniToggle label="Random HTML" value={randomHtml} onChange={setRandomHtml} icon="Palette" accent="violet" />
-                    <MiniToggle label="Random Test" value={randomTest} onChange={setRandomTest} icon="Zap" accent="yellow" />
+                    {/* UPGRADED: Random HTML removed per user request */}
+                    {/* UPGRADED: Random Test removed per user request */}
                     <MiniToggle label="Confirmed Ship" value={confirmedShipping} onChange={setConfirmedShipping} icon="Check" accent="green" />
                     <MiniToggle label="Priority Send" value={prioritySend} onChange={setPrioritySend} icon="Star" accent="yellow" />
-                    <MiniToggle label="Scheduled task" value={scheduledTask} onChange={setScheduledTask} icon="Clock" accent="cyan" />
+                    {/* UPGRADED: Scheduled task removed per user request */}
                   </div>
                 </div>
 
-                {/* Recipient textarea */}
-                <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[11px] text-gray-300">Recipient Emails <span className="text-gray-600 text-[9px]">(comma/newline/space)</span></label>
-                    <label className="flex items-center gap-1 text-[9px] text-violet-300 cursor-pointer hover:text-violet-200 bg-violet-500/10 px-2 py-1 rounded-md transition">
-                      <Icon.Upload className="w-3 h-3" /> Import
-                      <input type="file" accept=".csv,.txt" onChange={handleBulkImport} className="hidden" />
-                    </label>
-                  </div>
-                  <textarea value={numbersText} onChange={(e) => setNumbersText(e.target.value)} rows={3}
-                    placeholder={"user1@gmail.com\nuser2@yahoo.com\n…"}
-                    className="w-full px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-none text-[11px] font-mono" />
-                  <p className="text-[9px] text-gray-500 mt-0.5">{parsedEmails.length} emails · {Math.min(parsedEmails.length, remaining)} will be sent (quota: {remaining})</p>
-                </div>
+                {/* UPGRADED: Recipient textarea moved to RIGHT column (Recipient List panel) */}
 
-                {/* Anti-spam config (compact) */}
+                {/* Anti-spam config — behind toggle (show/hide + Save) */}
                 <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5">
-                  <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1"><Icon.Shield className="w-3 h-3 text-green-400" /> Anti-Spam Config</p>
-                  <div className="grid sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className="text-[9px] text-gray-300 flex justify-between"><span>Batch</span><span className="text-violet-300 font-medium">{batchSize}</span></label>
-                      <input type="range" min="1" max="20" value={batchSize} onChange={(e) => setBatchSize(Number(e.target.value))} className="w-full accent-violet-500 mt-0.5" />
+                  <button onClick={() => setShowAntiSpam(!showAntiSpam)}
+                    className="w-full flex items-center justify-between mb-0">
+                    <span className="text-[9px] text-gray-500 uppercase tracking-wider flex items-center gap-1"><Icon.Shield className="w-3 h-3 text-green-400" /> Anti-Spam Config <span className="text-gray-600 normal-case tracking-normal">· {showAntiSpam ? 'Hide' : 'Show'}</span></span>
+                    <Icon.ChevronRight className={`w-3.5 h-3.5 text-gray-500 transition-transform ${showAntiSpam ? 'rotate-90' : ''}`} />
+                  </button>
+                  {showAntiSpam && (
+                    <div className="mt-2 space-y-2">
+                      <div className="grid sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="text-[9px] text-gray-300 flex justify-between"><span>Batch</span><span className="text-violet-300 font-medium">{batchSize}</span></label>
+                          <input type="range" min="1" max="20" value={batchSize} onChange={(e) => setBatchSize(Number(e.target.value))} className="w-full accent-violet-500 mt-0.5" />
+                        </div>
+                        <div>
+                          <label className="text-[9px] text-gray-300 flex justify-between"><span>Delay (ms)</span><span className="text-violet-300 font-medium">{delayMsInput}ms</span></label>
+                          <input type="number" min="100" max="10000" step="100" value={delayMsInput} onChange={(e) => { const v = Math.max(100, Number(e.target.value) || 100); setDelayMsInput(v); setDelayMs(v); }}
+                            className="w-full px-2 py-1 bg-white/5 border border-white/10 rounded-md text-gray-100 text-[10px] font-mono focus:outline-none focus:ring-1 focus:ring-violet-500 mt-0.5" />
+                          <p className="text-[8px] text-gray-600 mt-0.5">Min 100ms · {(delayMsInput / 1000).toFixed(2)}s</p>
+                        </div>
+                        <div>
+                          <label className="text-[9px] text-gray-300 flex justify-between"><span>Jitter ±</span><span className="text-violet-300 font-medium">{jitterPct}%</span></label>
+                          <input type="range" min="0" max="100" value={jitterPct} onChange={(e) => setJitterPct(Number(e.target.value))} className="w-full accent-violet-500 mt-0.5" />
+                        </div>
+                      </div>
+                      <div className="grid sm:grid-cols-3 gap-1.5">
+                        <ToggleRow label="Humanize" desc="Mimics human" value={humanize} onChange={setHumanize} />
+                        <ToggleRow label="Drip Mode" desc="Spread over time" value={dripMode} onChange={setDripMode} />
+                        <ToggleRow label="Change/each send" desc="Rewrite per recipient" value={polymorph} onChange={setPolymorph} />
+                      </div>
+                      <button onClick={() => setShowAntiSpam(false)}
+                        className="w-full flex items-center justify-center gap-1 px-2 py-1.5 bg-green-600/20 hover:bg-green-600/30 text-green-300 rounded-md text-[10px] font-bold border border-green-500/30 transition">
+                        <Icon.Save className="w-3 h-3" /> Save & Close
+                      </button>
                     </div>
-                    <div>
-                      <label className="text-[9px] text-gray-300 flex justify-between"><span>Delay</span><span className="text-violet-300 font-medium">{(delayMs / 1000).toFixed(1)}s</span></label>
-                      <input type="range" min="500" max="5000" step="100" value={delayMs} onChange={(e) => setDelayMs(Number(e.target.value))} className="w-full accent-violet-500 mt-0.5" />
-                    </div>
-                    <div>
-                      <label className="text-[9px] text-gray-300 flex justify-between"><span>Jitter ±</span><span className="text-violet-300 font-medium">{jitterPct}%</span></label>
-                      <input type="range" min="0" max="100" value={jitterPct} onChange={(e) => setJitterPct(Number(e.target.value))} className="w-full accent-violet-500 mt-0.5" />
-                    </div>
-                  </div>
-                  <div className="grid sm:grid-cols-3 gap-1.5 mt-2">
-                    <ToggleRow label="Humanize" desc="Mimics human" value={humanize} onChange={setHumanize} />
-                    <ToggleRow label="Drip Mode" desc="Spread over time" value={dripMode} onChange={setDripMode} />
-                    <ToggleRow label="Change/each send" desc="Rewrite per recipient" value={polymorph} onChange={setPolymorph} />
-                  </div>
+                  )}
                 </div>
 
                 {/* Test Mail? + Auto-rotate sender */}
@@ -1909,32 +1995,128 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
               </div>
             </div>
 
-            {/* ── RIGHT: Image preview grid ── */}
+            {/* ── RIGHT: Recipient List + Paste + live validation + Start Campaign (UPGRADED) ── */}
             <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5 flex flex-col min-h-0 overflow-hidden order-3">
-              <p className="text-[10px] text-amber-400 uppercase tracking-wider mb-1.5 flex items-center gap-1 font-semibold flex-shrink-0"><Icon.Image className="w-3 h-3" /> Image Preview</p>
-              <div className="flex-1 overflow-y-auto min-h-0">
-                {contentMode === 'inline' || contentMode === 'image' ? (
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {[1,2,3,4,5,6].map(n => (
-                      <div key={n} className="aspect-square rounded-lg bg-gradient-to-br from-slate-700 to-slate-800 border border-white/5 flex items-center justify-center">
-                        <Icon.Image className="w-4 h-4 text-gray-600" />
-                      </div>
-                    ))}
-                    <p className="col-span-2 text-[9px] text-gray-600 text-center pt-1">Inline images embed here</p>
-                  </div>
-                ) : contentMode === 'pdf' ? (
-                  <div className="space-y-1.5">
-                    {[1,2,3].map(n => (
-                      <div key={n} className="aspect-[3/4] rounded-lg bg-gradient-to-b from-slate-700 to-slate-800 border border-white/5 flex items-center justify-center">
-                        <Icon.FilePdf className="w-5 h-5 text-gray-600" />
-                      </div>
-                    ))}
-                    <p className="text-[9px] text-gray-600 text-center pt-1">PDF pages preview</p>
+              <div className="flex items-center justify-between mb-1.5 flex-shrink-0">
+                <p className="text-[10px] text-amber-400 uppercase tracking-wider flex items-center gap-1 font-semibold"><Icon.Users className="w-3 h-3" /> Recipients</p>
+                <div className="flex items-center gap-1">
+                  <button onClick={handlePasteEmails} className="flex items-center gap-0.5 text-[9px] text-violet-300 hover:text-violet-200 bg-violet-500/10 px-1.5 py-0.5 rounded-md border border-violet-500/20 transition">
+                    <Icon.Clipboard className="w-2.5 h-2.5" /> Paste
+                  </button>
+                  <label className="flex items-center gap-0.5 text-[9px] text-cyan-300 hover:text-cyan-200 bg-cyan-500/10 px-1.5 py-0.5 rounded-md border border-cyan-500/20 cursor-pointer transition">
+                    <Icon.Upload className="w-2.5 h-2.5" /> Import
+                    <input type="file" accept=".csv,.txt" onChange={handleBulkImport} className="hidden" />
+                  </label>
+                </div>
+              </div>
+              {/* Compact textarea for quick entry */}
+              <textarea data-recipient-textarea value={numbersText} onChange={(e) => setNumbersText(e.target.value)} rows={2}
+                placeholder={"user1@gmail.com\nuser2@yahoo.com\n…"}
+                className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-none text-[10px] font-mono flex-shrink-0 mb-1.5" />
+              {/* Live validation results list (green check / red cross) */}
+              <div className="flex-1 overflow-y-auto min-h-0 pr-1 -mr-1">
+                {parsedEmails.length === 0 ? (
+                  <div className="text-center py-6">
+                    <Icon.Users className="w-6 h-6 text-gray-700 mx-auto mb-1.5" />
+                    <p className="text-[10px] text-gray-600">Paste or import emails to begin</p>
                   </div>
                 ) : (
-                  <p className="text-[10px] text-gray-600 text-center py-8">Select Inline/Image/PDF to preview</p>
+                  <div className="space-y-0.5">
+                    {parsedEmails.slice(0, 60).map((em, i) => {
+                      const v = emailValidation[em];
+                      return (
+                        <div key={i} className="flex items-center gap-1.5 px-1.5 py-1 rounded-md bg-white/[0.02] border border-white/5">
+                          <span className="text-[8px] text-gray-600 w-4 flex-shrink-0 tabular-nums">{i + 1}</span>
+                          {v && v.checking ? (
+                            <Spinner size={9} />
+                          ) : v && v.valid ? (
+                            <Icon.CheckCircle className="w-2.5 h-2.5 text-green-400 flex-shrink-0" />
+                          ) : v && !v.valid ? (
+                            <Icon.XCircle className="w-2.5 h-2.5 text-red-400 flex-shrink-0" />
+                          ) : (
+                            <span className="w-2.5 h-2.5 rounded-full bg-gray-600 flex-shrink-0 animate-pulse" />
+                          )}
+                          <span className={`text-[9px] truncate flex-1 ${v && !v.valid ? 'text-red-400' : 'text-gray-300'}`} title={em}>{em}</span>
+                        </div>
+                      );
+                    })}
+                    {parsedEmails.length > 60 && (
+                      <p className="text-[9px] text-gray-600 text-center pt-1">+{parsedEmails.length - 60} more</p>
+                    )}
+                  </div>
                 )}
               </div>
+              {/* Summary + Start Campaign button */}
+              <div className="flex-shrink-0 pt-1.5 mt-1 border-t border-white/5">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[9px] text-gray-500">{parsedEmails.length} total</span>
+                  <span className="text-[9px] text-green-400">{Object.values(emailValidation).filter(v => v && v.valid).length} valid</span>
+                  <span className="text-[9px] text-red-400">{Object.values(emailValidation).filter(v => v && !v.valid).length} invalid</span>
+                </div>
+                <button onClick={handleSend}
+                  disabled={loading || remaining <= 0 || parsedEmails.length === 0 || (spamPreview && spamPreview.level === 'high')}
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-[11px] font-bold transition shadow-lg shadow-violet-600/30">
+                  {loading ? <Spinner size={11} /> : <Icon.Rocket className="w-3.5 h-3.5" />} Start Campaign
+                </button>
+                {loading && (
+                  <div className="grid grid-cols-2 gap-1 mt-1">
+                    <button onClick={handlePause}
+                      className={`flex items-center justify-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-bold transition ${paused ? 'bg-green-600 hover:bg-green-500 text-white' : 'bg-amber-600 hover:bg-amber-500 text-white'}`}>
+                      {paused ? <><Icon.Play className="w-3 h-3" /> Resume</> : <><Icon.Pause className="w-3 h-3" /> Pause</>}
+                    </button>
+                    <button onClick={handleStop}
+                      className="flex items-center justify-center gap-1 px-2 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-md text-[10px] font-bold transition">
+                      <Icon.Stop className="w-3 h-3" /> Stop
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Email Preview Overlay (in-page, close + fullscreen) */}
+      {showPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => { setShowPreview(false); setPreviewFullscreen(false); }}>
+          <div className={`bg-slate-900 border border-violet-500/30 rounded-2xl shadow-2xl flex flex-col overflow-hidden ${previewFullscreen ? 'w-full h-full max-w-none max-h-none rounded-none' : 'w-full max-w-2xl max-h-[85vh] rounded-2xl'}`} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-slate-950/50 flex-shrink-0">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2"><Icon.Eye className="w-4 h-4 text-violet-400" /> Email Preview</h3>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setPreviewFullscreen(!previewFullscreen)} className="text-[10px] text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 px-2 py-1 rounded-md transition flex items-center gap-1">
+                  <Icon.Activity className="w-3 h-3" /> {previewFullscreen ? 'Exit Full' : 'Fullscreen'}
+                </button>
+                <button onClick={() => { setShowPreview(false); setPreviewFullscreen(false); }} className="text-gray-500 hover:text-white"><Icon.Close className="w-5 h-5" /></button>
+              </div>
+            </div>
+            <div className="overflow-y-auto flex-1 p-4 space-y-3">
+              {/* Email header preview */}
+              <div className="bg-white/5 rounded-lg p-3 space-y-1.5 border border-white/5">
+                <div className="flex items-start gap-2"><span className="text-[10px] text-gray-500 w-12 flex-shrink-0">From:</span><span className="text-[11px] text-gray-200">{fromName || senderMail || 'sender@gmail.com'} <span className="text-gray-500">&lt;{senderMail || 'auto-selected sender'}&gt;</span></span></div>
+                <div className="flex items-start gap-2"><span className="text-[10px] text-gray-500 w-12 flex-shrink-0">To:</span><span className="text-[11px] text-gray-200">{parsedEmails[0] || 'recipient@example.com'}{parsedEmails.length > 1 && <span className="text-gray-500"> +{parsedEmails.length - 1} more</span>}</span></div>
+                <div className="flex items-start gap-2"><span className="text-[10px] text-gray-500 w-12 flex-shrink-0">Subject:</span><span className="text-[11px] text-violet-300 font-medium">{subject || '(no subject)'}</span></div>
+              </div>
+              {/* Email body preview */}
+              <div className="bg-white rounded-lg p-4 min-h-[200px] border border-white/10">
+                {contentMode === 'html' || bodyMode === 'html' ? (
+                  <div className="text-gray-800 text-sm" dangerouslySetInnerHTML={{ __html: message || '<p style="color:#999;font-style:italic">(empty body - type content in the Content field)</p>' }} />
+                ) : (
+                  <pre className="text-gray-800 text-sm whitespace-pre-wrap font-sans">{message || '(empty body - type content in the Content field)'}</pre>
+                )}
+                {trackPixel && <img src="https://track.example.com/pixel.gif" alt="" width="1" height="1" className="opacity-10" />}
+              </div>
+              {/* Config summary */}
+              <div className="flex flex-wrap gap-1.5">
+                <span className="text-[9px] px-2 py-0.5 rounded-md bg-violet-500/10 text-violet-300 border border-violet-500/20">{contentTypes.find(c => c.key === contentMode)?.label || 'HTML'}</span>
+                {trackPixel && <span className="text-[9px] px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">Track Pixel ON</span>}
+                {autoChangeName && <span className="text-[9px] px-2 py-0.5 rounded-md bg-green-500/10 text-green-300 border border-green-500/20">Auto Name every {autoNameInterval}</span>}
+                {autoChangeSubject && <span className="text-[9px] px-2 py-0.5 rounded-md bg-green-500/10 text-green-300 border border-green-500/20">Auto Subject</span>}
+                {senderRotate && <span className="text-[9px] px-2 py-0.5 rounded-md bg-violet-500/10 text-violet-300 border border-violet-500/20">Sender Rotate</span>}
+                <span className="text-[9px] px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20">Delay {delayMs}ms</span>
+              </div>
+            </div>
+            <div className="px-4 py-3 border-t border-white/10 bg-slate-950/50 flex-shrink-0">
+              <button onClick={() => { setShowPreview(false); setPreviewFullscreen(false); }}
+                className="w-full px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-sm font-medium transition">Close Preview</button>
             </div>
           </div>
         </div>
