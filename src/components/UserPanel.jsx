@@ -1254,10 +1254,33 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
       }
       // Show redirect_uri registration guidance if needed
       if (data.needsRegistration && data.ourCallbackUri) {
+        const isDesktop = data.clientType === 'installed';
+        const steps = isDesktop
+          ? `<div style="margin:8px 0;padding:8px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:6px;font-size:11px;line-height:1.5">
+               <b style="color:#fbbf24">⚠ Desktop App credentials detected</b><br>
+               Your credentials.json is a <b>Desktop app</b> type. Desktop apps only have <code>http://localhost</code> redirect URIs which <b>cannot work</b> with our server callback.<br><br>
+               <b>Fix (2 options):</b><br>
+               <b>Option A (Recommended):</b> Create a <b>Web Application</b> OAuth client instead.<br>
+               &nbsp;&nbsp;1. Google Cloud Console → APIs &amp; Services → Credentials → "Create Credentials" → "OAuth client ID"<br>
+               &nbsp;&nbsp;2. Application type: <b>Web application</b><br>
+               &nbsp;&nbsp;3. Under "Authorized redirect URIs" → click "ADD URI" → paste the URL below<br>
+               &nbsp;&nbsp;4. Click "Create" → download the new <b>credentials.json</b> → upload it here<br><br>
+               <b>Option B:</b> Keep your Desktop client but add our callback URI manually.<br>
+               &nbsp;&nbsp;Google Cloud Console → Credentials → your OAuth client → "Authorized redirect URIs" → Add URI below → Save → re-upload here
+             </div>`
+          : `<div style="margin:8px 0;padding:8px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:6px;font-size:11px;line-height:1.5">
+               <b style="color:#fbbf24">⚠ Redirect URI not registered yet</b><br>
+               Follow these steps to fix:<br>
+               &nbsp;&nbsp;<b>1.</b> Open <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:#a78bfa;text-decoration:underline">Google Cloud Console → Credentials</a><br>
+               &nbsp;&nbsp;<b>2.</b> Click your <b>OAuth 2.0 Client ID</b><br>
+               &nbsp;&nbsp;<b>3.</b> Scroll to <b>"Authorized redirect URIs"</b> → click <b>"ADD URI"</b><br>
+               &nbsp;&nbsp;<b>4.</b> Paste this exact URL → <b>Save</b><br>
+               &nbsp;&nbsp;<b>5.</b> Re-download credentials.json (optional) → re-upload it here
+             </div>`;
         updateCampaign(campaignId, {
           gmailConnectMsg: {
             type: 'error',
-            text: `<b>&#9888; Setup required &mdash; Redirect URI not registered</b><br>Add this URI to Google Cloud Console &rarr; Credentials &rarr; OAuth Client &rarr; Authorized redirect URIs:<br><code style="display:block;margin:4px 0;padding:4px 8px;background:rgba(0,0,0,0.3);border-radius:4px;font-size:9px;word-break:break-all">${data.ourCallbackUri}</code>After adding it, re-upload your .json file and try again.`,
+            text: `<b>&#9888; Setup required &mdash; Redirect URI not registered</b><br>${steps}<div style="margin-top:8px"><b style="color:#a78bfa;font-size:11px">📋 Copy this Redirect URI (add it to Google Cloud Console):</b><br><code style="display:block;margin:4px 0;padding:8px 12px;background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.4);border-radius:6px;font-size:10px;word-break:break-all;cursor:pointer;color:#c4b5fd" onclick="navigator.clipboard?.writeText(this.innerText);this.style.background='rgba(34,197,94,0.2)'">${data.ourCallbackUri}</code><span style="font-size:10px;color:#64748b">💡 Click the URL above to copy it</span></div>`,
           },
           connectingGmail: false,
         });

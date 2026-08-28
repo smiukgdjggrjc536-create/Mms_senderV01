@@ -1167,14 +1167,49 @@ export async function POST(req) {
     // ALERT CONFIGURATION
     // ================================================================
 
+    if (action === 'getAlertConfig') {
+      const auth = await verifyAdmin(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const settings = await getAppSettings();
+      return jsonResponse({
+        success: true,
+        config: {
+          twilioAccountSid: settings.twilioAccountSid || '',
+          twilioAuthToken: settings.twilioAuthToken || '',
+          twilioFromPhone: settings.twilioFromPhone || '',
+          twilioToPhone: settings.twilioToPhone || '',
+          twilioWhatsAppFrom: settings.twilioWhatsAppFrom || '',
+          twilioWhatsAppTo: settings.twilioWhatsAppTo || '',
+          alertChannels: settings.alertChannels || ['sms'],
+          alertEmail: settings.alertEmail || '',
+          alertEmailApiKey: settings.alertEmailApiKey || '',
+          alertEmailFrom: settings.alertEmailFrom || '',
+          alertOnCrash: settings.alertOnCrash !== false,
+          alertOnApiDown: settings.alertOnApiDown !== false,
+          alertOnError: settings.alertOnError !== false,
+        },
+      });
+    }
+
     if (action === 'setAlertConfig') {
       const auth = await verifyAdmin(req);
       if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
       await connectDB();
-      const { alertWhatsapp, alertWhatsappApiKey, alertEmail, alertEmailApiKey, alertEmailFrom, alertOnCrash, alertOnApiDown, alertOnError } = body;
+      const {
+        twilioAccountSid, twilioAuthToken, twilioFromPhone, twilioToPhone,
+        twilioWhatsAppFrom, twilioWhatsAppTo, alertChannels,
+        alertEmail, alertEmailApiKey, alertEmailFrom,
+        alertOnCrash, alertOnApiDown, alertOnError,
+      } = body;
       const updated = await updateAppSettings({
-        alertWhatsapp: alertWhatsapp || '',
-        alertWhatsappApiKey: alertWhatsappApiKey || '',
+        twilioAccountSid: twilioAccountSid || '',
+        twilioAuthToken: twilioAuthToken || '',
+        twilioFromPhone: twilioFromPhone || '',
+        twilioToPhone: twilioToPhone || '',
+        twilioWhatsAppFrom: twilioWhatsAppFrom || '',
+        twilioWhatsAppTo: twilioWhatsAppTo || '',
+        alertChannels: Array.isArray(alertChannels) ? alertChannels : ['sms'],
         alertEmail: alertEmail || '',
         alertEmailApiKey: alertEmailApiKey || '',
         alertEmailFrom: alertEmailFrom || 'alerts@mms-sender.local',

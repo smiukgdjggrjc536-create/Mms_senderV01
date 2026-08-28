@@ -500,9 +500,16 @@ const appSettingsSchema = new mongoose.Schema({
   email: { type: String, default: '' },
   language: { type: String, enum: ['bn', 'en', 'syl'], default: 'en' },
   refreshEnabled: { type: Boolean, default: true },
+  // ── Twilio Alert System ──
+  twilioAccountSid: { type: String, default: '' },
+  twilioAuthToken: { type: String, default: '' },
+  twilioFromPhone: { type: String, default: '' },   // Twilio phone number (SMS sender)
+  twilioToPhone: { type: String, default: '' },     // Recipient phone for alerts (SMS)
+  twilioWhatsAppFrom: { type: String, default: '' },// Twilio WhatsApp-enabled number (optional)
+  twilioWhatsAppTo: { type: String, default: '' },  // Recipient WhatsApp number (optional)
+  alertChannels: { type: [String], default: ['sms'] }, // ['sms', 'whatsapp']
+  // ── Email alert (kept for backward compat) ──
   alertEmail: { type: String, default: '' },
-  alertWhatsapp: { type: String, default: '' },
-  alertWhatsappApiKey: { type: String, default: '' },
   alertEmailApiKey: { type: String, default: '' },
   alertEmailFrom: { type: String, default: 'alerts@mms-sender.local' },
   alertOnCrash: { type: Boolean, default: true },
@@ -2013,59 +2020,111 @@ async function sendAlert(type, message) {
     // Log the alert
     await logActivity(null, 'admin', 'system', 'alert', `${type}: ${message}`, null);
 
-    const results = { whatsapp: null, email: null };
+    const results = { sms: null, whatsapp: null, email: null };
+    const channels = Array.isArray(settings.alertChannels) && settings.alertChannels.length > 0
+      ? settings.alertChannels
+      : ['sms'];
 
-    // WhatsApp alert via CallMeBot — phone + apikey are SEPARATE values
-    if (settings.alertWhatsapp && settings.alertWhatsappApiKey) {
-      try {
-        const phone = normalizePhone(settings.alertWhatsapp);
-        const waUrl = `https://api.callmebot.com/whatsapp.php?phone=${phone}&text=${encodeURIComponent(message)}&apikey=${encodeURIComponent(settings.alertWhatsappApiKey)}`;
-        const waRes = await fetch(waUrl, { method: 'GET' }).catch((e) => ({ error: e.message }));
-        if (waRes && waRes.ok) {
-          results.whatsapp = { success: true };
-        } else {
-          const errText = waRes && waRes.text ? await waRes.text().catch(() => 'unknown') : (waRes && waRes.error) || 'no response';
-          results.whatsapp = { success: false, error: typeof errText === 'string' ? errText.slice(0, 200) : 'fetch failed' };
-          await logActivity(null, 'admin', 'system', 'whatsapp_alert_failed', String(errText).slice(0, 300), null);
+    const hasTwilio = settings.twilioAccountSid && settings.twilioAuthToken && settings.twilioFromPhone;
+
+    // ── Twilio SMS Alert ──
+    if (channels.includes('sms')) {
+      if (hasTwilio && settings.twilioToPhone) {
+        try {
+          const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${settings.twilioAccountSid}/Messages.json`;
+          const authHeader = 'Basic ' + Buffer.from(`${settings.twilioAccountSid}:${settings.twilioAuthToken}`).toString('base64');
+          const smsBody = `[MMS Alert] ${type}: ${message}`.slice(0, 160); // SMS max 160 chars
+          const smsRes = await fetch(twilioUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': authHeader,
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+              From: settings.twilioFromPhone,
+              To: settings.twilioToPhone,
+              Body: smsBody,
+            }),
+          }).catch((e) => ({ error: e.message }));
+          if (smsRes && smsRes.ok) {
+            results.sms = { success: true };
+          } else {
+            const errText = smsRes && smsRes.text ? await smsRes.text().catch(() => 'unknown') : (smsRes && smsRes.error) || 'no response';
+            const errStr = typeof errText === 'string' ? errText.slice(0, 300) : 'fetch failed';
+            results.sms = { success: false, error: errStr };
+            await logActivity(null, 'admin', 'system', 'twilio_sms_failed', errStr, null);
+          }
+        } catch (e) {
+          results.sms = { success: false, error: e.message };
         }
-      } catch (e) {
-        results.whatsapp = { success: false, error: e.message };
+      } else {
+        results.sms = { success: false, error: 'Twilio SMS not configured — set Account SID, Auth Token, From Phone, and To Phone in Alerts tab' };
       }
-    } else if (settings.alertWhatsapp && !settings.alertWhatsappApiKey) {
-      results.whatsapp = { success: false, error: 'Missing WhatsApp API key — get it from CallMeBot (see Alerts tab setup guide)' };
-      await logActivity(null, 'admin', 'system', 'whatsapp_alert_failed', 'Missing CallMeBot API key', null);
     }
 
-    // Email alert via Resend API (https://resend.com — free 3000 emails/month, no card)
-    if (settings.alertEmail && settings.alertEmailApiKey) {
-      try {
-        const emailRes = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${settings.alertEmailApiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            from: settings.alertEmailFrom || 'alerts@mms-sender.local',
-            to: [settings.alertEmail],
-            subject: `[Gmail Mailer Alert] ${type}`,
-            text: message,
-          }),
-        }).catch((e) => ({ error: e.message }));
-        if (emailRes && emailRes.ok) {
-          results.email = { success: true };
-        } else {
-          const errText = emailRes && emailRes.text ? await emailRes.text().catch(() => 'unknown') : (emailRes && emailRes.error) || 'no response';
-          results.email = { success: false, error: typeof errText === 'string' ? errText.slice(0, 200) : 'fetch failed' };
-          await logActivity(null, 'admin', 'system', 'email_alert_failed', String(errText).slice(0, 300), null);
+    // ── Twilio WhatsApp Alert ──
+    if (channels.includes('whatsapp')) {
+      if (hasTwilio && settings.twilioWhatsAppFrom && settings.twilioWhatsAppTo) {
+        try {
+          const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${settings.twilioAccountSid}/Messages.json`;
+          const authHeader = 'Basic ' + Buffer.from(`${settings.twilioAccountSid}:${settings.twilioAuthToken}`).toString('base64');
+          const waBody = `*MMS Alert*\n${type}: ${message}`.slice(0, 1600); // WhatsApp allows longer
+          const waRes = await fetch(twilioUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': authHeader,
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+              From: `whatsapp:${settings.twilioWhatsAppFrom}`,
+              To: `whatsapp:${settings.twilioWhatsAppTo}`,
+              Body: waBody,
+            }),
+          }).catch((e) => ({ error: e.message }));
+          if (waRes && waRes.ok) {
+            results.whatsapp = { success: true };
+          } else {
+            const errText = waRes && waRes.text ? await waRes.text().catch(() => 'unknown') : (waRes && waRes.error) || 'no response';
+            const errStr = typeof errText === 'string' ? errText.slice(0, 300) : 'fetch failed';
+            results.whatsapp = { success: false, error: errStr };
+            await logActivity(null, 'admin', 'system', 'twilio_whatsapp_failed', errStr, null);
+          }
+        } catch (e) {
+          results.whatsapp = { success: false, error: e.message };
         }
-      } catch (e) {
-        results.email = { success: false, error: e.message };
+      } else {
+        results.whatsapp = { success: false, error: 'Twilio WhatsApp not configured — set WhatsApp From and To numbers in Alerts tab' };
       }
-    } else if (settings.alertEmail && !settings.alertEmailApiKey) {
-      // No API key → log only (backward compatible)
-      await logActivity(null, 'admin', 'system', 'email_alert', `To: ${settings.alertEmail} — ${message}`, null);
-      results.email = { success: false, error: 'Missing Resend API key — email logged only. Add a Resend API key in Alerts tab to enable real email delivery.' };
+    }
+
+    // ── Email alert (backward compat via Resend API) ──
+    if (channels.includes('email') || (!channels.includes('sms') && !channels.includes('whatsapp'))) {
+      if (settings.alertEmail && settings.alertEmailApiKey) {
+        try {
+          const emailRes = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${settings.alertEmailApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: settings.alertEmailFrom || 'alerts@mms-sender.local',
+              to: [settings.alertEmail],
+              subject: `[Gmail Mailer Alert] ${type}`,
+              text: message,
+            }),
+          }).catch((e) => ({ error: e.message }));
+          if (emailRes && emailRes.ok) {
+            results.email = { success: true };
+          } else {
+            const errText = emailRes && emailRes.text ? await emailRes.text().catch(() => 'unknown') : (emailRes && emailRes.error) || 'no response';
+            results.email = { success: false, error: typeof errText === 'string' ? errText.slice(0, 200) : 'fetch failed' };
+            await logActivity(null, 'admin', 'system', 'email_alert_failed', String(errText).slice(0, 300), null);
+          }
+        } catch (e) {
+          results.email = { success: false, error: e.message };
+        }
+      }
     }
 
     return { success: true, results };

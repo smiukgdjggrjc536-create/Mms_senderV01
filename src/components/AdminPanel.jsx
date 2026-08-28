@@ -490,7 +490,8 @@ function AdminDashboard({ user, onLogout, onRefresh }) {
     {
       group: 'System', items: [
         { id: 'content', label: 'Content & Templates', icon: <Icon.Content /> },
-        { id: 'sms-guide', label: 'Email Setup Guide', icon: <Icon.Mail /> },
+        { id: 'alerts', label: 'Alerts & Notifications', icon: <Icon.Bell /> },
+        { id: 'subadmins', label: 'Sub-Admins', icon: <Icon.Users />, superadminOnly: true },
         { id: 'security', label: 'Admin Security', icon: <Icon.Shield /> },
         { id: 'settings', label: 'Settings', icon: <Icon.Settings /> },
       ]
@@ -513,7 +514,13 @@ function AdminDashboard({ user, onLogout, onRefresh }) {
             <div key={si} className="mb-1">
               <p className="px-3 pt-3 pb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-600 select-none">{section.group}</p>
               <div className="space-y-0.5">
-                {section.items.map(t => (
+                {section.items.filter(t => {
+                  // Super-admin only items
+                  if (t.superadminOnly && user?.role !== 'admin') return false;
+                  // Sub-admin permission check (subadmins tab itself is superadmin-only, handled above)
+                  if (user?.role === 'subadmin' && user?.permissions && !user.permissions.includes('all') && !user.permissions.includes(t.id)) return false;
+                  return true;
+                }).map(t => (
                   <button key={t.id} onClick={() => { setTab(t.id); setSidebarOpen(false); }}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition ${tab === t.id ? (t.primary ? 'bg-gradient-to-r from-sky-600/30 to-blue-600/20 text-sky-300 border border-sky-700/40' : 'bg-blue-600/20 text-blue-400 border border-blue-700/30') : 'text-gray-400 hover:bg-slate-800 hover:text-gray-200 border border-transparent'}`}>
                     {t.icon}<span className="flex-1 text-left">{t.label}</span>
@@ -577,8 +584,9 @@ function AdminDashboard({ user, onLogout, onRefresh }) {
           {tab === 'campaigns' && <CampaignsTab />}
           {tab === 'scheduled' && <ScheduledSendsTab />}
           {tab === 'content' && <ContentTab />}
+          {tab === 'alerts' && <AlertsTab />}
+          {tab === 'subadmins' && (user?.role === 'admin' ? <SubAdminsTab /> : <div className="text-gray-400 p-8 text-center">Access denied — Super Admin only</div>)}
           {tab === 'database' && <DatabaseTab />}
-          {tab === 'sms-guide' && <FreeSmsGuideTab />}
           {tab === 'logs' && <LogsTab />}
           {tab === 'security' && <SecurityTab user={user} />}
           {tab === 'settings' && <SettingsTab />}
@@ -1744,173 +1752,6 @@ function ContentTab() {
   );
 }
 
-function FreeSmsGuideTab() {
-  const [copied, setCopied] = useState(null);
-  const copy = (text, key) => { navigator.clipboard?.writeText(text); setCopied(key); setTimeout(() => setCopied(null), 2000); };
-
-  return (
-    <div className="space-y-6 max-w-4xl">
-      <div>
-        <h2 className="text-2xl font-bold text-white">ফ্রি ইমেইল সেন্ডিং সেটআপ গাইড</h2>
-        <p className="text-sm text-gray-400 mt-1">Gmail, Outlook, এবং Custom SMTP দিয়ে ফ্রি ইমেইল পাঠানোর সম্পূর্ণ গাইড। কোনো ক্রেডিট কার্ড লাগবে না। নিচে ৩টি অপশন দেওয়া আছে — Gmail OAuth2 (সবচেয়ে ভালো), Gmail App Password (সহজ), এবং Outlook Graph API (এন্টারপ্রাইজ)।</p>
-      </div>
-
-      {/* ── Option 1: Gmail OAuth2 (Best deliverability) ── */}
-      <div className="bg-slate-900/50 border border-emerald-800/40 rounded-xl p-6 space-y-4">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">🔒</span>
-          <div>
-            <h3 className="text-lg font-semibold text-white">অপশন ১: Gmail OAuth2 (সবচেয়ে ভালো — ৫০০ ইমেইল/দিন) <span className="text-xs bg-emerald-900/50 text-emerald-300 px-2 py-0.5 rounded-full ml-1">Recommended</span></h3>
-            <p className="text-xs text-emerald-400">ফ্রি: প্রতিদিন ৫০০ ইমেইল · কোনো পাসওয়ার্ড লাগে না · OAuth2 টোকেন অটো-রিফ্রেশ</p>
-          </div>
-        </div>
-
-        <div className="bg-slate-950/60 border border-slate-700/50 rounded-lg p-4 space-y-3">
-          <p className="text-sm text-gray-300">Gmail OAuth2 হলো সবচেয়ে নিরাপদ ও ভালো ডেলিভারিবিলিটির পদ্ধতি। এতে আপনার Gmail পাসওয়ার্ড কখনো স্টোর হয় না — শুধু OAuth2 রিফ্রেশ টোকেন থাকে যা অটোমেটিক রিফ্রেশ হয়। প্রতিদিন ৫০০ ইমেইল ফ্রি পাঠানো যায়।</p>
-
-          <p className="text-sm font-semibold text-white pt-1">ধাপে ধাপে সেটআপ:</p>
-          <ol className="list-decimal list-inside space-y-2 text-xs text-gray-300">
-            <li><a href="https://console.cloud.google.com" target="_blank" rel="noopener" className="text-sky-400 hover:underline">Google Cloud Console</a> এ যান, একটি নতুন প্রোজেক্ট তৈরি করুন (বা সিলেক্ট করুন)।</li>
-            <li><strong className="text-white">APIs & Services → Credentials</strong> এ যান, <strong className="text-white">Create Credentials → OAuth client ID</strong> সিলেক্ট করুন।</li>
-            <li>Application type <strong className="text-white">Web Application</strong> সিলেক্ট করুন। Authorized redirect URI হিসেবে বসান:
-              <button onClick={() => copy('https://mms-admin-gateway.netlify.app/api/auth/gmail/callback', 'g1')} className="text-green-300 hover:underline font-mono text-[11px] ml-1 block mt-1">https://mms-admin-gateway.netlify.app/api/auth/gmail/callback</button>
-              {copied === 'g1' && <span className="text-emerald-400"> ✓</span>}
-            </li>
-            <li><strong className="text-white">Client ID</strong> এবং <strong className="text-white">Client Secret</strong> কপি করুন।</li>
-            <li>Gmail API এনেবল করুন: <strong className="text-sky-400">APIs & Services → Library → Gmail API → Enable</strong></li>
-            <li>এই অ্যাডমিন প্যানেলে যান: <strong className="text-sky-400">Gateway → Accounts</strong> ট্যাব → <strong className="text-white">+ Add Gmail OAuth2 Account</strong> বাটন।</li>
-            <li>Client ID ও Client Secret পেস্ট করুন, তারপর <strong className="text-white">Connect Gmail</strong> ক্লিক করুন — Google লগইন পপআপ আসবে। অনুমতি দিন।</li>
-            <li>ব্যস! অ্যাকাউন্ট যুক্ত হয়ে গেছে। এখন এই অ্যাকাউন্ট থেকে অটোমেটিক ইমেইল পাঠানো যাবে।</li>
-          </ol>
-
-          <div className="flex items-start gap-2 text-xs text-amber-300 bg-amber-950/20 border border-amber-800/30 rounded-md p-3">
-            <span>⚠️</span>
-            <p><strong>সীমাবদ্ধতা:</strong> ফ্রি Gmail অ্যাকাউন্টে প্রতিদিন ৫০০ ইমেইল। Google Workspace অ্যাকাউন্টে ২০০০/দিন। বাল্ক স্প্যাম পাঠালে অ্যাকাউন্ট সাসপেন্ড হতে পারে — ধীরে ধীরে ওয়ার্মআপ করুন।</p>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Option 2: Gmail App Password (Simpler) ── */}
-      <div className="bg-slate-900/50 border border-sky-800/40 rounded-xl p-6 space-y-4">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">🔑</span>
-          <div>
-            <h3 className="text-lg font-semibold text-white">অপশন ২: Gmail App Password (সহজ সেটআপ)</h3>
-            <p className="text-xs text-sky-400">ফ্রি · ৫০০ ইমেইল/দিন · ১৬-ক্যারেক্টার পাসওয়ার্ড · SMTP দিয়ে</p>
-          </div>
-        </div>
-
-        <div className="bg-slate-950/60 border border-slate-700/50 rounded-lg p-4 space-y-3">
-          <p className="text-sm text-gray-300">App Password হলো Gmail এর একটি ১৬-ক্যারেক্টার পাসওয়ার্ড যা ২-Factor Authentication চালু থাকলে তৈরি করা যায়। এটি দিয়ে SMTP এর মাধ্যমে ইমেইল পাঠানো যায়। OAuth2 এর চেয়ে সহজ কিন্তু কিছুটা কম নিরাপদ।</p>
-
-          <p className="text-sm font-semibold text-white pt-1">ধাপে ধাপে সেটআপ:</p>
-          <ol className="list-decimal list-inside space-y-2 text-xs text-gray-300">
-            <li>Gmail অ্যাকাউন্টে <strong className="text-amber-300">2-Step Verification</strong> চালু করুন: <a href="https://myaccount.google.com/security" target="_blank" rel="noopener" className="text-sky-400 hover:underline">myaccount.google.com/security</a></li>
-            <li>Security পেজে <strong className="text-white">App Passwords</strong> এ যান।</li>
-            <li>App name দিন (যেমন "Gmail Mailer") এবং <strong className="text-white">Create</strong> ক্লিক করুন।</li>
-            <li>১৬-ক্যারেক্টার পাসওয়ার্ড কপি করুন।</li>
-            <li>এই প্যানেলে যান: <strong className="text-sky-400">Gateway → Accounts</strong> → <strong className="text-white">+ Add Account</strong> → Provider <strong className="text-white">GMAIL_APP_PASSWORD</strong> সিলেক্ট করুন।</li>
-            <li>Email = আপনার Gmail ঠিকানা, App Password = ১৬-ক্যারেক্টার পাসওয়ার্ড। Save করুন।</li>
-            <li>SMTP সেটিংস (অটো-ফিল হবে): <button onClick={() => copy('smtp.gmail.com:465', 'g2')} className="text-green-300 hover:underline font-mono text-[11px]">smtp.gmail.com:465 (SSL)</button> {copied === 'g2' && <span className="text-emerald-400"> ✓</span>}</li>
-          </ol>
-
-          <div className="bg-slate-800/50 border border-slate-700/30 rounded-md p-3 mt-2">
-            <p className="text-[10px] text-slate-500 uppercase mb-1">SMTP রেফারেন্স:</p>
-            <pre className="text-[11px] text-green-300 font-mono overflow-x-auto">{`Host: smtp.gmail.com
-Port: 465 (SSL) or 587 (STARTTLS)
-User: your-email@gmail.com
-Pass: 16-char App Password
-From: your-email@gmail.com`}</pre>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Option 3: Outlook Graph API (Enterprise) ── */}
-      <div className="bg-slate-900/50 border border-sky-800/40 rounded-xl p-6 space-y-4">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">📧</span>
-          <div>
-            <h3 className="text-lg font-semibold text-white">অপশন ৩: Outlook Graph API (এন্টারপ্রাইজ — ১০,০০০/দিন)</h3>
-            <p className="text-xs text-sky-400">উচ্চ লিমিট · Microsoft 365 অ্যাকাউন্ট · MSAL OAuth2</p>
-          </div>
-        </div>
-
-        <div className="bg-slate-950/60 border border-slate-700/50 rounded-lg p-4 space-y-3">
-          <p className="text-sm text-gray-300">Microsoft Graph API দিয়ে Outlook/Hotmail/Live অ্যাকাউন্ট থেকে ইমেইল পাঠানো যায়। Microsoft 365 অ্যাকাউন্টে প্রতিদিন ১০,০০০ ইমেইল পাঠানো যায় — বাল্ক সেন্ডিং এর জন্য সেরা।</p>
-
-          <p className="text-sm font-semibold text-white pt-1">ধাপে ধাপে সেটআপ:</p>
-          <ol className="list-decimal list-inside space-y-2 text-xs text-gray-300">
-            <li><a href="https://entra.microsoft.com" target="_blank" rel="noopener" className="text-sky-400 hover:underline">Microsoft Entra (Azure AD)</a> এ যান, নতুন App Registration তৈরি করুন।</li>
-            <li>Platform <strong className="text-white">Web</strong> → Redirect URI বসান: <button onClick={() => copy('https://mms-admin-gateway.netlify.app/api/auth/gmail/callback', 'g3')} className="text-green-300 hover:underline font-mono text-[11px]">https://mms-admin-gateway.netlify.app/api/auth/gmail/callback</button> {copied === 'g3' && <span className="text-emerald-400"> ✓</span>}</li>
-            <li>API Permissions → <strong className="text-white">Mail.Send</strong> (Delegated) যোগ করুন এবং admin consent দিন।</li>
-            <li><strong className="text-white">Client ID</strong> ও <strong className="text-white">Client Secret</strong> কপি করুন।</li>
-            <li>এই প্যানেলে: <strong className="text-sky-400">Gateway → Accounts</strong> → <strong className="text-white">+ Add Account</strong> → Provider <strong className="text-white">OUTLOOK_GRAPH</strong>।</li>
-            <li>Client ID, Client Secret, Email বসান। Save করুন।</li>
-          </ol>
-        </div>
-      </div>
-
-      {/* ── Email best practices ── */}
-      <div className="bg-blue-950/20 border border-blue-800/40 rounded-xl p-6 space-y-3">
-        <h3 className="text-lg font-semibold text-white">🌐 ইমেইল ডেলিভারিবিলিটি বেস্ট প্র্যাকটিস</h3>
-        <p className="text-xs text-gray-300 leading-relaxed">ইমেইল স্প্যাম ফোল্ডারে যাওয়া এড়াতে এই নিয়মগুলো মেনে চলুন। এগুলো এন্টারপ্রাইজ লেভেলের ডেলিভারিবিলিটি নিশ্চিত করবে।</p>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-slate-700">
-                <th className="text-left py-2 px-3 text-slate-400 font-medium">প্রায়োরিটি</th>
-                <th className="text-left py-2 px-3 text-slate-400 font-medium">টিপ</th>
-              </tr>
-            </thead>
-            <tbody className="text-gray-300">
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-rose-400 font-bold">CRITICAL</td><td className="py-2 px-3">প্রতিটি সেন্ডিং ডোমেইনে SPF, DKIM, DMARC DNS রেকর্ড সেট করুন।</td></tr>
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-rose-400 font-bold">CRITICAL</td><td className="py-2 px-3">নতুন অ্যাকাউন্ট ধীরে ওয়ার্মআপ করুন — প্রথম দিন ২০-৫০ ইমেইল, ২ সপ্তাহে বাড়ান।</td></tr>
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-amber-400 font-bold">HIGH</td><td className="py-2 px-3">সাবজেক্ট লাইনে #RANDOM# টোকেন ব্যবহার করুন — স্প্যাম ফিল্টার এড়ানো যাবে।</td></tr>
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-amber-400 font-bold">HIGH</td><td className="py-2 px-3">AI Polymorph চালু রাখুন — প্রতিটি ইমেইল বডি ইউনিক হবে।</td></tr>
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-amber-400 font-bold">HIGH</td><td className="py-2 px-3">ব্যাচ সাইজ ≤৫০ রাখুন, ব্যাচের মধ্যে ৬০-১২০ সেকেন্ড র‍্যান্ডম ডিলে দিন।</td></tr>
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-sky-400 font-bold">MEDIUM</td><td className="py-2 px-3">HTML এর সাথে plain-text alternative রাখুন — স্প্যাম স্কোর কমে।</td></tr>
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-sky-400 font-bold">MEDIUM</td><td className="py-2 px-3">স্প্যাম ট্রিগার শব্দ এড়ান: FREE, GUARANTEE, ACT NOW, ALL CAPS।</td></tr>
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-sky-400 font-bold">MEDIUM</td><td className="py-2 px-3">সবসময় unsubscribe link রাখুন — CAN-SPAM/GDPR কমপ্লায়েন্স।</td></tr>
-              <tr><td className="py-2 px-3 text-slate-400 font-bold">LOW</td><td className="py-2 px-3">Bounce rate ৩% এর নিচে রাখুন। ৫% এর বেশি হলে অ্যাকাউন্ট সাসপেন্ড করুন।</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* ── Comparison ── */}
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-white mb-3">তুলনা</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-slate-700">
-                <th className="text-left py-2 px-3 text-slate-400 font-medium">ফিচার</th>
-                <th className="text-left py-2 px-3 text-slate-400 font-medium">🔒 Gmail OAuth2</th>
-                <th className="text-left py-2 px-3 text-slate-400 font-medium">🔑 App Password</th>
-                <th className="text-left py-2 px-3 text-slate-400 font-medium">📧 Outlook Graph</th>
-              </tr>
-            </thead>
-            <tbody className="text-gray-300">
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">কার্ড লাগে?</td><td className="py-2 px-3 text-emerald-400">❌ না</td><td className="py-2 px-3 text-emerald-400">❌ না</td><td className="py-2 px-3 text-emerald-400">❌ না</td></tr>
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">ফ্রি কোটা</td><td className="py-2 px-3">৫০০/দিন</td><td className="py-2 px-3">৫০০/দিন</td><td className="py-2 px-3">১০,০০০/দিন</td></tr>
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">নিরাপত্তা</td><td className="py-2 px-3 text-emerald-400">সেরা</td><td className="py-2 px-3 text-amber-400">ভালো</td><td className="py-2 px-3 text-emerald-400">সেরা</td></tr>
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">সেটআপ সময়</td><td className="py-2 px-3">৫ মিনিট</td><td className="py-2 px-3">২ মিনিট</td><td className="py-2 px-3">১০ মিনিট</td></tr>
-              <tr className="border-b border-slate-800/50"><td className="py-2 px-3 text-slate-500">টোকেন রিফ্রেশ</td><td className="py-2 px-3 text-emerald-400">✅ অটো</td><td className="py-2 px-3 text-amber-400">না</td><td className="py-2 px-3 text-emerald-400">✅ অটো</td></tr>
-              <tr><td className="py-2 px-3 text-slate-500">ভালো কিসের জন্য</td><td className="py-2 px-3">ডেলিভারিবিলিটি</td><td className="py-2 px-3">দ্রুত সেটআপ</td><td className="py-2 px-3">বাল্ক/এন্টারপ্রাইজ</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* ── How to add in this system ── */}
-      <div className="bg-blue-950/20 border border-blue-800/40 rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-white mb-2">📌 এই সিস্টেমে কিভাবে অ্যাকাউন্ট যোগ করবেন</h3>
-        <p className="text-xs text-gray-300 leading-relaxed">অ্যাকাউন্ট সেটআপের পর: <strong className="text-sky-400">Gateway</strong> ট্যাব → <strong className="text-white">Accounts</strong> সাব-ট্যাব → <strong className="text-white">+ Add Account</strong> বাটন → Provider সিলেক্ট করুন → credentials পেস্ট করুন → Save। সিস্টেম অটোমেটিক ক্যাম্পেইন ও অটো-রিপ্লাইতে এই অ্যাকাউন্ট ব্যবহার করবে। টেস্ট করতে চাইলে Accounts এ প্রতিটি অ্যাকাউন্টের পাশে <strong className="text-white">Test</strong> বাটন আছে।</p>
-      </div>
-    </div>
-  );
-}
 
 
 // ============================================================================
@@ -2573,7 +2414,6 @@ function GatewayDashboardTab() {
     { id: 'lookup', label: 'Providers & Limits', icon: 'globe' },
     { id: 'logs', label: 'Live Logs', icon: 'list' },
     { id: 'preview', label: 'Email Preview', icon: 'eye' },
-    { id: 'deploy', label: 'Deploy', icon: 'rocket' },
   ];
   return (
     <div className="space-y-4">
@@ -2603,7 +2443,6 @@ function GatewayDashboardTab() {
       {sub === 'lookup' && <GatewayLookup />}
       {sub === 'logs' && <GatewayLogs />}
       {sub === 'preview' && <GatewayPreview />}
-      {sub === 'deploy' && <GatewayDeploy />}
     </div>
   );
 }
@@ -2673,7 +2512,7 @@ function GatewayConfig() {
   const [savedMsg, setSavedMsg] = useState('');
   const [form, setForm] = useState({
     geminiApiKey: '', carrierLookupApiKey: '', routingDelaySeconds: 3, batchSizePerAccount: 5,
-    enablePhishingFilter: true, blockedKeywords: ['bank', 'otp', 'passcode', 'credit card'], renderDeployUrl: '',
+    enablePhishingFilter: true, blockedKeywords: ['bank', 'otp', 'passcode', 'credit card'],
   });
   const [dynForm, setDynForm] = useState({
     routingDelayMs: 3000, batchSizePerAccount: 5, maxConcurrency: 10, queuePaused: false,
@@ -2695,7 +2534,6 @@ function GatewayConfig() {
           routingDelaySeconds: cfg.config.routingDelaySeconds ?? 3, batchSizePerAccount: cfg.config.batchSizePerAccount ?? 5,
           enablePhishingFilter: cfg.config.enablePhishingFilter ?? true,
           blockedKeywords: cfg.config.blockedKeywords || ['bank', 'otp', 'passcode', 'credit card'],
-          renderDeployUrl: cfg.config.renderDeployUrl || '',
         });
       }
       if (dyn.success && dyn.config) {
@@ -2824,10 +2662,6 @@ function GatewayConfig() {
             <div>
               <label className="text-xs text-slate-400 font-semibold">Email Validation API Key (optional — Abstract/Hunter)</label>
               <input value={form.carrierLookupApiKey} onChange={e => setForm({ ...form, carrierLookupApiKey: e.target.value })} placeholder="sk_... (optional)" type="password" className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
-            </div>
-            <div>
-              <label className="text-xs text-slate-400 font-semibold">Render Deploy Webhook URL</label>
-              <input value={form.renderDeployUrl} onChange={e => setForm({ ...form, renderDeployUrl: e.target.value })} placeholder="https://api.render.com/deploy/..." className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono" />
             </div>
           </div>
         </DetailBox>
@@ -3640,280 +3474,6 @@ function GatewayPreview() {
   );
 }
 
-// ── Deploy (trigger Render webhook + status) ──────────────────────────────
-function GatewayDeploy() {
-  const [deploying, setDeploying] = useState(false);
-  const [clearing, setClearing] = useState(false);
-  const [status, setStatus] = useState('');
-  const [renderUrl, setRenderUrl] = useState('');
-  const [deploys, setDeploys] = useState([]);
-  const [loadingDeploys, setLoadingDeploys] = useState(false);
-
-  const loadConfig = async () => {
-    try {
-      const d = await gatewayApi('/admin/gateway?resource=config');
-      if (d.success && d.config) setRenderUrl(d.config.renderDeployUrl || '');
-    } catch {}
-  };
-
-  const loadDeploys = async () => {
-    setLoadingDeploys(true);
-    try {
-      const d = await deployHookApi({});
-      if (d.success && d.deploys) setDeploys(d.deploys);
-    } catch {}
-    setLoadingDeploys(false);
-  };
-
-  useEffect(() => { loadConfig(); loadDeploys(); }, []);
-
-  const trigger = async (clearCache = false) => {
-    if (clearCache) { setClearing(true); } else { setDeploying(true); }
-    setStatus(clearCache ? 'Triggering deploy with cache clear...' : 'Triggering Render deploy...');
-    try {
-      const d = await deployHookApi({ mode: 'direct', clearCache });
-      if (d.success) {
-        setStatus(`✓ Deploy triggered! ${d.deployId ? 'Deploy ID: ' + d.deployId.slice(0, 12) : ''} — Render rebuilding in ~30-60s`);
-        setTimeout(() => loadDeploys(), 5000);
-      } else {
-        if (renderUrl) {
-          setStatus('Direct mode failed, trying webhook...');
-          const d2 = await deployHookApi({ url: renderUrl, clearCache });
-          setStatus(d2.success ? `✓ Deploy webhook triggered — Render will rebuild in ~30s` : `✗ ${d2.error || d.error || 'Deploy failed'}`);
-        } else {
-          setStatus(`✗ ${d.error || d.message || 'Deploy failed — set RENDER_API_KEY or a Render Deploy Webhook URL in Gateway Settings'}`);
-        }
-      }
-    } catch (e) { setStatus(`✗ ${e.message}`); }
-    setDeploying(false); setClearing(false);
-  };
-
-  const statusColor = status.startsWith('✓') ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' : status.startsWith('⚠') ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' : status.startsWith('✗') ? 'bg-rose-500/10 text-rose-300 border-rose-500/30' : 'bg-sky-500/10 text-sky-300 border-sky-500/30';
-
-  return (
-    <div className="space-y-4">
-      <DetailBox title="Render Headless Deploy" subtitle="One-click rebuild of the backend gateway engine — auto-configured, no manual URL needed" icon="rocket" accent="amber" live>
-        <div className="mt-3 space-y-4">
-          <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3">
-            <IconByName name="check" size={16} className="text-emerald-400" />
-            <span className="text-emerald-300 text-xs font-semibold">Auto-configured via Render API — just click to deploy</span>
-          </div>
-
-          {renderUrl && (
-            <div className="bg-white/5 rounded-xl p-4">
-              <p className="text-xs text-slate-400 font-semibold mb-1">Webhook URL (fallback, configured in Gateway Settings)</p>
-              <p className="text-white text-sm font-mono break-all">{renderUrl.replace(/\/deploy\/[a-z0-9-]+/i, '/deploy/***')}</p>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <button onClick={() => trigger(false)} disabled={deploying || clearing} className="py-3 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-bold disabled:opacity-50 flex items-center justify-center gap-2">
-              {deploying ? <><BtnSpinner /> Deploying...</> : <><IconByName name="rocket" size={18} /> Trigger Deploy</>}
-            </button>
-            <button onClick={() => trigger(true)} disabled={deploying || clearing} className="py-3 rounded-xl bg-gradient-to-r from-rose-700 to-rose-600 hover:from-rose-800 hover:to-rose-700 text-white font-bold disabled:opacity-50 flex items-center justify-center gap-2">
-              {clearing ? <><BtnSpinner /> Clearing...</> : <><IconByName name="refresh" size={18} /> Deploy + Clear Cache</>}
-            </button>
-          </div>
-
-          {status && <div className={`rounded-xl p-3 text-sm border ${statusColor}`}>{status}</div>}
-        </div>
-      </DetailBox>
-
-      <DetailBox title="Recent Deployments" subtitle="Live status from Render API" icon="activity" accent="sky" action={<button onClick={loadDeploys} disabled={loadingDeploys} className="text-xs text-sky-400 hover:text-sky-300 font-semibold flex items-center gap-1">{loadingDeploys ? <BtnSpinner /> : <><IconByName name="refresh" size={14} /> Refresh</>}</button>}>
-        <div className="mt-3 space-y-2">
-          {deploys.length === 0 && <p className="text-slate-500 text-sm text-center py-4">No recent deployments — trigger one above</p>}
-          {deploys.map((d, i) => (
-            <div key={d.id || i} className="bg-white/5 rounded-xl p-3 flex items-center gap-3">
-              <div className={`w-2.5 h-2.5 rounded-full ${d.status === 'live' ? 'bg-emerald-400' : d.status === 'build_in_progress' || d.status === 'created' ? 'bg-amber-400 animate-pulse' : d.status === 'build_failed' || d.status === 'update_failed' ? 'bg-rose-400' : 'bg-slate-400'}`} />
-              <div className="flex-1 min-w-0">
-                <p className="text-white text-sm font-mono truncate">{d.id ? d.id.slice(0, 16) : '—'}</p>
-                <p className="text-slate-400 text-xs">{d.status} {d.createdAt ? ' · ' + new Date(d.createdAt).toLocaleString() : ''}</p>
-              </div>
-              {d.commit && <div className="text-right"><p className="text-sky-400 text-xs font-mono">{d.commit.id}</p><p className="text-slate-500 text-xs truncate max-w-[200px]">{d.commit.message}</p></div>}
-            </div>
-          ))}
-        </div>
-      </DetailBox>
-
-      <GatewayKeepAlive />
-
-      <DetailBox title="Deployment Architecture" subtitle="2-platform single-codebase map — same repo, Admin + Gateway on Netlify" icon="server" accent="indigo">
-        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {[
-            { name: 'Vercel', mode: 'user', desc: 'User Panel (NEXT_PUBLIC_PANEL_MODE=user)', url: 'maileruser.vercel.app', card: 'bg-sky-500/10 border-sky-500/20', iconBg: 'bg-sky-500/20', iconText: 'text-sky-400' },
-            { name: 'Netlify', mode: 'admin', desc: 'Admin Panel + Gateway Engine (NEXT_PUBLIC_PANEL_MODE=admin)', url: 'mms-admin-gateway.netlify.app', card: 'bg-violet-500/10 border-violet-500/20', iconBg: 'bg-violet-500/20', iconText: 'text-violet-400' },
-          ].map(p => (
-            <div key={p.name} className={`${p.card} border rounded-xl p-4 text-center`}>
-              <div className={`w-12 h-12 mx-auto rounded-xl ${p.iconBg} flex items-center justify-center mb-2`}>
-                <IconByName name="server" size={22} className={p.iconText} />
-              </div>
-              <p className="text-white font-bold text-sm">{p.name}</p>
-              <p className="text-slate-400 text-xs mt-1">{p.desc}</p>
-              <p className="text-slate-500 text-xs font-mono mt-2 break-all">{p.url}</p>
-            </div>
-          ))}
-        </div>
-      </DetailBox>
-    </div>
-  );
-}
-
-// ── Keep-Alive Monitor (Render anti-sleep) ─────────────────────────────────────
-function GatewayKeepAlive() {
-  const [pinging, setPinging] = useState(false);
-  const [autoPing, setAutoPing] = useState(true);
-  const [renderStatus, setRenderStatus] = useState(null); // { alive, responseMs, renderTime, renderUptime }
-  const [kaStatus, setKaStatus] = useState(null); // keep-alive internal loop status
-  const [history, setHistory] = useState([]); // recent ping results
-  const [lastChecked, setLastChecked] = useState(null);
-  const timerRef = useRef(null);
-
-  const RENDER_URL = 'https://mms-gateway-engine.onrender.com';
-
-  const pingOnce = async () => {
-    setPinging(true);
-    try {
-      const d = await systemApi({ action: 'pingRender' });
-      const entry = {
-        alive: d.alive,
-        responseMs: d.responseMs,
-        at: new Date().toLocaleTimeString(),
-        error: d.error || null,
-      };
-      setRenderStatus(d);
-      setLastChecked(new Date().toLocaleString());
-      setHistory(prev => [entry, ...prev].slice(0, 8));
-    } catch (e) {
-      setHistory(prev => [{ alive: false, responseMs: 0, at: new Date().toLocaleTimeString(), error: e.message }].concat(prev).slice(0, 8));
-    }
-    setPinging(false);
-  };
-
-  const loadKaStatus = async () => {
-    try {
-      const d = await systemApi({ action: 'getKeepAliveStatus' });
-      if (d.success && d.keepAlive) setKaStatus(d.keepAlive);
-    } catch {}
-  };
-
-  useEffect(() => {
-    pingOnce();
-    loadKaStatus();
-    if (autoPing) {
-      timerRef.current = setInterval(() => { pingOnce(); }, 4 * 60 * 1000); // every 4 min
-    }
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [autoPing]);
-
-  const alive = renderStatus && renderStatus.alive;
-  const ms = renderStatus ? renderStatus.responseMs : null;
-  const uptime = renderStatus && renderStatus.renderUptime != null ? renderStatus.renderUptime : null;
-  const loopActive = kaStatus && kaStatus.active;
-  const pingCount = kaStatus ? kaStatus.pingCount : null;
-  const lastSelfPing = kaStatus ? kaStatus.lastPingAt : null;
-
-  const renderStateLabel = !renderStatus ? 'Checking…' : alive ? (ms > 1000 ? 'Awake (cold-start ' + ms + 'ms)' : 'Awake · Warm') : 'Asleep / Unreachable';
-  const renderStateColor = !renderStatus ? 'bg-slate-500/20 text-slate-300 border-slate-500/30' : alive ? (ms > 1000 ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30') : 'bg-rose-500/10 text-rose-300 border-rose-500/30';
-
-  return (
-    <div className="space-y-4">
-      <DetailBox title="Render Keep-Alive Monitor" subtitle="Prevents the free-tier instance from sleeping (15-min inactivity → 50s cold start)" icon="activity" accent="emerald" live>
-        <div className="mt-3 space-y-4">
-          {/* Live status banner */}
-          <div className={`rounded-xl p-4 border ${renderStateColor} flex items-center gap-3`}>
-            <div className={`w-3 h-3 rounded-full ${alive ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
-            <div className="flex-1">
-              <p className="font-bold text-sm">{renderStateLabel}</p>
-              <p className="text-xs opacity-80">{ms != null ? 'Response: ' + ms + 'ms' : 'No response yet'} {uptime != null ? ' · Uptime: ' + Math.round(uptime/60) + 'min' : ''}</p>
-            </div>
-            <button onClick={pingOnce} disabled={pinging} className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 disabled:opacity-50">
-              {pinging ? <BtnSpinner /> : <><IconByName name="refresh" size={14} /> Ping Now</>}
-            </button>
-          </div>
-
-          {/* Auto-ping toggle */}
-          <div className="bg-white/5 rounded-xl p-4 flex items-center justify-between">
-            <div>
-              <p className="text-white text-sm font-semibold">Auto-Ping from Admin Panel</p>
-              <p className="text-slate-400 text-xs mt-0.5">Pings Render every 4 minutes while this tab is open — keeps it warm while you work</p>
-            </div>
-            <button onClick={() => setAutoPing(a => !a)} className={`relative w-12 h-6 rounded-full transition-colors ${autoPing ? 'bg-emerald-500' : 'bg-slate-600'}`}>
-              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${autoPing ? 'translate-x-6' : ''}`} />
-            </button>
-          </div>
-
-          {/* Server-side self-ping loop status */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="bg-white/5 rounded-xl p-3 text-center">
-              <p className="text-slate-400 text-xs font-semibold mb-1">Server Self-Ping</p>
-              <p className={`text-sm font-bold ${loopActive ? 'text-emerald-400' : 'text-slate-500'}`}>{loopActive ? '● Active' : '○ Inactive'}</p>
-              <p className="text-slate-500 text-xs mt-1">{kaStatus ? 'every ' + Math.round(kaStatus.intervalMs/1000) + 's' : '—'}</p>
-            </div>
-            <div className="bg-white/5 rounded-xl p-3 text-center">
-              <p className="text-slate-400 text-xs font-semibold mb-1">Total Pings</p>
-              <p className="text-white text-sm font-bold">{pingCount != null ? pingCount : '—'}</p>
-              <p className="text-slate-500 text-xs mt-1">{kaStatus ? 'since boot' : 'server-side'}</p>
-            </div>
-            <div className="bg-white/5 rounded-xl p-3 text-center">
-              <p className="text-slate-400 text-xs font-semibold mb-1">Last Self-Ping</p>
-              <p className="text-white text-sm font-bold">{lastSelfPing ? new Date(lastSelfPing).toLocaleTimeString() : '—'}</p>
-              <p className="text-slate-500 text-xs mt-1">{kaStatus && kaStatus.lastPingOk === true ? '✓ ok' : kaStatus && kaStatus.lastPingOk === false ? '✗ failed' : '—'}</p>
-            </div>
-          </div>
-
-          {/* Ping history */}
-          <div>
-            <p className="text-slate-400 text-xs font-semibold mb-2">Recent Pings (from this panel)</p>
-            <div className="space-y-1.5">
-              {history.length === 0 && <p className="text-slate-500 text-xs text-center py-2">No pings yet</p>}
-              {history.map((h, i) => (
-                <div key={i} className="flex items-center gap-3 bg-white/5 rounded-lg px-3 py-2">
-                  <div className={`w-2 h-2 rounded-full ${h.alive ? 'bg-emerald-400' : 'bg-rose-400'}`} />
-                  <span className="text-white text-xs font-mono">{h.at}</span>
-                  <span className={`text-xs font-semibold ${h.alive ? (h.responseMs > 1000 ? 'text-amber-400' : 'text-emerald-400') : 'text-rose-400'}`}>{h.alive ? h.responseMs + 'ms' : 'timeout'}</span>
-                  {h.error && <span className="text-rose-400/70 text-xs truncate">{h.error}</span>}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {lastChecked && <p className="text-slate-500 text-xs text-center">Last checked: {lastChecked}</p>}
-        </div>
-      </DetailBox>
-
-      <DetailBox title="How Keep-Alive Works" subtitle="3-layer anti-sleep defense for Render free tier" icon="shield" accent="sky">
-        <div className="mt-3 space-y-3">
-          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 flex gap-3">
-            <span className="text-emerald-400 font-bold text-sm shrink-0">①</span>
-            <div>
-              <p className="text-white text-sm font-semibold">Server-Side Self-Ping (auto, on Render)</p>
-              <p className="text-slate-400 text-xs mt-1">A setInterval inside the Render app pings its own /api/ping every 5 minutes. Started automatically on boot via instrumentation hook. Zero config needed.</p>
-            </div>
-          </div>
-          <div className="bg-sky-500/10 border border-sky-500/20 rounded-xl p-3 flex gap-3">
-            <span className="text-sky-400 font-bold text-sm shrink-0">②</span>
-            <div>
-              <p className="text-white text-sm font-semibold">Admin Panel Auto-Ping (this tab)</p>
-              <p className="text-slate-400 text-xs mt-1">While you have this Deploy tab open, the panel pings Render every 4 minutes. Toggle above to disable. Helps keep it warm during active admin work.</p>
-            </div>
-          </div>
-          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 flex gap-3">
-            <span className="text-amber-400 font-bold text-sm shrink-0">③</span>
-            <div>
-              <p className="text-white text-sm font-semibold">External Cron (recommended, 24/7)</p>
-              <p className="text-slate-400 text-xs mt-1">For guaranteed 24/7 uptime, set up a free external monitor on <span className="text-amber-300 font-mono">cron-job.org</span> or <span className="text-amber-300 font-mono">UptimeRobot</span> to GET <span className="text-amber-300 font-mono break-all">{RENDER_URL}/api/ping</span> every 5-14 minutes. This wakes the instance even after a full sleep cycle.</p>
-            </div>
-          </div>
-          <div className="bg-white/5 rounded-xl p-3">
-            <p className="text-slate-400 text-xs font-semibold mb-1">Ping Endpoint URL (for external cron):</p>
-            <p className="text-white text-sm font-mono break-all select-all">{RENDER_URL}/api/ping</p>
-          </div>
-        </div>
-      </DetailBox>
-    </div>
-  );
-}
-
 // ============================================================================
 // SCHEDULED SENDS TAB (Admin Panel only)
 // ============================================================================
@@ -4024,6 +3584,443 @@ function ScheduledSendsTab() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================================================
+// ALERTS & NOTIFICATIONS TAB (Twilio-based)
+// ============================================================================
+function AlertsTab() {
+  const [config, setConfig] = useState({
+    twilioAccountSid: '', twilioAuthToken: '', twilioFromPhone: '', twilioToPhone: '',
+    twilioWhatsAppFrom: '', twilioWhatsAppTo: '', alertChannels: ['sms'],
+    alertEmail: '', alertEmailApiKey: '', alertEmailFrom: '',
+    alertOnCrash: true, alertOnApiDown: true, alertOnError: true,
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      const data = await api('getAlertConfig');
+      if (data.success && data.config) {
+        setConfig({
+          ...config,
+          ...data.config,
+          alertChannels: data.config.alertChannels || ['sms'],
+        });
+      }
+      setLoading(false);
+    })();
+  }, []);
+
+  const toggleChannel = (ch) => {
+    setConfig(prev => {
+      const channels = prev.alertChannels.includes(ch)
+        ? prev.alertChannels.filter(c => c !== ch)
+        : [...prev.alertChannels, ch];
+      return { ...prev, alertChannels: channels };
+    });
+  };
+
+  const save = async () => {
+    setSaving(true);
+    setMessage('');
+    try {
+      const data = await api('setAlertConfig', config);
+      if (data.success) {
+        setMessage('✓ Alert configuration saved successfully');
+      } else {
+        setMessage(`✗ ${data.error || 'Failed to save'}`);
+      }
+    } catch {
+      setMessage('✗ Network error');
+    }
+    setSaving(false);
+    setTimeout(() => setMessage(''), 5000);
+  };
+
+  const testAlert = async () => {
+    setTesting(true);
+    setMessage('');
+    try {
+      const data = await api('testAlert');
+      if (data.success) {
+        const parts = [];
+        if (data.results?.sms?.success) parts.push('SMS ✓');
+        if (data.results?.whatsapp?.success) parts.push('WhatsApp ✓');
+        if (data.results?.email?.success) parts.push('Email ✓');
+        const fails = [];
+        if (data.results?.sms && !data.results.sms.success) fails.push(`SMS: ${data.results.sms.error}`);
+        if (data.results?.whatsapp && !data.results.whatsapp.success) fails.push(`WhatsApp: ${data.results.whatsapp.error}`);
+        if (data.results?.email && !data.results.email.success) fails.push(`Email: ${data.results.email.error}`);
+        if (parts.length > 0) {
+          setMessage(`✓ Test alert sent via: ${parts.join(', ')}`);
+        }
+        if (fails.length > 0) {
+          setMessage(prev => prev + ` | Failed: ${fails.join('; ')}`);
+        }
+      } else {
+        setMessage(`✗ ${data.error || 'Test failed'}`);
+      }
+    } catch {
+      setMessage('✗ Network error');
+    }
+    setTesting(false);
+    setTimeout(() => setMessage(''), 8000);
+  };
+
+  if (loading) return <SkeletonGrid count={3} />;
+
+  return (
+    <div className="space-y-5 max-w-4xl">
+      {message && (
+        <div className={`flex items-center gap-2 rounded-xl px-4 py-3 text-sm border ${message.startsWith('✓') ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-red-500/10 border-red-500/30 text-red-300'}`}>
+          <Icon.Info /> {message}
+        </div>
+      )}
+
+      {/* Twilio SMS Configuration */}
+      <DetailBox title="Twilio SMS Alerts" subtitle="Configure Twilio to receive SMS alerts for system events" icon="bell" accent="amber">
+        <div className="mt-3 space-y-4">
+          <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3 text-sm text-amber-200/80">
+            <p className="font-semibold mb-1">📋 Twilio Setup (সংক্ষেপে):</p>
+            <p>1. <a href="https://www.twilio.com/console" target="_blank" rel="noopener" className="text-amber-300 underline">twilio.com/console</a> → Account SID ও Auth Token কপি করুন</p>
+            <p>2. Phone Numbers → Buy a number (SMS-enabled) → From Phone এ বসান</p>
+            <p>3. আপনার মোবাইল নম্বর To Phone এ দিন (যেখানে alert পাবেন)</p>
+            <p>4. নিচের ফিল্ডগুলো পূরণ করে Save → Test Alert চাপুন</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <label className="text-gray-400 text-sm font-medium block mb-1.5">Twilio Account SID <span className="text-red-400">*</span></label>
+              <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" value={config.twilioAccountSid} onChange={e => setConfig({...config, twilioAccountSid: e.target.value.trim()})} />
+            </div>
+            <div className="md:col-span-2">
+              <label className="text-gray-400 text-sm font-medium block mb-1.5">Twilio Auth Token <span className="text-red-400">*</span></label>
+              <input type="password" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" placeholder="Your Twilio Auth Token" value={config.twilioAuthToken} onChange={e => setConfig({...config, twilioAuthToken: e.target.value.trim()})} />
+            </div>
+            <div>
+              <label className="text-gray-400 text-sm font-medium block mb-1.5">From Phone (Twilio) <span className="text-red-400">*</span></label>
+              <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" placeholder="+1234567890" value={config.twilioFromPhone} onChange={e => setConfig({...config, twilioFromPhone: e.target.value.trim()})} />
+            </div>
+            <div>
+              <label className="text-gray-400 text-sm font-medium block mb-1.5">To Phone (Your mobile) <span className="text-red-400">*</span></label>
+              <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" placeholder="+8801XXXXXXXXX" value={config.twilioToPhone} onChange={e => setConfig({...config, twilioToPhone: e.target.value.trim()})} />
+            </div>
+          </div>
+        </div>
+      </DetailBox>
+
+      {/* Twilio WhatsApp Configuration (Optional) */}
+      <DetailBox title="Twilio WhatsApp Alerts (Optional)" subtitle="Enable WhatsApp alerts via Twilio WhatsApp Sandbox or approved sender" icon="mail" accent="emerald">
+        <div className="mt-3 space-y-4">
+          <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 text-sm text-emerald-200/80">
+            <p>WhatsApp এর জন্য Twilio WhatsApp Sandbox এ যান এবং join code দিয়ে আপনার নম্বর verify করুন। তারপর Twilio WhatsApp From ও To নম্বর এখানে দিন।</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-gray-400 text-sm font-medium block mb-1.5">WhatsApp From (Twilio WA number)</label>
+              <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" placeholder="+1234567890" value={config.twilioWhatsAppFrom} onChange={e => setConfig({...config, twilioWhatsAppFrom: e.target.value.trim()})} />
+            </div>
+            <div>
+              <label className="text-gray-400 text-sm font-medium block mb-1.5">WhatsApp To (Your verified number)</label>
+              <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" placeholder="+8801XXXXXXXXX" value={config.twilioWhatsAppTo} onChange={e => setConfig({...config, twilioWhatsAppTo: e.target.value.trim()})} />
+            </div>
+          </div>
+        </div>
+      </DetailBox>
+
+      {/* Email Alert (Optional) */}
+      <DetailBox title="Email Alerts (Optional)" subtitle="Send alerts via email using Resend API" icon="mail" accent="sky">
+        <div className="mt-3 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-gray-400 text-sm font-medium block mb-1.5">Alert Email (recipient)</label>
+              <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="admin@example.com" value={config.alertEmail} onChange={e => setConfig({...config, alertEmail: e.target.value.trim()})} />
+            </div>
+            <div>
+              <label className="text-gray-400 text-sm font-medium block mb-1.5">Resend API Key</label>
+              <input type="password" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" placeholder="re_xxxxxxxx" value={config.alertEmailApiKey} onChange={e => setConfig({...config, alertEmailApiKey: e.target.value.trim()})} />
+            </div>
+            <div className="md:col-span-2">
+              <label className="text-gray-400 text-sm font-medium block mb-1.5">From Email</label>
+              <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="alerts@mms-sender.local" value={config.alertEmailFrom} onChange={e => setConfig({...config, alertEmailFrom: e.target.value.trim()})} />
+            </div>
+          </div>
+        </div>
+      </DetailBox>
+
+      {/* Alert Channels & Triggers */}
+      <DetailBox title="Alert Channels & Triggers" subtitle="Choose which channels to use and when to send alerts" icon="settings" accent="violet">
+        <div className="mt-3 space-y-4">
+          <div>
+            <label className="text-gray-400 text-sm font-medium block mb-2">Active Channels</label>
+            <div className="flex gap-3 flex-wrap">
+              {['sms', 'whatsapp', 'email'].map(ch => (
+                <label key={ch} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border cursor-pointer transition ${config.alertChannels.includes(ch) ? 'bg-violet-600/20 border-violet-500/40 text-violet-300' : 'bg-slate-800 border-slate-700 text-gray-400 hover:border-slate-600'}`}>
+                  <input type="checkbox" checked={config.alertChannels.includes(ch)} onChange={() => toggleChannel(ch)} className="accent-violet-500" />
+                  <span className="text-sm font-medium capitalize">{ch === 'sms' ? 'SMS' : ch === 'whatsapp' ? 'WhatsApp' : 'Email'}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="text-gray-400 text-sm font-medium block mb-2">Trigger Events</label>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm text-gray-300"><input type="checkbox" checked={config.alertOnCrash} onChange={e => setConfig({...config, alertOnCrash: e.target.checked})} className="accent-violet-500" />Alert on system crash</label>
+              <label className="flex items-center gap-2 text-sm text-gray-300"><input type="checkbox" checked={config.alertOnApiDown} onChange={e => setConfig({...config, alertOnApiDown: e.target.checked})} className="accent-violet-500" />Alert when API is down</label>
+              <label className="flex items-center gap-2 text-sm text-gray-300"><input type="checkbox" checked={config.alertOnError} onChange={e => setConfig({...config, alertOnError: e.target.checked})} className="accent-violet-500" />Alert on errors</label>
+            </div>
+          </div>
+        </div>
+      </DetailBox>
+
+      {/* Action Buttons */}
+      <div className="flex gap-3 flex-wrap">
+        <button onClick={save} disabled={saving} className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-sm px-6 py-2.5 rounded-lg transition font-semibold disabled:opacity-60">
+          {saving ? <BtnSpinner size={14} /> : null} Save Configuration
+        </button>
+        <button onClick={testAlert} disabled={testing || !config.twilioAccountSid} className="inline-flex items-center gap-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white text-sm px-6 py-2.5 rounded-lg transition font-semibold disabled:opacity-60">
+          {testing ? <BtnSpinner size={14} /> : <Icon.Bell className="w-4 h-4" />} Send Test Alert
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// SUB-ADMINS TAB (RBAC — Granular Permissions)
+// ============================================================================
+function SubAdminsTab() {
+  const [subAdmins, setSubAdmins] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [message, setMessage] = useState('');
+
+  // Create form
+  const [newUsername, setNewUsername] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newPerms, setNewPerms] = useState([]);
+
+  // Edit form
+  const [editPerms, setEditPerms] = useState([]);
+
+  // All available permissions (matches nav section IDs + special 'all')
+  const ALL_PERMISSIONS = [
+    { id: 'dashboard', label: 'Dashboard', desc: 'View dashboard & stats' },
+    { id: 'users', label: 'User Management', desc: 'View, edit, delete users' },
+    { id: 'campaigns', label: 'Campaigns', desc: 'View & manage campaigns' },
+    { id: 'scheduled', label: 'Scheduled Sends', desc: 'View & manage scheduled sends' },
+    { id: 'gateway', label: 'Gateway Engine', desc: 'Gateway overview, config, accounts' },
+    { id: 'apis', label: 'API Management', desc: 'View & manage API providers' },
+    { id: 'content', label: 'Content & Templates', desc: 'Manage email/SMS templates' },
+    { id: 'database', label: 'Database', desc: 'View database & export data' },
+    { id: 'logs', label: 'Activity Logs', desc: 'View system activity logs' },
+    { id: 'alerts', label: 'Alerts & Notifications', desc: 'Configure alert settings' },
+    { id: 'security', label: 'Admin Security', desc: 'Manage admin credentials' },
+    { id: 'settings', label: 'Settings', desc: 'Platform settings' },
+  ];
+
+  const load = async () => {
+    setLoading(true);
+    const data = await api('getSubAdmins');
+    if (data.success) setSubAdmins(data.subAdmins || []);
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  const togglePerm = (permId, list, setList) => {
+    if (list.includes(permId)) {
+      setList(list.filter(p => p !== permId));
+    } else {
+      setList([...list, permId]);
+    }
+  };
+
+  const createSub = async () => {
+    if (!newUsername || !newPassword) {
+      setMessage('✗ Username and password required');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setMessage('✗ Password must be at least 8 characters');
+      return;
+    }
+    setMessage('');
+    try {
+      const data = await api('createSubAdmin', { username: newUsername, password: newPassword, permissions: newPerms });
+      if (data.success) {
+        setMessage(`✓ Sub-Admin created! API Key: ${data.apiKey} (save this — shown only once)`);
+        setNewUsername(''); setNewPassword(''); setNewPerms([]);
+        setShowCreate(false);
+        load();
+      } else {
+        setMessage(`✗ ${data.error || 'Failed to create'}`);
+      }
+    } catch {
+      setMessage('✗ Network error');
+    }
+  };
+
+  const startEdit = (sub) => {
+    setEditingId(sub._id);
+    setEditPerms(sub.permissions || []);
+    setMessage('');
+  };
+
+  const saveEdit = async (subId) => {
+    try {
+      const data = await api('updateSubAdminPermissions', { id: subId, permissions: editPerms });
+      if (data.success) {
+        setMessage('✓ Permissions updated');
+        setEditingId(null);
+        load();
+      } else {
+        setMessage(`✗ ${data.error || 'Failed to update'}`);
+      }
+    } catch {
+      setMessage('✗ Network error');
+    }
+  };
+
+  const deleteSub = async (subId, username) => {
+    if (!confirm(`Delete sub-admin "${username}"? This cannot be undone.`)) return;
+    try {
+      const data = await api('deleteSubAdmin', { id: subId });
+      if (data.success) {
+        setMessage(`✓ Sub-Admin "${username}" deleted`);
+        load();
+      } else {
+        setMessage(`✗ ${data.error || 'Failed to delete'}`);
+      }
+    } catch {
+      setMessage('✗ Network error');
+    }
+  };
+
+  if (loading) return <SkeletonGrid count={3} />;
+
+  return (
+    <div className="space-y-5 max-w-4xl">
+      {message && (
+        <div className={`flex items-center gap-2 rounded-xl px-4 py-3 text-sm border ${message.startsWith('✓') ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-red-500/10 border-red-500/30 text-red-300'}`}>
+          <Icon.Info /> <span className="break-all">{message}</span>
+        </div>
+      )}
+
+      {/* Header + Create button */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-white">Sub-Admin Management</h2>
+          <p className="text-sm text-gray-400 mt-0.5">Create sub-admins with granular, section-level permissions (RBAC)</p>
+        </div>
+        <button onClick={() => setShowCreate(!showCreate)} className="inline-flex items-center gap-2 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white text-sm px-4 py-2.5 rounded-lg transition font-semibold">
+          {showCreate ? 'Cancel' : '+ Create Sub-Admin'}
+        </button>
+      </div>
+
+      {/* Create form */}
+      {showCreate && (
+        <DetailBox title="Create New Sub-Admin" subtitle="Set username, password, and choose which sections they can access" icon="users" accent="sky">
+          <div className="mt-3 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-gray-400 text-sm font-medium block mb-1.5">Username</label>
+                <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="e.g. operator1" value={newUsername} onChange={e => setNewUsername(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-gray-400 text-sm font-medium block mb-1.5">Password (min 8 chars)</label>
+                <input type="password" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Strong password" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+              </div>
+            </div>
+            <div>
+              <label className="text-gray-400 text-sm font-medium block mb-2">Permissions — select sections this sub-admin can access:</label>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                {ALL_PERMISSIONS.map(p => (
+                  <label key={p.id} className={`flex items-start gap-2.5 px-3 py-2.5 rounded-lg border cursor-pointer transition ${newPerms.includes(p.id) ? 'bg-sky-600/15 border-sky-500/40' : 'bg-slate-800 border-slate-700 hover:border-slate-600'}`}>
+                    <input type="checkbox" checked={newPerms.includes(p.id)} onChange={() => togglePerm(p.id, newPerms, setNewPerms)} className="accent-sky-500 mt-0.5" />
+                    <div>
+                      <p className={`text-sm font-medium ${newPerms.includes(p.id) ? 'text-sky-300' : 'text-gray-300'}`}>{p.label}</p>
+                      <p className="text-xs text-gray-500">{p.desc}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500 mt-1.5">Selected: {newPerms.length} / {ALL_PERMISSIONS.length} sections</p>
+            </div>
+            <button onClick={createSub} className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white text-sm px-6 py-2.5 rounded-lg transition font-semibold">
+              Create Sub-Admin
+            </button>
+          </div>
+        </DetailBox>
+      )}
+
+      {/* Sub-Admins list */}
+      <DetailBox title={`Existing Sub-Admins (${subAdmins.length})`} subtitle="Click Edit to modify permissions for any sub-admin" icon="shield" accent="violet">
+        <div className="mt-3">
+          {subAdmins.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <Icon.Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
+              <p>No sub-admins yet. Create one to get started.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {subAdmins.map(sub => (
+                <div key={sub._id} className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <p className="text-white font-semibold flex items-center gap-2">
+                        {sub.username}
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-violet-500/20 text-violet-400 uppercase tracking-wider">Sub-Admin</span>
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5">Created: {new Date(sub.createdAt || sub.updatedAt).toLocaleDateString()}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      {editingId === sub._id ? (
+                        <>
+                          <button onClick={() => saveEdit(sub._id)} className="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 rounded-lg text-xs font-medium transition border border-emerald-500/20">Save</button>
+                          <button onClick={() => setEditingId(null)} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded-lg text-xs font-medium transition">Cancel</button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => startEdit(sub)} className="px-3 py-1.5 bg-sky-600/20 hover:bg-sky-600/30 text-sky-400 rounded-lg text-xs font-medium transition border border-sky-500/20">Edit</button>
+                          <button onClick={() => deleteSub(sub._id, sub.username)} className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg text-xs font-medium transition border border-red-500/20">Delete</button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Permissions display / edit */}
+                  {editingId === sub._id ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {ALL_PERMISSIONS.map(p => (
+                        <label key={p.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition ${editPerms.includes(p.id) ? 'bg-sky-600/15 border-sky-500/40' : 'bg-slate-800 border-slate-700'}`}>
+                          <input type="checkbox" checked={editPerms.includes(p.id)} onChange={() => togglePerm(p.id, editPerms, setEditPerms)} className="accent-sky-500" />
+                          <span className={`text-sm ${editPerms.includes(p.id) ? 'text-sky-300' : 'text-gray-400'}`}>{p.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {(sub.permissions || []).length === 0 ? (
+                        <span className="text-xs text-gray-600 italic">No permissions assigned</span>
+                      ) : (
+                        (sub.permissions || []).map(p => (
+                          <span key={p} className="text-xs bg-slate-700 text-sky-300 px-2.5 py-1 rounded-md font-medium">{p}</span>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </DetailBox>
     </div>
   );
 }

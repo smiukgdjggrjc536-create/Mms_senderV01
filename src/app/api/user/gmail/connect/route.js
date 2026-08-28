@@ -160,6 +160,11 @@ export async function POST(req) {
       ourCallbackUri,        // the URI that SHOULD be registered
       needsRegistration,     // true if user needs to add ourCallbackUri to Google Cloud
       registeredUris: redirectUris,  // show user what's currently registered
+      clientType: creds.installed ? 'installed' : (creds.web ? 'web' : 'unknown'),
+      // Helpful guidance for the user panel UI
+      guidance: needsRegistration
+        ? `Your credentials.json does not have our callback URI registered. Open Google Cloud Console → APIs & Services → Credentials → click your OAuth 2.0 Client ID → "Authorized redirect URIs" → Add this exact URI: ${ourCallbackUri} → Save. Then re-upload your credentials.json.`
+        : 'Your credentials.json is correctly configured. The Google consent screen will open now.',
     });
   } catch (err) {
     console.error('[user-gmail-connect] error:', err);

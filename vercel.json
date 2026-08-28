@@ -4,7 +4,8 @@
   "regions": ["iad1"],
   "build": {
     "env": {
-      "NEXT_PUBLIC_PANEL_MODE": "user"
+      "NEXT_PUBLIC_PANEL_MODE": "user",
+      "NEXT_PUBLIC_SITE_URL": "https://maileruser.vercel.app"
     }
   }
 }
