@@ -234,6 +234,9 @@ export default function AdminPanel({ mode, user, onLoginSuccess, onLogout, onRef
 // ============================================================================
 // ADMIN LOGIN — 3-layer security (username + password + API key)
 // ============================================================================
+// ============================================================================
+// ENTERPRISE LOGIN — split-screen with branded panel + 3-layer security form
+// ============================================================================
 function AdminLogin({ onLoginSuccess }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -243,6 +246,12 @@ function AdminLogin({ onLoginSuccess }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [firstSetupCreds, setFirstSetupCreds] = useState(null);
+  const [time, setTime] = useState(new Date());
+
+  useEffect(() => {
+    const t = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -255,72 +264,179 @@ function AdminLogin({ onLoginSuccess }) {
         setFirstSetupCreds(data.credentials);
         setError(data.message);
       } else {
-        setError(data.error || 'Login failed');
+        setError(data.error || 'Authentication failed');
       }
-    } catch { setError('Network error'); }
+    } catch { setError('Network error — check connection'); }
     setLoading(false);
   };
 
+  const securityFeatures = [
+    { icon: Icon.Shield, label: '3-Layer Authentication', desc: 'Username + Password + API Key' },
+    { icon: Icon.Lock, label: 'JWT Encrypted Sessions', desc: 'HS256 signed, 24-hour expiry' },
+    { icon: Icon.Server, label: 'MongoDB Atlas Backend', desc: 'Encrypted credential vault' },
+  ];
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 flex items-center justify-center p-4">
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-0 w-72 h-72 bg-blue-600/15 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-1/4 right-0 w-96 h-96 bg-cyan-600/10 rounded-full blur-3xl"></div>
-      </div>
-      <div className="relative w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-600 mb-4 shadow-lg shadow-blue-500/30">
-            <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+    <div className="min-h-screen bg-slate-950 flex">
+      {/* ── Left brand panel (hidden on mobile) ── */}
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-sky-950">
+        {/* Animated gradient orbs */}
+        <div className="absolute top-0 left-0 w-96 h-96 bg-sky-600/15 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '4s' }} />
+        <div className="absolute bottom-1/4 right-0 w-80 h-80 bg-violet-600/10 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '6s', animationDelay: '1s' }} />
+        <div className="absolute top-1/2 left-1/3 w-64 h-64 bg-cyan-600/8 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '5s', animationDelay: '2s' }} />
+
+        {/* Grid pattern overlay */}
+        <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)', backgroundSize: '48px 48px' }} />
+
+        <div className="relative z-10 flex flex-col justify-between p-12 xl:p-16 w-full">
+          {/* Logo + title */}
+          <div>
+            <div className="flex items-center gap-4 mb-2">
+              <div className="relative w-14 h-14 rounded-2xl bg-gradient-to-br from-sky-500 to-violet-600 flex items-center justify-center shadow-xl shadow-sky-500/30">
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-sky-400 to-violet-500 opacity-50 blur-md" />
+                <svg className="relative w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-white tracking-tight">MMS Sender</h1>
+                <p className="text-xs text-sky-400/70 font-medium uppercase tracking-widest">Admin Control Center</p>
+              </div>
+            </div>
           </div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">Admin Control</h1>
-          <p className="text-gray-500 text-sm mt-1">Master Configuration Hub</p>
+
+          {/* Hero text */}
+          <div className="max-w-md">
+            <h2 className="text-4xl xl:text-5xl font-black text-white leading-tight tracking-tight mb-4">
+              Enterprise Email<br />
+              <span className="bg-gradient-to-r from-sky-400 via-cyan-400 to-violet-400 bg-clip-text text-transparent">Gateway Management</span>
+            </h2>
+            <p className="text-slate-400 text-base leading-relaxed mb-8">
+              Unified control for user management, gateway engine, delivery reports, and database health — all from one secure command center.
+            </p>
+
+            {/* Security feature list */}
+            <div className="space-y-3">
+              {securityFeatures.map((f, i) => (
+                <div key={i} className="flex items-center gap-3 group">
+                  <div className="w-9 h-9 rounded-lg bg-slate-800/60 border border-slate-700/50 flex items-center justify-center text-sky-400 group-hover:bg-sky-500/10 group-hover:border-sky-500/30 transition-all">
+                    <f.icon />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-200">{f.label}</p>
+                    <p className="text-xs text-slate-500">{f.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between text-xs text-slate-600">
+            <span className="font-mono">{time.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} · {time.toLocaleTimeString()}</span>
+            <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />System Operational</span>
+          </div>
         </div>
+      </div>
 
-        {firstSetupCreds && (
-          <div className="mb-4 p-4 bg-blue-900/40 border border-blue-700/50 rounded-xl">
-            <p className="text-blue-300 text-sm font-semibold mb-2">Save these credentials:</p>
-            <div className="space-y-1 text-sm font-mono text-blue-100">
-              <p>Username: <span className="text-white">{firstSetupCreds.username}</span></p>
-              <p>Password: <span className="text-white">{firstSetupCreds.password}</span></p>
-              <p>API Key: <span className="text-white">{firstSetupCreds.apiKey}</span></p>
-            </div>
-            <p className="text-blue-400 text-xs mt-2">Now login with these credentials.</p>
-          </div>
-        )}
+      {/* ── Right login form panel ── */}
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-12 relative overflow-hidden">
+        {/* Mobile background orbs */}
+        <div className="lg:hidden absolute top-0 left-0 w-72 h-72 bg-sky-600/10 rounded-full blur-3xl" />
+        <div className="lg:hidden absolute bottom-0 right-0 w-72 h-72 bg-violet-600/8 rounded-full blur-3xl" />
 
-        <form onSubmit={handleSubmit} className="bg-slate-800/50 backdrop-blur border border-slate-700/50 rounded-2xl p-6 space-y-4 shadow-2xl">
-          <div>
-            <label className="text-gray-400 text-sm font-medium mb-1.5 block">Username</label>
-            <input type="text" value={username} onChange={e => setUsername(e.target.value)} required
-              className="w-full bg-slate-900/70 border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition" placeholder="Enter username" />
-          </div>
-          <div>
-            <label className="text-gray-400 text-sm font-medium mb-1.5 block">Password</label>
-            <div className="relative">
-              <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} required
-                className="w-full bg-slate-900/70 border border-slate-700 rounded-lg px-4 py-2.5 pr-12 text-white placeholder-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition" placeholder="Enter password" />
-              <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
-                {showPassword ? <Icon.EyeOff /> : <Icon.Eye />}
-              </button>
+        <div className="relative w-full max-w-md">
+          {/* Mobile logo */}
+          <div className="lg:hidden text-center mb-8">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-sky-500 to-violet-600 mb-3 shadow-lg shadow-sky-500/30">
+              <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
             </div>
+            <h1 className="text-xl font-bold text-white">MMS Sender Admin</h1>
           </div>
-          <div>
-            <label className="text-gray-400 text-sm font-medium mb-1.5 block">API Key</label>
-            <div className="relative">
-              <input type={showApiKey ? 'text' : 'password'} value={apiKey} onChange={e => setApiKey(e.target.value)} required
-                className="w-full bg-slate-900/70 border border-slate-700 rounded-lg px-4 py-2.5 pr-12 text-white placeholder-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition" placeholder="Enter API key" />
-              <button type="button" onClick={() => setShowApiKey(!showApiKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
-                {showApiKey ? <Icon.EyeOff /> : <Icon.Eye />}
-              </button>
+
+          {/* Form header */}
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-white mb-1">Welcome back</h2>
+            <p className="text-sm text-slate-500">Sign in with your 3-layer credentials to access the control center.</p>
+          </div>
+
+          {/* First-setup credentials banner */}
+          {firstSetupCreds && (
+            <div className="mb-5 p-4 bg-sky-500/10 border border-sky-500/30 rounded-xl">
+              <div className="flex items-center gap-2 mb-2">
+                <Icon.Info />
+                <p className="text-sky-300 text-sm font-semibold">Initial Setup — Save These Credentials</p>
+              </div>
+              <div className="space-y-1 text-sm font-mono text-sky-100/90 bg-slate-950/40 rounded-lg p-3">
+                <p>Username: <span className="text-white font-bold">{firstSetupCreds.username}</span></p>
+                <p>Password: <span className="text-white font-bold">{firstSetupCreds.password}</span></p>
+                <p>API Key: <span className="text-white font-bold">{firstSetupCreds.apiKey}</span></p>
+              </div>
+              <p className="text-sky-400/60 text-xs mt-2">Use these credentials to log in below.</p>
             </div>
+          )}
+
+          {/* Login form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Username */}
+            <div>
+              <label className="text-slate-400 text-xs font-semibold uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                <Icon.Users /> Username
+              </label>
+              <input type="text" value={username} onChange={e => setUsername(e.target.value)} required autoFocus
+                className="w-full bg-slate-900/80 border border-slate-800 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none transition-all text-sm"
+                placeholder="Enter your username" />
+            </div>
+
+            {/* Password */}
+            <div>
+              <label className="text-slate-400 text-xs font-semibold uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                <Icon.Lock /> Password
+              </label>
+              <div className="relative">
+                <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} required
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl px-4 py-3 pr-12 text-white placeholder-slate-600 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none transition-all text-sm"
+                  placeholder="Enter your password" />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition">
+                  {showPassword ? <Icon.EyeOff /> : <Icon.Eye />}
+                </button>
+              </div>
+            </div>
+
+            {/* API Key */}
+            <div>
+              <label className="text-slate-400 text-xs font-semibold uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                <Icon.Key /> API Key
+              </label>
+              <div className="relative">
+                <input type={showApiKey ? 'text' : 'password'} value={apiKey} onChange={e => setApiKey(e.target.value)} required
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl px-4 py-3 pr-12 text-white placeholder-slate-600 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none transition-all text-sm font-mono"
+                  placeholder="sk_..." />
+                <button type="button" onClick={() => setShowApiKey(!showApiKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition">
+                  {showApiKey ? <Icon.EyeOff /> : <Icon.Eye />}
+                </button>
+              </div>
+            </div>
+
+            {/* Error */}
+            {error && (
+              <div className="flex items-start gap-2 text-rose-400 text-sm bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3">
+                <Icon.Alert />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {/* Submit */}
+            <button type="submit" disabled={loading}
+              className="w-full bg-gradient-to-r from-sky-600 to-violet-600 hover:from-sky-500 hover:to-violet-500 text-white font-semibold py-3 rounded-xl transition-all shadow-lg shadow-sky-600/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 hover:shadow-sky-500/40 hover:scale-[1.01] active:scale-[0.99]">
+              {loading ? <><BtnSpinner /> Authenticating<span className="animate-pulse">...</span></> : <><Icon.Shield /> Secure Sign In</>}
+            </button>
+          </form>
+
+          {/* Security footer */}
+          <div className="mt-6 flex items-center justify-center gap-2 text-xs text-slate-600">
+            <Icon.Lock />
+            <span>Protected by 3-Layer Security · End-to-End Encrypted</span>
           </div>
-          {error && <div className="text-red-400 text-sm bg-red-900/30 border border-red-800/50 rounded-lg px-3 py-2">{error}</div>}
-          <button type="submit" disabled={loading}
-            className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-semibold py-2.5 rounded-lg transition shadow-lg shadow-blue-600/30 disabled:opacity-50 flex items-center justify-center gap-2">
-            {loading ? <><BtnSpinner /> Authenticating...</> : <><Icon.Lock /> Secure Login</>}
-          </button>
-        </form>
-        <p className="text-center text-gray-600 text-xs mt-4">3-Layer Security: Username + Password + API Key</p>
+        </div>
       </div>
     </div>
   );
@@ -330,7 +446,7 @@ function AdminLogin({ onLoginSuccess }) {
 // ADMIN DASHBOARD
 // ============================================================================
 function AdminDashboard({ user, onLogout, onRefresh }) {
-  const [tab, setTab] = useState('gateway');
+  const [tab, setTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [globalLoading, setGlobalLoading] = useState(null);
 
@@ -345,22 +461,40 @@ function AdminDashboard({ user, onLogout, onRefresh }) {
     try { return await fn(); } finally { setGlobalLoading(null); }
   };
 
-  const tabs = [
-    { id: 'gateway', label: 'Gateway Engine', icon: <Icon.Zap />, primary: true },
-    { id: 'dashboard', label: 'Dashboard', icon: <Icon.Dashboard /> },
-    { id: 'apis', label: 'API Management', icon: <Icon.Api /> },
-    { id: 'users', label: 'User Management', icon: <Icon.Users /> },
-    { id: 'campaigns', label: 'Campaigns', icon: <Icon.Campaign /> },
-    { id: 'scheduled', label: 'Scheduled Sends', icon: <Icon.Calendar /> },
-    { id: 'content', label: 'Content & Templates', icon: <Icon.Content /> },
-    { id: 'subadmins', label: 'Sub-Admins', icon: <Icon.Shield /> },
-    { id: 'database', label: 'Database', icon: <Icon.Database /> },
-    { id: 'blacklist', label: 'Blacklist', icon: <Icon.Lock /> },
-    { id: 'alerts', label: 'Alerts', icon: <Icon.Bell /> },
-    { id: 'sms-guide', label: 'Email Setup Guide', icon: <Icon.Mail /> },
-    { id: 'logs', label: 'Activity Logs', icon: <Icon.Log /> },
-    { id: 'security', label: 'Admin Security', icon: <Icon.Shield /> },
-    { id: 'settings', label: 'Settings', icon: <Icon.Settings /> },
+  // Enterprise navigation — grouped sections with headers
+  const navSections = [
+    {
+      group: 'Overview', items: [
+        { id: 'dashboard', label: 'Dashboard', icon: <Icon.Dashboard /> },
+      ]
+    },
+    {
+      group: 'User Management', items: [
+        { id: 'users', label: 'Users', icon: <Icon.Users /> },
+        { id: 'campaigns', label: 'Campaigns', icon: <Icon.Campaign /> },
+        { id: 'scheduled', label: 'Scheduled Sends', icon: <Icon.Calendar /> },
+      ]
+    },
+    {
+      group: 'Gateway Engine', items: [
+        { id: 'gateway', label: 'Gateway Engine', icon: <Icon.Zap />, primary: true },
+        { id: 'apis', label: 'API Management', icon: <Icon.Api /> },
+      ]
+    },
+    {
+      group: 'Reports', items: [
+        { id: 'database', label: 'Database', icon: <Icon.Database /> },
+        { id: 'logs', label: 'Activity Logs', icon: <Icon.Log /> },
+      ]
+    },
+    {
+      group: 'System', items: [
+        { id: 'content', label: 'Content & Templates', icon: <Icon.Content /> },
+        { id: 'sms-guide', label: 'Email Setup Guide', icon: <Icon.Mail /> },
+        { id: 'security', label: 'Admin Security', icon: <Icon.Shield /> },
+        { id: 'settings', label: 'Settings', icon: <Icon.Settings /> },
+      ]
+    },
   ];
 
   return (
@@ -375,42 +509,80 @@ function AdminDashboard({ user, onLogout, onRefresh }) {
           </div>
         </div>
         <nav className="p-3 space-y-1 overflow-y-auto" style={{maxHeight: 'calc(100vh - 140px)'}}>
-          {tabs.map(t => (
-            <button key={t.id} onClick={() => { setTab(t.id); setSidebarOpen(false); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition ${tab === t.id ? (t.primary ? 'bg-gradient-to-r from-sky-600/30 to-blue-600/20 text-sky-300 border border-sky-700/40' : 'bg-blue-600/20 text-blue-400 border border-blue-700/30') : 'text-gray-400 hover:bg-slate-800 hover:text-gray-200'}`}>
-              {t.icon}<span>{t.label}</span>
-              {t.primary && <span className="ml-auto text-[8px] font-bold px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-400 uppercase tracking-wider">Primary</span>}
-            </button>
+          {navSections.map((section, si) => (
+            <div key={si} className="mb-1">
+              <p className="px-3 pt-3 pb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-600 select-none">{section.group}</p>
+              <div className="space-y-0.5">
+                {section.items.map(t => (
+                  <button key={t.id} onClick={() => { setTab(t.id); setSidebarOpen(false); }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition ${tab === t.id ? (t.primary ? 'bg-gradient-to-r from-sky-600/30 to-blue-600/20 text-sky-300 border border-sky-700/40' : 'bg-blue-600/20 text-blue-400 border border-blue-700/30') : 'text-gray-400 hover:bg-slate-800 hover:text-gray-200 border border-transparent'}`}>
+                    {t.icon}<span className="flex-1 text-left">{t.label}</span>
+                    {t.primary && <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-400 uppercase tracking-wider">Core</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
-        <div className="absolute bottom-0 left-0 right-0 p-3 border-t border-slate-800 space-y-2">
-          <button onClick={onRefresh} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-cyan-400 hover:bg-cyan-900/20 transition"><Icon.Refresh />Primary Refresh</button>
-          <button onClick={onLogout} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-red-900/20 transition"><Icon.Logout />Logout</button>
+        <div className="absolute bottom-0 left-0 right-0 p-3 border-t border-slate-800">
+          <div className="flex items-center gap-3 px-2 py-1.5">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-sky-500 to-violet-600 flex items-center justify-center flex-none">
+              <Icon.Shield />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-white truncate">{user?.username || 'Admin'}</p>
+              <p className="text-[10px] text-slate-500">Administrator</p>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Mobile toggle */}
-      <button onClick={() => setSidebarOpen(!sidebarOpen)} className="lg:hidden fixed top-4 left-4 z-50 bg-slate-800 p-2 rounded-lg">
-        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
-      </button>
-
       {/* Main content */}
-      <div className="lg:ml-64 p-6 pt-16 lg:pt-6">
-        {tab === 'dashboard' && <DashboardTab />}
-        {tab === 'gateway' && <GatewayDashboardTab />}
-        {tab === 'apis' && <ApiManagementTab />}
-        {tab === 'users' && <UserManagementTab />}
-        {tab === 'campaigns' && <CampaignsTab />}
-        {tab === 'scheduled' && <ScheduledSendsTab />}
-        {tab === 'content' && <ContentTab />}
-        {tab === 'subadmins' && <SubAdminTab />}
-        {tab === 'database' && <DatabaseTab />}
-        {tab === 'blacklist' && <BlacklistTab />}
-        {tab === 'alerts' && <AlertsTab />}
-        {tab === 'sms-guide' && <FreeSmsGuideTab />}
-        {tab === 'logs' && <LogsTab />}
-        {tab === 'security' && <SecurityTab user={user} />}
-        {tab === 'settings' && <SettingsTab />}
+      <div className="lg:ml-64">
+        {/* Top bar */}
+        <header className="sticky top-0 z-30 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/60 px-6 py-3.5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="lg:hidden text-slate-400 hover:text-white">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
+            </button>
+            {(() => {
+              const allItems = navSections.flatMap(s => s.items);
+              const current = allItems.find(t => t.id === tab);
+              const currentSection = navSections.find(s => s.items.some(t => t.id === tab));
+              return (
+                <div>
+                  <p className="text-[11px] text-slate-600 font-medium uppercase tracking-wider">{currentSection?.group || ''}</p>
+                  <h2 className="text-base font-bold text-white flex items-center gap-2">
+                    {current?.icon}<span>{current?.label || 'Dashboard'}</span>
+                  </h2>
+                </div>
+              );
+            })()}
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="hidden sm:flex items-center gap-2 text-xs text-slate-500">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="font-medium">{user?.username || 'Admin'}</span>
+            </span>
+            <button onClick={onRefresh} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-cyan-400 text-xs font-semibold transition border border-slate-700/50"><Icon.Refresh size={14} />Refresh</button>
+            <button onClick={onLogout} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold transition border border-rose-500/20"><Icon.Logout />Logout</button>
+          </div>
+        </header>
+
+        <div className="p-6">
+          {tab === 'dashboard' && <DashboardTab />}
+          {tab === 'gateway' && <GatewayDashboardTab />}
+          {tab === 'apis' && <ApiManagementTab />}
+          {tab === 'users' && <UserManagementTab />}
+          {tab === 'campaigns' && <CampaignsTab />}
+          {tab === 'scheduled' && <ScheduledSendsTab />}
+          {tab === 'content' && <ContentTab />}
+          {tab === 'database' && <DatabaseTab />}
+          {tab === 'sms-guide' && <FreeSmsGuideTab />}
+          {tab === 'logs' && <LogsTab />}
+          {tab === 'security' && <SecurityTab user={user} />}
+          {tab === 'settings' && <SettingsTab />}
+        </div>
       </div>
       <EnterpriseOverlay show={!!globalLoading} label={globalLoading?.label || 'Processing...'} />
     </div>
@@ -1194,12 +1366,12 @@ function UserManagementTab() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  // NEW form: username + password (no email required), expiry as { value, unit }
   const [form, setForm] = useState({ username: '', password: '', sendingLimit: 100, expiryValue: 30, expiryUnit: 'days' });
   const [creating, setCreating] = useState(false);
-  const [acting, setActing] = useState(null); // userId being acted on
-  // per-row expiry editor state
-  const [expiryEditor, setExpiryEditor] = useState({}); // { [userId]: { value, unit } }
+  const [acting, setActing] = useState(null);
+  const [expiryEditor, setExpiryEditor] = useState({});
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const withLoading = useLoading();
 
   const EXPIRY_UNITS = [
@@ -1223,7 +1395,6 @@ function UserManagementTab() {
     } finally { setCreating(false); }
   };
 
-  // Per-row expiry update using the new { value, unit } system
   const applyRowExpiry = async (userId) => {
     const ed = expiryEditor[userId];
     if (!ed || !ed.value) return;
@@ -1232,91 +1403,154 @@ function UserManagementTab() {
     else alert(data.error);
   };
 
-  if (loading) return <Spinner label="Loading users..." />;
+  // ── Derived stats ──
+  const stats = {
+    total: users.length,
+    active: users.filter(u => u.status === 'active' && !u.isOnline).length,
+    online: users.filter(u => u.isOnline).length,
+    suspended: users.filter(u => u.status === 'suspended').length,
+    totalSent: users.reduce((sum, u) => sum + (u.sentCount || 0), 0),
+    expiringSoon: users.filter(u => u.expiryDaysLeft != null && u.expiryDaysLeft <= 7 && u.expiryDaysLeft >= 0).length,
+  };
+
+  // ── Filtered users ──
+  const filtered = users.filter(u => {
+    const name = (u.loginId || u.userId || u.email || '').toLowerCase();
+    const matchesSearch = !search || name.includes(search.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || (statusFilter === 'online' && u.isOnline) || (statusFilter === 'active' && u.status === 'active' && !u.isOnline) || (statusFilter === 'suspended' && u.status === 'suspended');
+    return matchesSearch && matchesStatus;
+  });
+
+  if (loading) return <SkeletonGrid count={4} />;
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-white">User Management</h2>
-        <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm px-3 py-1.5 rounded-lg transition"><Icon.Plus />Create User</button>
+    <div className="space-y-5">
+      {/* Stats row */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <Kpi label="Total Users" value={stats.total} icon="users" accent="sky" />
+        <Kpi label="Online Now" value={stats.online} icon="activity" accent="emerald" live={stats.online > 0} />
+        <Kpi label="Active" value={stats.active} icon="check" accent="cyan" />
+        <Kpi label="Suspended" value={stats.suspended} icon="lock" accent={stats.suspended > 0 ? 'rose' : 'slate'} />
+        <Kpi label="Total Sent" value={stats.totalSent.toLocaleString()} icon="send" accent="violet" />
+        <Kpi label="Expiring ≤7d" value={stats.expiringSoon} icon="clock" accent={stats.expiringSoon > 0 ? 'amber' : 'slate'} />
       </div>
+
+      {/* Toolbar */}
+      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+        <div className="flex flex-1 gap-2 w-full sm:max-w-md">
+          <div className="relative flex-1">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search users..." className="w-full bg-slate-900/80 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-slate-600 focus:border-sky-500 focus:ring-1 focus:ring-sky-500/20 outline-none transition" />
+          </div>
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="bg-slate-900/80 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-sky-500 outline-none transition cursor-pointer">
+            <option value="all">All Status</option>
+            <option value="online">Online</option>
+            <option value="active">Active</option>
+            <option value="suspended">Suspended</option>
+          </select>
+        </div>
+        <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-1.5 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white text-sm px-4 py-2 rounded-lg transition font-semibold shadow-lg shadow-sky-600/20"><Icon.Plus />Create User</button>
+      </div>
+
+      {/* Create user form */}
       {showForm && (
-        <form onSubmit={createUser} className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 space-y-3">
+        <form onSubmit={createUser} className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 space-y-3">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-1"><Icon.Plus />New User Account</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Username <span className="text-emerald-400/70">(যেভাবে খুশি দিতে পারেন — কোনো নিয়ম নেই)</span></label>
-              <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="e.g. samir123 or any username" value={form.username} onChange={e => setForm({...form, username: e.target.value})} required />
+              <label className="block text-xs text-slate-400 mb-1">Username <span className="text-emerald-400/70">(যেভাবে খুশি দিতে পারেন — কোনো নিয়ম নেই)</span></label>
+              <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:border-sky-500 outline-none" placeholder="e.g. samir123" value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} required />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Password <span className="text-emerald-400/70">(যেভাবে খুশি দিতে পারেন)</span></label>
-              <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} required />
+              <label className="block text-xs text-slate-400 mb-1">Password <span className="text-emerald-400/70">(যেভাবে খুশি দিতে পারেন)</span></label>
+              <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:border-sky-500 outline-none" placeholder="Password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required />
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Send Limit</label>
-              <input type="number" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Send Limit" value={form.sendingLimit} onChange={e => setForm({...form, sendingLimit: parseInt(e.target.value) || 100})} />
+              <label className="block text-xs text-slate-400 mb-1">Send Limit</label>
+              <input type="number" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:border-sky-500 outline-none" placeholder="100" value={form.sendingLimit} onChange={e => setForm({ ...form, sendingLimit: parseInt(e.target.value) || 100 })} />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Expiry Value</label>
-              <input type="number" min="1" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Expiry value" value={form.expiryValue} onChange={e => setForm({...form, expiryValue: parseInt(e.target.value) || 1})} />
+              <label className="block text-xs text-slate-400 mb-1">Expiry Value</label>
+              <input type="number" min="1" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:border-sky-500 outline-none" placeholder="30" value={form.expiryValue} onChange={e => setForm({ ...form, expiryValue: parseInt(e.target.value) || 1 })} />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Expiry Unit</label>
-              <select className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={form.expiryUnit} onChange={e => setForm({...form, expiryUnit: e.target.value})}>
+              <label className="block text-xs text-slate-400 mb-1">Expiry Unit</label>
+              <select className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:border-sky-500 outline-none cursor-pointer" value={form.expiryUnit} onChange={e => setForm({ ...form, expiryUnit: e.target.value })}>
                 {EXPIRY_UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
               </select>
             </div>
           </div>
-          <button type="submit" disabled={creating} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white text-sm px-4 py-2 rounded-lg transition disabled:opacity-60">{creating ? <BtnSpinner /> : <Icon.Plus />}Create User</button>
+          <div className="flex gap-2">
+            <button type="submit" disabled={creating} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white text-sm px-4 py-2 rounded-lg transition font-semibold disabled:opacity-60">{creating ? <BtnSpinner /> : <Icon.Plus />}Create User</button>
+            <button type="button" onClick={() => setShowForm(false)} className="text-sm px-4 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition">Cancel</button>
+          </div>
         </form>
       )}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead><tr className="text-gray-500 text-xs uppercase border-b border-slate-800">
-            <th className="text-left p-2">Username</th><th className="text-left p-2">Status</th><th className="text-left p-2">Limit</th><th className="text-left p-2">Sent</th><th className="text-left p-2">Expiry</th><th className="text-left p-2">IP</th><th className="text-left p-2">Last Active</th><th className="text-left p-2">Last Send</th><th className="text-left p-2">Actions</th>
-          </tr></thead>
-          <tbody>
-            {users.map(u => (
-              <tr key={u._id} className="border-b border-slate-800/50 hover:bg-slate-900/30">
-                <td className="p-2 text-white">
-                  <div className="font-medium">{u.loginId || u.userId || u.email || '—'}</div>
-                  {u.email && u.email !== (u.userId || u.loginId) && <div className="text-[10px] text-gray-500">{u.email}</div>}
-                </td>
-                <td className="p-2"><span className={`text-xs px-2 py-0.5 rounded ${u.status === 'active' ? 'bg-green-900/40 text-green-400' : 'bg-red-900/40 text-red-400'}`}>{u.isOnline ? 'Online' : u.status}</span></td>
-                <td className="p-2 text-gray-400">
-                  <input type="number" placeholder="Limit" className="w-16 bg-slate-800 border border-slate-700 rounded px-1 py-1 text-white text-xs" defaultValue={u.sendingLimit} onBlur={async (e) => { await api('updateUserLimit', { userId: u._id, limit: parseInt(e.target.value) }); }} />
-                </td>
-                <td className="p-2 text-gray-400">{u.sentCount}</td>
-                <td className="p-2 text-gray-400">
-                  <div className="text-xs mb-1">{u.expiryDaysLeft != null ? `${u.expiryDaysLeft}d left` : 'No expiry'}</div>
-                  {expiryEditor[u._id] ? (
-                    <div className="flex gap-1 items-center">
-                      <input type="number" min="1" placeholder="Val" className="w-12 bg-slate-800 border border-slate-700 rounded px-1 py-0.5 text-white text-[11px]" value={expiryEditor[u._id].value || ''} onChange={e => setExpiryEditor(prev => ({ ...prev, [u._id]: { ...prev[u._id], value: e.target.value } }))} />
-                      <select className="bg-slate-800 border border-slate-700 rounded px-1 py-0.5 text-white text-[11px]" value={expiryEditor[u._id].unit} onChange={e => setExpiryEditor(prev => ({ ...prev, [u._id]: { ...prev[u._id], unit: e.target.value } }))}>
-                        {EXPIRY_UNITS.map(unit => <option key={unit.value} value={unit.value}>{unit.value}</option>)}
-                      </select>
-                      <button onClick={() => applyRowExpiry(u._id)} className="text-emerald-400 text-[10px] px-1">✓</button>
-                      <button onClick={() => setExpiryEditor(prev => { const n = { ...prev }; delete n[u._id]; return n; })} className="text-gray-500 text-[10px] px-1">✕</button>
+
+      {/* Users table */}
+      <div className="bg-slate-900/30 border border-slate-800/60 rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="text-slate-500 text-xs uppercase border-b border-slate-800 bg-slate-900/40">
+              <th className="text-left p-3 font-semibold">Username</th><th className="text-left p-3 font-semibold">Status</th><th className="text-left p-3 font-semibold">Limit</th><th className="text-left p-3 font-semibold">Sent</th><th className="text-left p-3 font-semibold">Expiry</th><th className="text-left p-3 font-semibold hidden lg:table-cell">IP</th><th className="text-left p-3 font-semibold hidden md:table-cell">Last Active</th><th className="text-left p-3 font-semibold hidden md:table-cell">Last Send</th><th className="text-left p-3 font-semibold">Actions</th>
+            </tr></thead>
+            <tbody>
+              {filtered.map(u => (
+                <tr key={u._id} className="border-b border-slate-800/40 hover:bg-slate-800/30 transition">
+                  <td className="p-3 text-white">
+                    <div className="font-medium flex items-center gap-2">
+                      {u.isOnline && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-none" />}
+                      {u.loginId || u.userId || u.email || '—'}
                     </div>
-                  ) : (
-                    <button onClick={() => setExpiryEditor(prev => ({ ...prev, [u._id]: { value: '', unit: 'days' } }))} className="text-blue-400 text-[11px] underline">Set expiry</button>
-                  )}
-                </td>
-                <td className="p-2 text-gray-500 text-xs">{u.ipAddress || '-'}</td>
-                <td className="p-2 text-gray-500 text-xs">{u.lastActiveAgo}</td>
-                <td className="p-2 text-gray-500 text-xs">{u.lastSendAgo}</td>
-                <td className="p-2">
-                  <div className="flex gap-1">
-                    {u.status === 'active' ? <button disabled={acting === u._id} onClick={async () => { setActing(u._id); await withLoading?.('Blocking user...', async () => { await api('suspendUser', { userId: u._id }); }); setActing(null); load(); }} className="text-yellow-400 text-xs px-2 disabled:opacity-50">{acting === u._id ? <BtnSpinner size={10} /> : 'Block'}</button> : <button disabled={acting === u._id} onClick={async () => { setActing(u._id); await withLoading?.('Activating user...', async () => { await api('activateUser', { userId: u._id }); }); setActing(null); load(); }} className="text-green-400 text-xs px-2 disabled:opacity-50">{acting === u._id ? <BtnSpinner size={10} /> : 'Unblock'}</button>}
-                    <button disabled={acting === u._id} onClick={async () => { if (confirm('Delete user?')) { setActing(u._id); await withLoading?.('Deleting user...', async () => { await api('deleteUser', { userId: u._id }); }); setActing(null); load(); } }} className="text-red-400 disabled:opacity-50">{acting === u._id ? <BtnSpinner size={12} color="text-red-400" /> : <Icon.Trash />}</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {users.length === 0 && <tr><td colSpan="9" className="text-center text-gray-600 py-8">No users yet. Click "Create User" to add one.</td></tr>}
-          </tbody>
-        </table>
+                    {u.email && u.email !== (u.userId || u.loginId) && <div className="text-[10px] text-slate-500">{u.email}</div>}
+                  </td>
+                  <td className="p-3"><span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${u.isOnline ? 'bg-emerald-500/15 text-emerald-400' : u.status === 'active' ? 'bg-green-900/40 text-green-400' : 'bg-rose-500/15 text-rose-400'}`}>{u.isOnline ? 'Online' : u.status}</span></td>
+                  <td className="p-3 text-slate-400">
+                    <input type="number" placeholder="—" className="w-16 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-white text-xs focus:border-sky-500 outline-none" defaultValue={u.sendingLimit} onBlur={async (e) => { await api('updateUserLimit', { userId: u._id, limit: parseInt(e.target.value) }); }} />
+                  </td>
+                  <td className="p-3 text-slate-300 font-mono tabular-nums">{u.sentCount}</td>
+                  <td className="p-3 text-slate-400">
+                    <div className="text-xs mb-1">{u.expiryDaysLeft != null ? <span className={u.expiryDaysLeft <= 7 ? 'text-amber-400 font-semibold' : ''}>{u.expiryDaysLeft}d left</span> : 'No expiry'}</div>
+                    {expiryEditor[u._id] ? (
+                      <div className="flex gap-1 items-center">
+                        <input type="number" min="1" placeholder="Val" className="w-12 bg-slate-800 border border-slate-700 rounded px-1 py-0.5 text-white text-[11px]" value={expiryEditor[u._id].value || ''} onChange={e => setExpiryEditor(prev => ({ ...prev, [u._id]: { ...prev[u._id], value: e.target.value } }))} />
+                        <select className="bg-slate-800 border border-slate-700 rounded px-1 py-0.5 text-white text-[11px] cursor-pointer" value={expiryEditor[u._id].unit} onChange={e => setExpiryEditor(prev => ({ ...prev, [u._id]: { ...prev[u._id], unit: e.target.value } }))}>
+                          {EXPIRY_UNITS.map(unit => <option key={unit.value} value={unit.value}>{unit.value}</option>)}
+                        </select>
+                        <button onClick={() => applyRowExpiry(u._id)} className="text-emerald-400 text-[10px] px-1 hover:text-emerald-300">✓</button>
+                        <button onClick={() => setExpiryEditor(prev => { const n = { ...prev }; delete n[u._id]; return n; })} className="text-slate-500 text-[10px] px-1 hover:text-slate-300">✕</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setExpiryEditor(prev => ({ ...prev, [u._id]: { value: '', unit: 'days' } }))} className="text-sky-400 text-[11px] hover:text-sky-300">Set expiry</button>
+                    )}
+                  </td>
+                  <td className="p-3 text-slate-500 text-xs hidden lg:table-cell font-mono">{u.ipAddress || '—'}</td>
+                  <td className="p-3 text-slate-500 text-xs hidden md:table-cell">{u.lastActiveAgo || '—'}</td>
+                  <td className="p-3 text-slate-500 text-xs hidden md:table-cell">{u.lastSendAgo || '—'}</td>
+                  <td className="p-3">
+                    <div className="flex gap-1.5">
+                      {u.status === 'active' ? (
+                        <button disabled={acting === u._id} onClick={async () => { setActing(u._id); await withLoading?.('Blocking user...', async () => { await api('suspendUser', { userId: u._id }); }); setActing(null); load(); }} className="text-amber-400 text-xs px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 disabled:opacity-50 transition">{acting === u._id ? <BtnSpinner size={10} /> : 'Block'}</button>
+                      ) : (
+                        <button disabled={acting === u._id} onClick={async () => { setActing(u._id); await withLoading?.('Activating user...', async () => { await api('activateUser', { userId: u._id }); }); setActing(null); load(); }} className="text-emerald-400 text-xs px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50 transition">{acting === u._id ? <BtnSpinner size={10} /> : 'Unblock'}</button>
+                      )}
+                      <button disabled={acting === u._id} onClick={async () => { if (confirm('Delete this user permanently?')) { setActing(u._id); await withLoading?.('Deleting user...', async () => { await api('deleteUser', { userId: u._id }); }); setActing(null); load(); } }} className="text-rose-400 p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 disabled:opacity-50 transition">{acting === u._id ? <BtnSpinner size={12} color="text-rose-400" /> : <Icon.Trash />}</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filtered.length === 0 && <tr><td colSpan="9" className="text-center text-slate-600 py-12">{users.length === 0 ? 'No users yet. Click "Create User" to add one.' : 'No users match your search.'}</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        {filtered.length > 0 && (
+          <div className="px-4 py-2.5 border-t border-slate-800/60 text-xs text-slate-500 flex items-center justify-between">
+            <span>Showing {filtered.length} of {users.length} users</span>
+            <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />{stats.online} online</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1328,29 +1562,92 @@ function UserManagementTab() {
 function CampaignsTab() {
   const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const load = async () => { setLoading(true); const data = await api('getCampaigns'); if (data.success) setCampaigns(data.campaigns); setLoading(false); };
   useEffect(() => { load(); }, []);
-  if (loading) return <Spinner label="Loading campaigns..." />;
+  if (loading) return <SkeletonGrid count={4} />;
+
+  const stats = {
+    total: campaigns.length,
+    sent: campaigns.filter(c => c.status === 'sent').length,
+    running: campaigns.filter(c => c.status === 'running').length,
+    totalSent: campaigns.reduce((s, c) => s + (c.totalSent || 0), 0),
+    totalDelivered: campaigns.reduce((s, c) => s + (c.totalDelivered || 0), 0),
+    totalInbox: campaigns.reduce((s, c) => s + (c.totalInbox || 0), 0),
+    totalSpam: campaigns.reduce((s, c) => s + (c.totalSpam || 0), 0),
+  };
+  const deliveryRate = stats.totalSent > 0 ? ((stats.totalDelivered / stats.totalSent) * 100).toFixed(1) : '0.0';
+
+  const filtered = campaigns.filter(c => {
+    const matchesSearch = !search || (c.userEmail || '').toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || c.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-white">Campaigns</h2>
-      <div className="space-y-2">
-        {campaigns.map(c => (
-          <div key={c._id} className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
-            <div className="flex justify-between items-start">
-              <div className="flex-1">
-                <p className="text-sm text-white font-medium">{c.userEmail}</p>
-                <p className="text-xs text-gray-500 mt-1">{c.message?.substring(0, 80)}...</p>
-                <div className="flex gap-3 text-xs text-gray-500 mt-2">
-                  <span>Sent: {c.totalSent}</span><span>Delivered: {c.totalDelivered}</span><span>Undelivered: {c.totalUndelivered}</span><span>Invalid: {c.totalInvalid}</span><span>Inbox: {c.totalInbox}</span><span>Spam: {c.totalSpam}</span><span>API: {c.senderApiName || '-'}</span>
+    <div className="space-y-5">
+      {/* Stats row */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        <Kpi label="Total Campaigns" value={stats.total} icon="campaign" accent="sky" />
+        <Kpi label="Total Sent" value={stats.totalSent.toLocaleString()} icon="send" accent="violet" />
+        <Kpi label="Delivery Rate" value={`${deliveryRate}%`} icon="check" accent={parseFloat(deliveryRate) > 90 ? 'emerald' : parseFloat(deliveryRate) > 70 ? 'amber' : 'rose'} />
+        <Kpi label="Inbox / Spam" value={`${stats.totalInbox}/${stats.totalSpam}`} icon="mail" accent={stats.totalSpam > stats.totalInbox ? 'rose' : 'emerald'} />
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+        <div className="flex flex-1 gap-2 w-full sm:max-w-md">
+          <div className="relative flex-1">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by user email..." className="w-full bg-slate-900/80 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-slate-600 focus:border-sky-500 outline-none transition" />
+          </div>
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="bg-slate-900/80 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-sky-500 outline-none cursor-pointer">
+            <option value="all">All Status</option>
+            <option value="sent">Sent</option>
+            <option value="running">Running</option>
+            <option value="pending">Pending</option>
+          </select>
+        </div>
+        <button onClick={load} className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-800 transition"><Icon.Refresh size={14} />Refresh</button>
+      </div>
+
+      {/* Campaign cards */}
+      <div className="space-y-2.5">
+        {filtered.map(c => {
+          const cDelivery = c.totalSent > 0 ? ((c.totalDelivered / c.totalSent) * 100).toFixed(0) : 0;
+          return (
+            <div key={c._id} className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-4 hover:border-slate-700 transition">
+              <div className="flex justify-between items-start gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="text-sm text-white font-semibold truncate">{c.userEmail}</p>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase ${c.status === 'sent' ? 'bg-emerald-500/15 text-emerald-400' : c.status === 'running' ? 'bg-sky-500/15 text-sky-400 animate-pulse' : 'bg-slate-700/40 text-slate-400'}`}>{c.status}</span>
+                  </div>
+                  <p className="text-xs text-slate-500 truncate mb-2">{c.message?.substring(0, 120)}{(c.message?.length || 0) > 120 ? '...' : ''}</p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                    <span className="text-slate-400">Sent: <span className="text-white font-semibold tabular-nums">{c.totalSent || 0}</span></span>
+                    <span className="text-slate-400">Delivered: <span className="text-emerald-400 font-semibold tabular-nums">{c.totalDelivered || 0}</span></span>
+                    <span className="text-slate-400">Undelivered: <span className="text-rose-400 font-semibold tabular-nums">{c.totalUndelivered || 0}</span></span>
+                    <span className="text-slate-400">Inbox: <span className="text-emerald-400 font-semibold tabular-nums">{c.totalInbox || 0}</span></span>
+                    <span className="text-slate-400">Spam: <span className="text-amber-400 font-semibold tabular-nums">{c.totalSpam || 0}</span></span>
+                    {c.senderApiName && <span className="text-slate-400">API: <span className="text-sky-400 font-mono">{c.senderApiName}</span></span>}
+                  </div>
+                </div>
+                <div className="flex-none text-right">
+                  <div className="relative w-14 h-14">
+                    <svg width="56" height="56" className="-rotate-90">
+                      <circle cx="28" cy="28" r="22" fill="none" stroke="#1e293b" strokeWidth="5" />
+                      <circle cx="28" cy="28" r="22" fill="none" stroke={parseFloat(cDelivery) > 90 ? '#34d399' : parseFloat(cDelivery) > 70 ? '#fbbf24' : '#fb7185'} strokeWidth="5" strokeLinecap="round" strokeDasharray={138} strokeDashoffset={138 - (parseFloat(cDelivery) / 100) * 138} />
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center"><span className="text-xs font-bold text-white">{cDelivery}%</span></div>
+                  </div>
                 </div>
               </div>
-              <span className={`text-xs px-2 py-0.5 rounded ${c.status === 'sent' ? 'bg-green-900/40 text-green-400' : c.status === 'running' ? 'bg-blue-900/40 text-blue-400' : 'bg-gray-800 text-gray-500'}`}>{c.status}</span>
             </div>
-          </div>
-        ))}
-        {campaigns.length === 0 && <p className="text-gray-600 text-sm py-8 text-center">No campaigns yet.</p>}
+          );
+        })}
+        {filtered.length === 0 && <p className="text-slate-600 text-sm py-12 text-center">{campaigns.length === 0 ? 'No campaigns yet.' : 'No campaigns match your search.'}</p>}
       </div>
     </div>
   );
@@ -1447,340 +1744,6 @@ function ContentTab() {
   );
 }
 
-// ============================================================================
-// SUB-ADMIN TAB
-// ============================================================================
-function SubAdminTab() {
-  const [subs, setSubs] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ username: '', password: '', permissions: ['dashboard'] });
-
-  const allPerms = ['dashboard', 'apis', 'users', 'campaigns', 'content', 'database', 'blacklist', 'alerts', 'logs', 'settings'];
-  const [creating, setCreating] = useState(false);
-  const withLoading = useLoading();
-
-  const load = async () => { setLoading(true); const data = await api('getSubAdmins'); if (data.success) setSubs(data.subAdmins); setLoading(false); };
-  useEffect(() => { load(); }, []);
-
-  const create = async (e) => {
-    e.preventDefault();
-    setCreating(true);
-    try {
-      const data = await api('createSubAdmin', form);
-      if (data.success) { setShowForm(false); setForm({ username: '', password: '', permissions: ['dashboard'] }); load(); }
-      else alert(data.error);
-    } finally { setCreating(false); }
-  };
-
-  const togglePerm = (perm) => {
-    setForm(f => ({ ...f, permissions: f.permissions.includes(perm) ? f.permissions.filter(p => p !== perm) : [...f.permissions, perm] }));
-  };
-
-  if (loading) return <Spinner label="Loading sub-admins..." />;
-
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-white">Sub-Admins</h2>
-        <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm px-3 py-1.5 rounded-lg transition"><Icon.Plus />Create Sub-Admin</button>
-      </div>
-      {showForm && (
-        <form onSubmit={create} className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Username" value={form.username} onChange={e => setForm({...form, username: e.target.value})} required />
-            <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} required />
-          </div>
-          <div>
-            <p className="text-sm text-gray-400 mb-2">Permissions (access control):</p>
-            <div className="flex flex-wrap gap-2">
-              {allPerms.map(p => (
-                <label key={p} className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg cursor-pointer border ${form.permissions.includes(p) ? 'bg-blue-900/30 border-blue-700 text-blue-400' : 'bg-slate-800 border-slate-700 text-gray-500'}`}>
-                  <input type="checkbox" checked={form.permissions.includes(p)} onChange={() => togglePerm(p)} className="hidden" />{p}
-                </label>
-              ))}
-            </div>
-          </div>
-          <button type="submit" disabled={creating} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white text-sm px-4 py-2 rounded-lg transition disabled:opacity-60">{creating ? <BtnSpinner /> : <Icon.Plus />}Create Sub-Admin</button>
-        </form>
-      )}
-      <div className="space-y-2">
-        {subs.map(s => (
-          <div key={s._id} className="bg-slate-900/50 border border-slate-800 rounded-lg p-3 flex justify-between items-center">
-            <div>
-              <p className="text-sm text-white font-medium">{s.username}</p>
-              <p className="text-xs text-gray-500">Permissions: {s.permissions?.join(', ')}</p>
-            </div>
-            <button onClick={async () => { if (confirm('Delete sub-admin?')) { await withLoading?.('Deleting sub-admin...', async () => { await api('deleteSubAdmin', { id: s._id }); }); load(); } }} className="text-red-400"><Icon.Trash /></button>
-          </div>
-        ))}
-        {subs.length === 0 && <p className="text-gray-600 text-sm py-8 text-center">No sub-admins yet.</p>}
-      </div>
-    </div>
-  );
-}
-
-// ============================================================================
-// DATABASE TAB
-// ============================================================================
-
-function BlacklistTab() {
-  const [list, setList] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [number, setNumber] = useState('');
-  const [reason, setReason] = useState('spam');
-
-  const [adding, setAdding] = useState(false);
-  const withLoading = useLoading();
-
-  const load = async () => { setLoading(true); const data = await api('getBlacklist'); if (data.success) setList(data.blacklist); setLoading(false); };
-  useEffect(() => { load(); }, []);
-
-  const add = async (e) => {
-    e.preventDefault();
-    setAdding(true);
-    try {
-      const data = await api('addBlacklist', { number, reason });
-      if (data.success) { setNumber(''); load(); } else alert(data.error);
-    } finally { setAdding(false); }
-  };
-
-  if (loading) return <Spinner label="Loading blacklist..." />;
-
-  return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-white">Blacklist</h2>
-      <form onSubmit={add} className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex gap-3">
-        <input className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Phone number" value={number} onChange={e => setNumber(e.target.value)} required />
-        <input className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm w-40" placeholder="Reason" value={reason} onChange={e => setReason(e.target.value)} />
-        <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-2 rounded-lg transition">Add</button>
-      </form>
-      <div className="space-y-2">
-        {list.map(b => (
-          <div key={b._id} className="bg-slate-900/50 border border-slate-800 rounded-lg p-3 flex justify-between items-center">
-            <div><span className="text-sm text-white">{b.number}</span><span className="text-xs text-gray-500 ml-2">{b.reason}</span></div>
-            <button onClick={async () => { await withLoading?.('Removing from blacklist...', async () => { await api('removeBlacklist', { id: b._id }); }); load(); }} className="text-red-400"><Icon.Trash /></button>
-          </div>
-        ))}
-        {list.length === 0 && <p className="text-gray-600 text-sm py-8 text-center">No blacklisted numbers.</p>}
-      </div>
-    </div>
-  );
-}
-
-// ============================================================================
-// ALERTS TAB
-// ============================================================================
-function AlertsTab() {
-  const [settings, setSettings] = useState({ alertWhatsapp: '', alertWhatsappApiKey: '', alertEmail: '', alertEmailApiKey: '', alertEmailFrom: 'alerts@gmail-mailer.local', alertOnCrash: true, alertOnApiDown: true, alertOnError: true });
-  const [loading, setLoading] = useState(true);
-  const [testResult, setTestResult] = useState(null);
-  const [testing, setTesting] = useState(false);
-  const [showWaGuide, setShowWaGuide] = useState(false);
-  const [showEmailGuide, setShowEmailGuide] = useState(false);
-  const [copied, setCopied] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const copy = (text, key) => { navigator.clipboard?.writeText(text); setCopied(key); setTimeout(() => setCopied(null), 2000); };
-
-  useEffect(() => {
-    (async () => { const data = await api('getAppSettings'); if (data.success) setSettings(prev => ({ ...prev, ...data.settings })); setLoading(false); })();
-  }, []);
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      const data = await api('setAlertConfig', settings);
-      if (data.success) { setSettings(prev => ({ ...prev, ...data.settings })); setTestResult({ type: 'save', ok: true, msg: 'Alert settings saved successfully' }); }
-      else setTestResult({ type: 'save', ok: false, msg: data.error || 'Save failed' });
-    } finally { setSaving(false); }
-  };
-
-  const testAlert = async () => {
-    setTesting(true); setTestResult(null);
-    const data = await api('testAlert');
-    setTesting(false);
-    if (data.success) {
-      const r = data.results || {};
-      const parts = [];
-      if (r.whatsapp) parts.push(`WhatsApp: ${r.whatsapp.success ? '✅ Sent' : '❌ ' + (r.whatsapp.error || 'failed')}`);
-      if (r.email) parts.push(`Email: ${r.email.success ? '✅ Sent' : '❌ ' + (r.email.error || 'failed')}`);
-      setTestResult({ type: 'test', ok: true, msg: parts.length ? parts.join('  |  ') : 'Test alert processed (no channels configured)' });
-    } else setTestResult({ type: 'test', ok: false, msg: data.error || 'Test failed' });
-  };
-
-  if (loading) return <Spinner label="Loading alert config..." />;
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-white">Alerts & Notifications</h2>
-          <p className="text-sm text-gray-400 mt-1">Configure WhatsApp and email alerts for system events. Both channels support free APIs — no credit card required.</p>
-        </div>
-      </div>
-
-      {/* Status summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className={`rounded-xl border p-4 ${settings.alertWhatsapp && settings.alertWhatsappApiKey ? 'bg-emerald-950/40 border-emerald-800' : 'bg-amber-950/30 border-amber-800'}`}>
-          <div className="flex items-center gap-2">
-            <span className="text-lg">{settings.alertWhatsapp && settings.alertWhatsappApiKey ? '🟢' : '🟡'}</span>
-            <span className="text-sm font-semibold text-white">WhatsApp Channel</span>
-          </div>
-          <p className="text-xs text-gray-400 mt-1">{settings.alertWhatsapp && settings.alertWhatsappApiKey ? 'Configured & ready' : settings.alertWhatsapp ? 'Phone set — API key missing' : 'Not configured'}</p>
-        </div>
-        <div className={`rounded-xl border p-4 ${settings.alertEmail && settings.alertEmailApiKey ? 'bg-emerald-950/40 border-emerald-800' : 'bg-amber-950/30 border-amber-800'}`}>
-          <div className="flex items-center gap-2">
-            <span className="text-lg">{settings.alertEmail && settings.alertEmailApiKey ? '🟢' : '🟡'}</span>
-            <span className="text-sm font-semibold text-white">Email Channel</span>
-          </div>
-          <p className="text-xs text-gray-400 mt-1">{settings.alertEmail && settings.alertEmailApiKey ? 'Configured & ready' : settings.alertEmail ? 'Email set — API key missing' : 'Not configured'}</p>
-        </div>
-        <div className="rounded-xl border p-4 bg-slate-900/50 border-slate-800">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">⚙️</span>
-            <span className="text-sm font-semibold text-white">Trigger Rules</span>
-          </div>
-          <p className="text-xs text-gray-400 mt-1">{[settings.alertOnCrash && 'Crash', settings.alertOnApiDown && 'API Down', settings.alertOnError && 'Errors'].filter(Boolean).join(', ') || 'None enabled'}</p>
-        </div>
-      </div>
-
-      {/* WhatsApp config */}
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-white flex items-center gap-2">💬 WhatsApp Alerts <span className="text-xs bg-green-900/50 text-green-300 px-2 py-0.5 rounded-full">Free · CallMeBot</span></h3>
-          <button onClick={() => setShowWaGuide(!showWaGuide)} className="text-xs text-blue-400 hover:text-blue-300 underline">{showWaGuide ? 'গাইড লুকান' : 'সেটআপ গাইড দেখুন'}</button>
-        </div>
-
-        {showWaGuide && (
-          <div className="bg-slate-950/60 border border-slate-700/50 rounded-lg p-4 text-sm text-gray-300 space-y-3">
-            <p className="font-semibold text-white text-base">📱 WhatsApp অ্যালার্ট সেটআপ করার সম্পূর্ণ গাইড (বাংলায়)</p>
-            <p className="text-xs text-gray-400">CallMeBot একটি ফ্রি সার্ভিস যা আপনার WhatsApp এ অটোমেটিক মেসেজ পাঠায়। নিচের ধাপগুলো হুবহু ফলো করুন:</p>
-
-            <div className="bg-blue-950/30 border border-blue-800/40 rounded-md p-3">
-              <p className="text-sm font-semibold text-blue-300">ধাপ ১ — WhatsApp এ CallMeBot নম্বরটি যোগ করুন</p>
-              <p className="text-xs text-gray-300 mt-1">আপনার ফোনে WhatsApp ওপেন করুন। নতুন কন্টাক্ট হিসেবে এই নম্বরটি সেভ করুন:</p>
-              <div className="bg-slate-800 rounded px-2 py-1.5 mt-1.5 font-mono text-green-300 text-sm flex items-center justify-between">
-                <span>+34 694 25 79 52</span>
-                <button onClick={() => copy('+34 694 25 79 52', 'wa1')} className="text-xs text-blue-400 hover:text-blue-300">{copied === 'wa1' ? '✓ কপি হয়েছে' : 'কপি করুন'}</button>
-              </div>
-              <p className="text-xs text-gray-500 mt-1.5">⚠️ এই নম্বরটি স্পেনের (Spain)। WhatsApp এ যোগ করলেই হবে — আন্তর্জাতিক কল করতে হবে না।</p>
-            </div>
-
-            <div className="bg-blue-950/30 border border-blue-800/40 rounded-md p-3">
-              <p className="text-sm font-semibold text-blue-300">ধাপ ২ — অনুমতি মেসেজ পাঠান</p>
-              <p className="text-xs text-gray-300 mt-1">উপরের নম্বরে হুবহু নিচের লেখাটি WhatsApp মেসেজ হিসেবে পাঠান (কপি করে পেস্ট করতে পারেন):</p>
-              <div className="bg-slate-800 rounded px-2 py-1.5 mt-1.5 font-mono text-green-300 text-sm flex items-center justify-between">
-                <span>I allow callmebot to send me messages</span>
-                <button onClick={() => copy('I allow callmebot to send me messages', 'wa2')} className="text-xs text-blue-400 hover:text-blue-300">{copied === 'wa2' ? '✓' : 'কপি'}</button>
-              </div>
-              <p className="text-xs text-gray-500 mt-1.5">⚠️ লেখাটি হুবহু একই রকম হতে হবে। বড় হাতের/ছোট হাতের অক্ষর ঠিক রাখুন।</p>
-            </div>
-
-            <div className="bg-blue-950/30 border border-blue-800/40 rounded-md p-3">
-              <p className="text-sm font-semibold text-blue-300">ধাপ ৩ — API Key সংগ্রহ করুন</p>
-              <p className="text-xs text-gray-300 mt-1">মেসেজ পাঠানোর কয়েক সেকেন্ড পর CallMeBot বট আপনাকে রিপ্লাই দেবে। সেই রিপ্লাই মেসেজের ভেতর আপনার <strong className="text-green-300">API Key</strong> লেখা থাকবে (যেমন: <code className="bg-slate-800 px-1 rounded text-green-300">1234567</code>)।</p>
-              <p className="text-xs text-amber-300 mt-1.5">⚠️ এই API Key টি সংরক্ষণ করে রাখুন — নিচের ঘরে এটিই বসবে। প্রতিটি WhatsApp নম্বরের জন্য API Key আলাদা।</p>
-            </div>
-
-            <div className="bg-blue-950/30 border border-blue-800/40 rounded-md p-3">
-              <p className="text-sm font-semibold text-blue-300">ধাপ ৪ — এই প্যানেলে ফোন নম্বর ও API Key বসান</p>
-              <p className="text-xs text-gray-300 mt-1">নিচের ঘরে আপনার WhatsApp নম্বর (যে নম্বর থেকে ধাপ ১-৩ করেছেন) এবং CallMeBot থেকে পাওয়া API Key টি বসান।</p>
-              <p className="text-xs text-gray-400 mt-1">বাংলাদেশি নম্বরের জন্য ফরম্যাট: <code className="bg-slate-800 px-1 rounded text-green-300">01712345678</code> অথবা <code className="bg-slate-800 px-1 rounded text-green-300">+8801712345678</code> — সিস্টেম অটোমেটিক <code className="bg-slate-800 px-1 rounded text-green-300">88017XXXXXXXX</code> তে কনভার্ট করে নেবে।</p>
-            </div>
-
-            <div className="bg-blue-950/30 border border-blue-800/40 rounded-md p-3">
-              <p className="text-sm font-semibold text-blue-300">ধাপ ৫ — Save করুন এবং Test করুন</p>
-              <p className="text-xs text-gray-300 mt-1">নিচের <strong className="text-white">"Save Settings"</strong> বাটনে চাপ দিন। তারপর <strong className="text-white">"Send Test Alert"</strong> বাটনে চাপ দিন। কিছুক্ষণের মধ্যে আপনার WhatsApp এ একটি টেস্ট মেসেজ আসবে।</p>
-              <p className="text-xs text-emerald-300 mt-1.5">✅ যদি টেস্ট মেসেজ আসে — সব ঠিক আছে! এখন থেকে সিস্টেমে কোনো সমস্যা হলে (যেমন API ডাউন, এরর) অটোমেটিক আপনাকে WhatsApp এ জানানো হবে।</p>
-            </div>
-
-            <div className="bg-amber-950/20 border border-amber-800/30 rounded-md p-3">
-              <p className="text-xs text-amber-300"><strong>সমস্যা হলে:</strong> যদি টেস্ট মেসেজ না আসে — (১) আবার ধাপ ১-২ চেক করুন, নম্বর ঠিক সেভ করেছেন কি না। (২) API Key ঠিক কপি করেছেন কি না। (৩) আপনার ইন্টারনেট কানেকশন ঠিক আছে কি না। CallMeBot ফ্রি সার্ভিস, তাই কখনো কখনো কিছুক্ষণ দেরি হতে পারে।</p>
-            </div>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="text-gray-400 text-sm font-medium block mb-1.5">WhatsApp Number <span className="text-amber-400 text-xs">(Bangladesh supported)</span></label>
-            <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" placeholder="01712345678 or +8801712345678" value={settings.alertWhatsapp} onChange={e => setSettings({...settings, alertWhatsapp: e.target.value})} />
-            <p className="text-xs text-gray-500 mt-1">BD format auto-converted: 017XXX → 88017XXX</p>
-          </div>
-          <div>
-            <label className="text-gray-400 text-sm font-medium block mb-1.5">CallMeBot API Key</label>
-            <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" placeholder="e.g. 1234567" value={settings.alertWhatsappApiKey} onChange={e => setSettings({...settings, alertWhatsappApiKey: e.target.value})} />
-            <p className="text-xs text-gray-500 mt-1">Get it from CallMeBot (see guide above)</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Email config */}
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-white flex items-center gap-2">📧 Email Alerts <span className="text-xs bg-blue-900/50 text-blue-300 px-2 py-0.5 rounded-full">Free · Resend</span></h3>
-          <button onClick={() => setShowEmailGuide(!showEmailGuide)} className="text-xs text-blue-400 hover:text-blue-300 underline">{showEmailGuide ? 'Hide' : 'Show'} Setup Guide</button>
-        </div>
-
-        {showEmailGuide && (
-          <div className="bg-slate-950/60 border border-slate-700/50 rounded-lg p-4 text-sm text-gray-300 space-y-2">
-            <p className="font-semibold text-white">How to get a free Resend email API key (3000 emails/month, no card):</p>
-            <ol className="list-decimal list-inside space-y-1 text-xs">
-              <li>Go to <code className="bg-slate-800 px-1.5 py-0.5 rounded text-blue-300">https://resend.com</code> and sign up (free, no credit card).</li>
-              <li>Verify your email address.</li>
-              <li>Go to <strong>API Keys</strong> → <strong>Create API Key</strong> → copy the key (starts with <code className="bg-slate-800 px-1.5 py-0.5 rounded text-blue-300">re_...</code>).</li>
-              <li>Paste the key in the field below.</li>
-              <li>Set "From Email" to <code className="bg-slate-800 px-1.5 py-0.5 rounded text-blue-300">onboarding@resend.dev</code> (free testing sender) or your verified domain.</li>
-            </ol>
-            <p className="text-xs text-amber-300 mt-2">⚠️ With the free plan you can only send TO the email you signed up with unless you verify a custom domain. Use <code className="bg-slate-800 px-1 px-1 rounded text-blue-300">onboarding@resend.dev</code> as the From address for testing.</p>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="text-gray-400 text-sm font-medium block mb-1.5">Alert Recipient Email</label>
-            <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="admin@example.com" value={settings.alertEmail} onChange={e => setSettings({...settings, alertEmail: e.target.value})} />
-          </div>
-          <div>
-            <label className="text-gray-400 text-sm font-medium block mb-1.5">Resend API Key</label>
-            <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" placeholder="re_xxxxxxxx" value={settings.alertEmailApiKey} onChange={e => setSettings({...settings, alertEmailApiKey: e.target.value})} />
-          </div>
-        </div>
-        <div>
-          <label className="text-gray-400 text-sm font-medium block mb-1.5">From Email Address</label>
-          <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" placeholder="onboarding@resend.dev" value={settings.alertEmailFrom} onChange={e => setSettings({...settings, alertEmailFrom: e.target.value})} />
-          <p className="text-xs text-gray-500 mt-1">Use onboarding@resend.dev for free testing, or your verified domain email</p>
-        </div>
-      </div>
-
-      {/* Trigger rules */}
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 space-y-3">
-        <h3 className="text-lg font-semibold text-white">⚡ Alert Triggers</h3>
-        <div className="space-y-2">
-          <label className="flex items-center gap-3 text-sm text-gray-300 cursor-pointer p-2 rounded-lg hover:bg-slate-800/50 transition"><input type="checkbox" checked={settings.alertOnCrash} onChange={e => setSettings({...settings, alertOnCrash: e.target.checked})} className="w-4 h-4 accent-blue-600" />Alert on server crash</label>
-          <label className="flex items-center gap-3 text-sm text-gray-300 cursor-pointer p-2 rounded-lg hover:bg-slate-800/50 transition"><input type="checkbox" checked={settings.alertOnApiDown} onChange={e => setSettings({...settings, alertOnApiDown: e.target.checked})} className="w-4 h-4 accent-blue-600" />Alert when Email API goes down</label>
-          <label className="flex items-center gap-3 text-sm text-gray-300 cursor-pointer p-2 rounded-lg hover:bg-slate-800/50 transition"><input type="checkbox" checked={settings.alertOnError} onChange={e => setSettings({...settings, alertOnError: e.target.checked})} className="w-4 h-4 accent-blue-600" />Alert on errors / bugs</label>
-        </div>
-      </div>
-
-      {/* Test result */}
-      {testResult && (
-        <div className={`rounded-xl border p-4 text-sm ${testResult.ok ? 'bg-emerald-950/40 border-emerald-800 text-emerald-200' : 'bg-red-950/40 border-red-800 text-red-200'}`}>
-          <strong>{testResult.type === 'test' ? 'Test Alert Result: ' : 'Save: '}</strong>{testResult.msg}
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="flex gap-3">
-        <button onClick={save} disabled={saving} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition disabled:opacity-60">{saving ? <BtnSpinner /> : null}Save Settings</button>
-        <button onClick={testAlert} disabled={testing} className="inline-flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition">{testing ? <BtnSpinner /> : null}{testing ? 'Sending...' : 'Send Test Alert'}</button>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================================
-// FREE EMAIL SETUP GUIDE TAB — Gmail, Outlook, SMTP — full Bengali guide
-// ============================================================================
 function FreeSmsGuideTab() {
   const [copied, setCopied] = useState(null);
   const copy = (text, key) => { navigator.clipboard?.writeText(text); setCopied(key); setTimeout(() => setCopied(null), 2000); };
@@ -1810,7 +1773,7 @@ function FreeSmsGuideTab() {
             <li><a href="https://console.cloud.google.com" target="_blank" rel="noopener" className="text-sky-400 hover:underline">Google Cloud Console</a> এ যান, একটি নতুন প্রোজেক্ট তৈরি করুন (বা সিলেক্ট করুন)।</li>
             <li><strong className="text-white">APIs & Services → Credentials</strong> এ যান, <strong className="text-white">Create Credentials → OAuth client ID</strong> সিলেক্ট করুন।</li>
             <li>Application type <strong className="text-white">Web Application</strong> সিলেক্ট করুন। Authorized redirect URI হিসেবে বসান:
-              <button onClick={() => copy('https://mmsadminpanellogin.netlify.app/api/auth/gmail/callback', 'g1')} className="text-green-300 hover:underline font-mono text-[11px] ml-1 block mt-1">https://mmsadminpanellogin.netlify.app/api/auth/gmail/callback</button>
+              <button onClick={() => copy('https://mms-admin-gateway.netlify.app/api/auth/gmail/callback', 'g1')} className="text-green-300 hover:underline font-mono text-[11px] ml-1 block mt-1">https://mms-admin-gateway.netlify.app/api/auth/gmail/callback</button>
               {copied === 'g1' && <span className="text-emerald-400"> ✓</span>}
             </li>
             <li><strong className="text-white">Client ID</strong> এবং <strong className="text-white">Client Secret</strong> কপি করুন।</li>
@@ -1878,7 +1841,7 @@ From: your-email@gmail.com`}</pre>
           <p className="text-sm font-semibold text-white pt-1">ধাপে ধাপে সেটআপ:</p>
           <ol className="list-decimal list-inside space-y-2 text-xs text-gray-300">
             <li><a href="https://entra.microsoft.com" target="_blank" rel="noopener" className="text-sky-400 hover:underline">Microsoft Entra (Azure AD)</a> এ যান, নতুন App Registration তৈরি করুন।</li>
-            <li>Platform <strong className="text-white">Web</strong> → Redirect URI বসান: <button onClick={() => copy('https://mmsadminpanellogin.netlify.app/api/auth/gmail/callback', 'g3')} className="text-green-300 hover:underline font-mono text-[11px]">https://mmsadminpanellogin.netlify.app/api/auth/gmail/callback</button> {copied === 'g3' && <span className="text-emerald-400"> ✓</span>}</li>
+            <li>Platform <strong className="text-white">Web</strong> → Redirect URI বসান: <button onClick={() => copy('https://mms-admin-gateway.netlify.app/api/auth/gmail/callback', 'g3')} className="text-green-300 hover:underline font-mono text-[11px]">https://mms-admin-gateway.netlify.app/api/auth/gmail/callback</button> {copied === 'g3' && <span className="text-emerald-400"> ✓</span>}</li>
             <li>API Permissions → <strong className="text-white">Mail.Send</strong> (Delegated) যোগ করুন এবং admin consent দিন।</li>
             <li><strong className="text-white">Client ID</strong> ও <strong className="text-white">Client Secret</strong> কপি করুন।</li>
             <li>এই প্যানেলে: <strong className="text-sky-400">Gateway → Accounts</strong> → <strong className="text-white">+ Add Account</strong> → Provider <strong className="text-white">OUTLOOK_GRAPH</strong>।</li>
@@ -1956,26 +1919,83 @@ From: your-email@gmail.com`}</pre>
 function LogsTab() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [actorFilter, setActorFilter] = useState('all');
+  const [autoRefresh, setAutoRefresh] = useState(true);
 
+  const load = async () => {
+    const data = await api('getActivityLogs', { limit: 300 });
+    if (data.success) setLogs(data.logs);
+    setLoading(false);
+  };
   useEffect(() => {
-    (async () => { const data = await api('getActivityLogs', { limit: 200 }); if (data.success) setLogs(data.logs); setLoading(false); })();
-  }, []);
+    load();
+    if (autoRefresh) { const t = setInterval(load, 15000); return () => clearInterval(t); }
+  }, [autoRefresh]);
 
-  if (loading) return <Spinner label="Loading activity logs..." />;
+  const filtered = logs.filter(l => {
+    const matchesSearch = !search || (l.action + ' ' + l.details).toLowerCase().includes(search.toLowerCase());
+    const matchesActor = actorFilter === 'all' || l.actorType === actorFilter;
+    return matchesSearch && matchesActor;
+  });
+
+  const stats = {
+    total: logs.length,
+    admin: logs.filter(l => l.actorType === 'admin').length,
+    user: logs.filter(l => l.actorType === 'user').length,
+    system: logs.filter(l => l.actorType !== 'admin' && l.actorType !== 'user').length,
+  };
+
+  if (loading) return <SkeletonGrid count={4} />;
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-white">Activity Logs</h2>
-      <div className="space-y-1 max-h-[600px] overflow-y-auto">
-        {logs.map((l, i) => (
-          <div key={i} className="bg-slate-900/30 border border-slate-800/50 rounded-lg px-3 py-2 text-sm flex gap-3">
-            <span className="text-gray-600 text-xs whitespace-nowrap">{new Date(l.timestamp).toLocaleString()}</span>
-            <span className={`text-xs px-1.5 rounded ${l.actorType === 'admin' ? 'bg-blue-900/40 text-blue-400' : l.actorType === 'user' ? 'bg-green-900/40 text-green-400' : 'bg-gray-800 text-gray-500'}`}>{l.actorType}</span>
-            <span className="text-gray-300 flex-1">{l.action}: <span className="text-gray-500">{l.details}</span></span>
-            {l.ipAddress && <span className="text-gray-600 text-xs">{l.ipAddress}</span>}
+    <div className="space-y-5">
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Kpi label="Total Events" value={stats.total.toLocaleString()} icon="log" accent="sky" />
+        <Kpi label="Admin Actions" value={stats.admin} icon="shield" accent="violet" />
+        <Kpi label="User Actions" value={stats.user} icon="users" accent="emerald" />
+        <Kpi label="System Events" value={stats.system} icon="server" accent="amber" />
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+        <div className="flex flex-1 gap-2 w-full sm:max-w-lg">
+          <div className="relative flex-1">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search logs..." className="w-full bg-slate-900/80 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-slate-600 focus:border-sky-500 outline-none transition" />
           </div>
-        ))}
-        {logs.length === 0 && <p className="text-gray-600 text-sm py-8 text-center">No activity logs yet.</p>}
+          <select value={actorFilter} onChange={e => setActorFilter(e.target.value)} className="bg-slate-900/80 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-sky-500 outline-none cursor-pointer">
+            <option value="all">All Actors</option>
+            <option value="admin">Admin</option>
+            <option value="user">User</option>
+          </select>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer select-none">
+          <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} className="w-4 h-4 rounded accent-sky-500" />
+          Auto-refresh
+        </label>
+      </div>
+
+      {/* Logs list */}
+      <div className="bg-slate-900/30 border border-slate-800/60 rounded-xl overflow-hidden">
+        <div className="max-h-[600px] overflow-y-auto divide-y divide-slate-800/40">
+          {filtered.map((l, i) => (
+            <div key={i} className="px-4 py-2.5 text-sm flex gap-3 items-center hover:bg-slate-800/30 transition">
+              <span className="text-slate-600 text-xs whitespace-nowrap font-mono flex-none w-36">{new Date(l.timestamp).toLocaleString()}</span>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-semibold flex-none ${l.actorType === 'admin' ? 'bg-violet-500/15 text-violet-400' : l.actorType === 'user' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-slate-700/40 text-slate-400'}`}>{l.actorType}</span>
+              <span className="text-slate-200 flex-1 min-w-0 truncate font-medium">{l.action}</span>
+              <span className="text-slate-500 text-xs truncate hidden md:block">{l.details}</span>
+              {l.ipAddress && <span className="text-slate-600 text-xs font-mono flex-none">{l.ipAddress}</span>}
+            </div>
+          ))}
+          {filtered.length === 0 && <p className="text-slate-600 text-sm py-12 text-center">{logs.length === 0 ? 'No activity logs yet.' : 'No logs match your search.'}</p>}
+        </div>
+        {filtered.length > 0 && (
+          <div className="px-4 py-2.5 border-t border-slate-800/60 text-xs text-slate-500">
+            Showing {filtered.length} of {logs.length} events {autoRefresh && <span className="text-emerald-400">· Auto-refreshing every 15s</span>}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2015,22 +2035,23 @@ function SecurityTab({ user }) {
     } finally { setActing(false); }
   };
 
-  if (loading) return <Spinner label="Loading security..." />;
+  if (loading) return <SkeletonGrid count={3} />;
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-white">Admin Security</h2>
+    <div className="space-y-5 max-w-2xl">
+      {/* Current credentials summary */}
       {info && (
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 max-w-lg">
-          <div className="space-y-2 text-sm">
-            <p className="text-gray-400">Current Username: <span className="text-white font-mono">{info.username}</span></p>
-            <p className="text-gray-400">API Key: <span className="text-white font-mono">{info.apiKeyMasked}</span></p>
-            <p className="text-gray-400">Email: <span className="text-white">{info.email || 'Not set (add email to enable verification)'}</span></p>
+        <DetailBox title="Current Credentials" subtitle="Active admin authentication details" icon="shield" accent="violet">
+          <div className="mt-3 space-y-2 text-sm">
+            <div className="flex items-center justify-between"><span className="text-slate-400">Username</span><span className="text-white font-mono font-semibold">{info.username}</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-400">API Key</span><span className="text-white font-mono">{info.apiKeyMasked}</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-400">Email</span><span className="text-white text-xs">{info.email || 'Not set'}</span></div>
           </div>
-        </div>
+        </DetailBox>
       )}
-      {message && <div className="bg-blue-900/30 border border-blue-800/50 rounded-lg px-4 py-2 text-sm text-blue-300">{message}</div>}
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 space-y-4 max-w-lg">
+      {message && <div className="flex items-center gap-2 bg-sky-500/10 border border-sky-500/30 rounded-xl px-4 py-3 text-sm text-sky-300"><Icon.Info /> {message}</div>}
+      <DetailBox title="Credential Management" subtitle="Change username, password, or regenerate API key — email verification required" icon="lock" accent="sky">
+        <div className="mt-3 space-y-4">
         {pendingAction && (
           <div>
             <label className="text-gray-400 text-sm font-medium block mb-1.5">Verification Code</label>
@@ -2064,7 +2085,8 @@ function SecurityTab({ user }) {
             <input className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="admin@example.com" defaultValue={info?.email} onBlur={async (e) => { await api('updateAdminEmail', { email: e.target.value }); load(); }} />
           </div>
         </div>
-      </div>
+        </div>
+      </DetailBox>
     </div>
   );
 }
@@ -2089,12 +2111,12 @@ function SettingsTab() {
     } finally { setSaving(false); }
   };
 
-  if (loading) return <Spinner label="Loading settings..." />;
+  if (loading) return <SkeletonGrid count={4} />;
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-white">Settings</h2>
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 space-y-4 max-w-2xl">
+    <div className="space-y-5 max-w-3xl">
+      <DetailBox title="Platform Settings" subtitle="Branding, limits, and spam protection configuration" icon="settings" accent="sky">
+        <div className="mt-3 space-y-4">
         <h3 className="text-lg font-semibold text-gray-300">Primary Settings</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -2150,7 +2172,8 @@ function SettingsTab() {
           <textarea className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono" rows="3" placeholder='{"BD": "allow", "US": "allow"}' value={settings.countryRules || ''} onChange={e => setSettings({...settings, countryRules: e.target.value})} />
         </div>
         <button onClick={save} disabled={saving} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white text-sm px-6 py-2.5 rounded-lg transition font-semibold disabled:opacity-60">{saving ? <BtnSpinner /> : null}Save All Settings</button>
-      </div>
+        </div>
+      </DetailBox>
     </div>
   );
 }
@@ -3718,7 +3741,7 @@ function GatewayDeploy() {
         <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
           {[
             { name: 'Vercel', mode: 'user', desc: 'User Panel (NEXT_PUBLIC_PANEL_MODE=user)', url: 'maileruser.vercel.app', card: 'bg-sky-500/10 border-sky-500/20', iconBg: 'bg-sky-500/20', iconText: 'text-sky-400' },
-            { name: 'Netlify', mode: 'admin', desc: 'Admin Panel + Gateway Engine (NEXT_PUBLIC_PANEL_MODE=admin)', url: 'emailengineadminaccesspanel.netlify.app', card: 'bg-violet-500/10 border-violet-500/20', iconBg: 'bg-violet-500/20', iconText: 'text-violet-400' },
+            { name: 'Netlify', mode: 'admin', desc: 'Admin Panel + Gateway Engine (NEXT_PUBLIC_PANEL_MODE=admin)', url: 'mms-admin-gateway.netlify.app', card: 'bg-violet-500/10 border-violet-500/20', iconBg: 'bg-violet-500/20', iconText: 'text-violet-400' },
           ].map(p => (
             <div key={p.name} className={`${p.card} border rounded-xl p-4 text-center`}>
               <div className={`w-12 h-12 mx-auto rounded-xl ${p.iconBg} flex items-center justify-center mb-2`}>
@@ -3920,33 +3943,24 @@ function ScheduledSendsTab() {
     setDeleting(null);
   };
 
-  if (loading) return <Spinner label="Loading scheduled sends..." />;
+  if (loading) return <SkeletonGrid count={4} />;
 
   const now = new Date();
   const upcoming = scheduled.filter(s => new Date(s.scheduledAt) > now);
   const overdue = scheduled.filter(s => new Date(s.scheduledAt) <= now);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      {/* Stats row */}
+      <div className="grid grid-cols-3 gap-3">
+        <Kpi label="Total Scheduled" value={scheduled.length} icon="calendar" accent="sky" />
+        <Kpi label="Upcoming" value={upcoming.length} icon="clock" accent="emerald" live={upcoming.length > 0} />
+        <Kpi label="Overdue" value={overdue.length} icon="alert" accent={overdue.length > 0 ? 'amber' : 'slate'} />
+      </div>
+
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-white flex items-center gap-2"><Icon.Calendar className="w-6 h-6 text-blue-400" /> Scheduled Sends</h2>
-          <p className="text-sm text-gray-500 mt-1">Manage all scheduled email campaigns across all users</p>
-        </div>
-        <div className="flex gap-3">
-          <div className="bg-slate-900/50 border border-slate-800 rounded-xl px-4 py-2 text-center">
-            <div className="text-xl font-bold text-blue-400">{upcoming.length}</div>
-            <div className="text-xs text-gray-500">Upcoming</div>
-          </div>
-          <div className="bg-slate-900/50 border border-slate-800 rounded-xl px-4 py-2 text-center">
-            <div className="text-xl font-bold text-amber-400">{overdue.length}</div>
-            <div className="text-xs text-gray-500">Overdue</div>
-          </div>
-          <div className="bg-slate-900/50 border border-slate-800 rounded-xl px-4 py-2 text-center">
-            <div className="text-xl font-bold text-white">{scheduled.length}</div>
-            <div className="text-xs text-gray-500">Total</div>
-          </div>
-        </div>
+        <p className="text-sm text-slate-500">Manage all scheduled email campaigns across all users</p>
+        <button onClick={load} className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-800 transition"><Icon.Refresh size={14} />Refresh</button>
       </div>
 
       {scheduled.length === 0 ? (
