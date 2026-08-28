@@ -42,7 +42,12 @@ const SCOPES = [
  * Returns { redirectUri, origin }.
  */
 function resolveRedirectUri(cfg, url) {
-  const origin = (cfg.redirectOrigin || url.origin).replace(/\/$/, '');
+  // Prefer NEXT_PUBLIC_SITE_URL (set per-environment) for a guaranteed-correct
+  // origin, then the explicit redirectOrigin, then the request origin.
+  const envSiteUrl = process.env.NEXT_PUBLIC_SITE_URL
+    ? process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, '')
+    : null;
+  const origin = (envSiteUrl || cfg.redirectOrigin || url.origin).replace(/\/$/, '');
   const defaultUri = `${origin}/api/auth/gmail/callback`;
 
   // (1) explicit override from the admin panel
@@ -52,15 +57,19 @@ function resolveRedirectUri(cfg, url) {
 
   // (2) match against registered URIs from candidates.json
   const registered = Array.isArray(cfg.redirectUris) ? cfg.redirectUris : [];
-  if (registered.length > 0) {
+  // Filter out loopback / localhost URIs (Desktop app defaults).
+  const realRegistered = registered.filter(
+    (u) => typeof u === 'string' && !/^https?:\/\/localhost(:\d+)?\/?$/i.test(u) && !/^https?:\/\/127\.0\.0\.1(:\d+)?\/?$/i.test(u)
+  );
+  if (realRegistered.length > 0) {
     // Prefer an exact host match first
-    const hostMatch = registered.find(
+    const hostMatch = realRegistered.find(
       (u) => typeof u === 'string' && u.includes(`/api/auth/gmail/callback`) && new URL(u).host === new URL(defaultUri).host
     );
     if (hostMatch) return { redirectUri: hostMatch, origin };
 
     // Otherwise prefer the FIRST registered callback URI (admin picked one)
-    const anyCallback = registered.find(
+    const anyCallback = realRegistered.find(
       (u) => typeof u === 'string' && u.includes(`/api/auth/gmail/callback`)
     );
     if (anyCallback) return { redirectUri: anyCallback, origin: new URL(anyCallback).origin };

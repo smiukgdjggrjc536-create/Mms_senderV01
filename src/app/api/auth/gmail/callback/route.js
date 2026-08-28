@@ -78,7 +78,7 @@ export async function GET(req) {
     // MUST EXACTLY match the one used in the initial /api/auth/gmail redirect.
     // We mirror the same resolution logic as the initiate route so the token
     // exchange never fails with "redirect_uri_mismatch".
-    const origin = (cfg.redirectOrigin || url.origin).replace(/\/$/, '');
+    const origin = (process.env.NEXT_PUBLIC_SITE_URL ? process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, '') : (cfg.redirectOrigin || url.origin)).replace(/\/$/, '');
     let redirectUri;
     if (cfg.redirectUri && typeof cfg.redirectUri === 'string') {
       redirectUri = cfg.redirectUri;

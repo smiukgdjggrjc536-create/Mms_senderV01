@@ -67,7 +67,13 @@ export async function POST(req) {
     const redirectUris = Array.isArray(client.redirect_uris) ? client.redirect_uris : [];
 
     const url = new URL(req.url);
-    const origin = url.origin.replace(/\/$/, '');
+    // Prefer NEXT_PUBLIC_SITE_URL (set per-environment) so the callback URI is
+    // always correct even when the request origin is an internal/proxy host.
+    // Falls back to the request origin if the env var is not set.
+    const envSiteUrl = process.env.NEXT_PUBLIC_SITE_URL
+      ? process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, '')
+      : null;
+    const origin = (envSiteUrl || url.origin).replace(/\/$/, '');
     const ourCallbackUri = `${origin}/api/user/gmail/connect/callback`;
 
     // ── FIX: Choose the redirect_uri to send to Google ──
@@ -84,27 +90,39 @@ export async function POST(req) {
     let needsRegistration = false;
 
     if (redirectUris.length > 0) {
-      // Check for exact match first
-      const exactMatch = redirectUris.find(
-        (u) => typeof u === 'string' && u.replace(/\/$/, '') === ourCallbackUri.replace(/\/$/, '')
+      // Filter out loopback / localhost URIs (Desktop app defaults) — they can't
+      // work with a server-side callback. Keep only real https/http host URIs.
+      const realUris = redirectUris.filter(
+        (u) => typeof u === 'string' && !/^https?:\/\/localhost(:\d+)?\/?$/i.test(u) && !/^https?:\/\/127\.0\.0\.1(:\d+)?\/?$/i.test(u)
       );
-      if (exactMatch) {
-        callbackUri = exactMatch;
-      } else {
-        // Check for path match (same path, different host)
-        const pathMatch = redirectUris.find(
-          (u) => typeof u === 'string' && u.includes('/api/user/gmail/connect/callback')
+
+      if (realUris.length > 0) {
+        // Check for exact match first
+        const exactMatch = realUris.find(
+          (u) => typeof u === 'string' && u.replace(/\/$/, '') === ourCallbackUri.replace(/\/$/, '')
         );
-        if (pathMatch) {
-          // Use the registered one — it will work for consent, and we handle
-          // the token exchange redirect_uri to match this in the callback.
-          callbackUri = pathMatch;
+        if (exactMatch) {
+          callbackUri = exactMatch;
         } else {
-          // No match at all — use first registered URI (may be loopback for Desktop)
-          // and tell the user to register our callback
-          callbackUri = redirectUris[0];
-          needsRegistration = true;
+          // Check for path match (same path, different host)
+          const pathMatch = realUris.find(
+            (u) => typeof u === 'string' && u.includes('/api/user/gmail/connect/callback')
+          );
+          if (pathMatch) {
+            // Use the registered one — it will work for consent, and we handle
+            // the token exchange redirect_uri to match this in the callback.
+            callbackUri = pathMatch;
+          } else {
+            // No matching path — use our callback and tell user to register it
+            callbackUri = ourCallbackUri;
+            needsRegistration = true;
+          }
         }
+      } else {
+        // All registered URIs are loopback (Desktop app) — use our server callback
+        // and instruct the user to register it in Google Cloud Console.
+        callbackUri = ourCallbackUri;
+        needsRegistration = true;
       }
     } else {
       // No redirect_uris in credentials.json — use ours, user needs to register it

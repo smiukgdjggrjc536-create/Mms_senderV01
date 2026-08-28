@@ -50,7 +50,7 @@ export async function GET(req) {
 
     // Resolve redirect_uri — must EXACTLY match the one used in the initiate step.
     // We now store the exact URI used in the state payload (callbackUriUsed).
-    const origin = (cfg.redirectOrigin || url.origin).replace(/\/$/, '');
+    const origin = (process.env.NEXT_PUBLIC_SITE_URL ? process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, '') : (cfg.redirectOrigin || url.origin)).replace(/\/$/, '');
     const defaultUri = `${origin}/api/user/gmail/connect/callback`;
 
     // Use the exact URI that was sent to Google in the initiate step (stored in state).
