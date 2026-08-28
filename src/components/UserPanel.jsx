@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { COUNTRY_SUPPORT, getCountryStats } from '@/lib/countrySupport';
-import SmsTab from './SmsTab';
+// SmsTab removed — SMS module deleted from user panel per owner request.
 
 // ================================================================
 // Icon set (professional SVG, NO emoji in chrome — emoji only for flags)
@@ -425,7 +425,6 @@ function UserDashboard({ user, onLogout, onRefresh }) {
   const tabs = [
     { k: 'dashboard', l: 'Dashboard', I: Icon.Dashboard },
     { k: 'send', l: 'Send Email', I: Icon.Send },
-    { k: 'sms', l: 'SMS Module', I: Icon.Sms },
     { k: 'countries', l: 'Deliverability', I: Icon.Shield },
     { k: 'inbox', l: 'Inbox & Auto-Reply', I: Icon.Inbox },
     { k: 'reports', l: 'Reports', I: Icon.Report },
@@ -551,7 +550,6 @@ function UserDashboard({ user, onLogout, onRefresh }) {
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white tracking-tight truncate">
                 {activeTab === 'dashboard' && 'Dashboard'}
                 {activeTab === 'send' && 'Send Email Campaign'}
-                {activeTab === 'sms' && 'SMS Sending Module'}
                 {activeTab === 'countries' && 'Deliverability'}
                 {activeTab === 'inbox' && 'Inbox & Auto-Reply'}
                 {activeTab === 'reports' && 'Delivery Reports'}
@@ -595,13 +593,6 @@ function UserDashboard({ user, onLogout, onRefresh }) {
                 onSent={(msg, type) => { show(msg, type); fetchAll(); }}
                 onCampaignClick={fetchDeliveryReports}
                 language={language}
-              />
-            )}
-            {activeTab === 'sms' && (
-              <SmsTab
-                user={user}
-                onToast={show}
-                onSent={(msg, type) => { show(msg, type); fetchAll(); }}
               />
             )}
             {activeTab === 'countries' && <CountrySupportTab />}
