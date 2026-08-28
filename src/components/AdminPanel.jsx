@@ -3714,12 +3714,11 @@ function GatewayDeploy() {
 
       <GatewayKeepAlive />
 
-      <DetailBox title="Deployment Architecture" subtitle="3-platform single-codebase map — same repo, 3 modes" icon="server" accent="indigo">
-        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <DetailBox title="Deployment Architecture" subtitle="2-platform single-codebase map — same repo, Admin + Gateway on Netlify" icon="server" accent="indigo">
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
           {[
-            { name: 'Vercel', mode: 'user', desc: 'User Panel (NEXT_PUBLIC_PANEL_MODE=user)', url: 'mms-sender-v01.vercel.app', card: 'bg-sky-500/10 border-sky-500/20', iconBg: 'bg-sky-500/20', iconText: 'text-sky-400' },
-            { name: 'Netlify', mode: 'admin', desc: 'Admin Panel (NEXT_PUBLIC_PANEL_MODE=admin)', url: 'mms-sender-v01.netlify.app', card: 'bg-violet-500/10 border-violet-500/20', iconBg: 'bg-violet-500/20', iconText: 'text-violet-400' },
-            { name: 'Render', mode: 'api', desc: 'Headless Engine (NEXT_PUBLIC_PANEL_MODE=api)', url: 'mms-gateway-engine.onrender.com', card: 'bg-amber-500/10 border-amber-500/20', iconBg: 'bg-amber-500/20', iconText: 'text-amber-400' },
+            { name: 'Vercel', mode: 'user', desc: 'User Panel (NEXT_PUBLIC_PANEL_MODE=user)', url: 'maileruser.vercel.app', card: 'bg-sky-500/10 border-sky-500/20', iconBg: 'bg-sky-500/20', iconText: 'text-sky-400' },
+            { name: 'Netlify', mode: 'admin', desc: 'Admin Panel + Gateway Engine (NEXT_PUBLIC_PANEL_MODE=admin)', url: 'emailengineadminaccesspanel.netlify.app', card: 'bg-violet-500/10 border-violet-500/20', iconBg: 'bg-violet-500/20', iconText: 'text-violet-400' },
           ].map(p => (
             <div key={p.name} className={`${p.card} border rounded-xl p-4 text-center`}>
               <div className={`w-12 h-12 mx-auto rounded-xl ${p.iconBg} flex items-center justify-center mb-2`}>

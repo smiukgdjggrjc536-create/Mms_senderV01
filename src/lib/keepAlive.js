@@ -30,13 +30,16 @@ let lastPingOk = null;
 // Default 5 minutes — well under Render's ~15 min inactivity threshold.
 const DEFAULT_INTERVAL = 5 * 60 * 1000;
 
-// The public URL of this Render service. Can be overridden via KEEPALIVE_URL
-// or RENDER_EXTERNAL_URL env var. Falls back to the known Render domain.
+// The public URL of this service. Can be overridden via KEEPALIVE_URL
+// or the platform-specific external URL env var. Falls back to the known
+// domains (Render legacy / Netlify admin panel).
 const SELF_URL =
   process.env.KEEPALIVE_URL ||
   process.env.RENDER_EXTERNAL_URL ||
   (process.env.RENDER_SERVICE_ID ? `https://${process.env.RENDER_SERVICE_ID}.onrender.com` : '') ||
-  'https://mms-gateway-engine.onrender.com';
+  process.env.URL || // Netlify sets this to the site's production URL at runtime
+  process.env.DEPLOY_PRIME_URL ||
+  'https://emailengineadminaccesspanel.netlify.app';
 
 const PING_PATH = process.env.KEEPALIVE_PATH || '/api/ping';
 
@@ -77,9 +80,10 @@ async function pingOnce() {
  *   KEEPALIVE_INTERVAL_MS or 5 minutes.
  */
 export function startKeepAlive(intervalMs) {
-  // Only run on Render (api mode) — never on Vercel/Netlify.
+  // Run on admin mode (Netlify — now also hosts the gateway engine) and on
+  // api mode (legacy Render). Never on user mode (Vercel).
   const mode = process.env.NEXT_PUBLIC_PANEL_MODE;
-  if (mode !== 'api') {
+  if (mode !== 'api' && mode !== 'admin') {
     return false;
   }
 
