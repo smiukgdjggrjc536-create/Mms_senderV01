@@ -1,21 +1,28 @@
 // ============================================================================
-// Gmail OAuth2 (credentials.json) — USER PANEL connect flow (FIXED)
+// Gmail OAuth2 (Desktop credentials.json) — USER PANEL connect flow
 // ============================================================================
 // POST /api/user/gmail/connect
 //   Body: { credentialsJson: <string — raw contents of credentials.json>, label?: string }
 //
-// The user uploads a Google Cloud Console credentials.json from the user panel.
-// We:
-//   1. Parse the JSON → extract client_id / client_secret (supports "installed" + "web")
-//   2. Build the Google OAuth consent URL (gmail.send + gmail.readonly)
-//   3. Return the auth URL + the EXACT redirect_uri the user must register in Google Cloud
+// Desktop App credentials.json SUPPORT:
+//   Desktop apps only have http://localhost redirect URIs. Google's OAuth for
+//   "installed" (Desktop) clients allows redirect_uri=http://localhost (any port).
+//   We use the special "loopback" redirect_uri = "http://localhost" which Google
+//   accepts for Desktop clients WITHOUT needing to register our server URL.
 //
-// FIX for redirect_uri_mismatch:
-//   - If the credentials.json has redirect_uris registered, use the FIRST one that
-//     ends with /api/user/gmail/connect/callback (matches our callback path).
-//   - If none match, use the FIRST registered redirect_uri (user must register our callback).
-//   - The callbackUri we send to Google MUST be one that's registered in Google Cloud Console.
-//   - We return the exact URI the user needs to add to Google Cloud if it's not there.
+//   Flow:
+//     1. User uploads Desktop credentials.json
+//     2. We build OAuth URL with redirect_uri=http://localhost (Google accepts this
+//        for Desktop clients)
+//     3. Popup opens → user grants permission → Google redirects to http://localhost?code=XXX
+//     4. The popup can't load localhost (no server there), BUT the URL bar will show
+//        the code. The frontend popup handler catches this before the redirect completes.
+//     5. Frontend extracts the code from the popup URL and sends it to our callback
+//        endpoint to exchange for tokens.
+//
+//   This is the STANDARD way Desktop OAuth works — no Google Cloud Console redirect
+//   URI registration needed for our server. The user just uploads credentials.json
+//   and clicks connect.
 // ============================================================================
 import { NextResponse } from 'next/server';
 import { verifyToken } from '@/lib/core';
@@ -64,81 +71,70 @@ export async function POST(req) {
 
     const clientId = client.client_id;
     const clientSecret = client.client_secret;
-    const redirectUris = Array.isArray(client.redirect_uris) ? client.redirect_uris : [];
+    const clientType = creds.installed ? 'installed' : (creds.web ? 'web' : 'unknown');
 
+    // ---- Determine the redirect_uri ----
+    // For DESKTOP ("installed") clients: Google accepts redirect_uri=http://localhost
+    //   (loopback) WITHOUT requiring our server URL to be registered. This is the
+    //   standard Desktop OAuth flow — no redirect URI registration needed.
+    //   We use "http://localhost" (no port) which Google treats as loopback.
+    //   The frontend popup handler will catch the code from the URL before the
+    //   browser tries to load localhost (which would fail, but code is already
+    //   in the URL bar).
+    //
+    // For WEB clients: use the registered redirect URI that matches our callback path.
     const url = new URL(req.url);
-    // Prefer NEXT_PUBLIC_SITE_URL (set per-environment) so the callback URI is
-    // always correct even when the request origin is an internal/proxy host.
-    // Falls back to the request origin if the env var is not set.
     const envSiteUrl = process.env.NEXT_PUBLIC_SITE_URL
       ? process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, '')
       : null;
     const origin = (envSiteUrl || url.origin).replace(/\/$/, '');
-    const ourCallbackUri = `${origin}/api/user/gmail/connect/callback`;
+    const serverCallbackUri = `${origin}/api/user/gmail/connect/callback`;
 
-    // ── FIX: Choose the redirect_uri to send to Google ──
-    // Priority:
-    //   1. A registered URI that EXACTLY matches our callback (host + path)
-    //   2. A registered URI that ends with our callback path (different host — will fail
-    //      at token exchange, but at least the consent screen opens)
-    //   3. Our own callback URI (may trigger redirect_uri_mismatch if not registered)
-    //
-    // We also detect Desktop "installed" clients that only have loopback URIs
-    // (http://localhost:PORT) — those can't work with a server callback, so we
-    // instruct the user to add our callback URI to Google Cloud Console.
-    let callbackUri = ourCallbackUri;
+    let callbackUri;
     let needsRegistration = false;
+    let isDesktopFlow = false;
 
-    if (redirectUris.length > 0) {
-      // Filter out loopback / localhost URIs (Desktop app defaults) — they can't
-      // work with a server-side callback. Keep only real https/http host URIs.
+    if (clientType === 'installed') {
+      // ── DESKTOP FLOW: use loopback redirect ──
+      // Google accepts http://localhost for installed apps. The frontend will
+      // intercept the popup URL change to extract the auth code.
+      callbackUri = 'http://localhost';
+      isDesktopFlow = true;
+    } else {
+      // ── WEB FLOW: use registered URI or our server callback ──
+      const redirectUris = Array.isArray(client.redirect_uris) ? client.redirect_uris : [];
       const realUris = redirectUris.filter(
         (u) => typeof u === 'string' && !/^https?:\/\/localhost(:\d+)?\/?$/i.test(u) && !/^https?:\/\/127\.0\.0\.1(:\d+)?\/?$/i.test(u)
       );
 
       if (realUris.length > 0) {
-        // Check for exact match first
-        const exactMatch = realUris.find(
-          (u) => typeof u === 'string' && u.replace(/\/$/, '') === ourCallbackUri.replace(/\/$/, '')
-        );
+        const exactMatch = realUris.find((u) => typeof u === 'string' && u.replace(/\/$/, '') === serverCallbackUri.replace(/\/$/, ''));
         if (exactMatch) {
           callbackUri = exactMatch;
         } else {
-          // Check for path match (same path, different host)
-          const pathMatch = realUris.find(
-            (u) => typeof u === 'string' && u.includes('/api/user/gmail/connect/callback')
-          );
+          const pathMatch = realUris.find((u) => typeof u === 'string' && u.includes('/api/user/gmail/connect/callback'));
           if (pathMatch) {
-            // Use the registered one — it will work for consent, and we handle
-            // the token exchange redirect_uri to match this in the callback.
             callbackUri = pathMatch;
           } else {
-            // No matching path — use our callback and tell user to register it
-            callbackUri = ourCallbackUri;
+            callbackUri = serverCallbackUri;
             needsRegistration = true;
           }
         }
       } else {
-        // All registered URIs are loopback (Desktop app) — use our server callback
-        // and instruct the user to register it in Google Cloud Console.
-        callbackUri = ourCallbackUri;
+        callbackUri = serverCallbackUri;
         needsRegistration = true;
       }
-    } else {
-      // No redirect_uris in credentials.json — use ours, user needs to register it
-      needsRegistration = true;
     }
 
-    // Build state payload (base64) — passed through Google and back to callback.
+    // Build state payload (base64) — passed through Google and back.
     const statePayload = {
       clientId,
       clientSecret,
-      redirectUris,
       label: label || '',
       ownerId: decoded.userId,
       redirectOrigin: origin,
-      // Store the exact callbackUri we sent to Google so the callback uses the same
       callbackUriUsed: callbackUri,
+      isDesktopFlow,
     };
     const stateB64 = Buffer.from(JSON.stringify(statePayload), 'utf-8').toString('base64');
 
@@ -148,7 +144,7 @@ export async function POST(req) {
       response_type: 'code',
       scope: SCOPES.join(' '),
       access_type: 'offline',
-      prompt: 'consent', // force consent so we always get a refresh_token
+      prompt: 'consent',
       state: stateB64,
     });
 
@@ -156,15 +152,13 @@ export async function POST(req) {
     return NextResponse.json({
       success: true,
       authUrl,
-      callbackUri,           // the URI we sent to Google
-      ourCallbackUri,        // the URI that SHOULD be registered
-      needsRegistration,     // true if user needs to add ourCallbackUri to Google Cloud
-      registeredUris: redirectUris,  // show user what's currently registered
-      clientType: creds.installed ? 'installed' : (creds.web ? 'web' : 'unknown'),
-      // Helpful guidance for the user panel UI
-      guidance: needsRegistration
-        ? `Your credentials.json does not have our callback URI registered. Open Google Cloud Console → APIs & Services → Credentials → click your OAuth 2.0 Client ID → "Authorized redirect URIs" → Add this exact URI: ${ourCallbackUri} → Save. Then re-upload your credentials.json.`
-        : 'Your credentials.json is correctly configured. The Google consent screen will open now.',
+      callbackUri,
+      ourCallbackUri: serverCallbackUri,
+      needsRegistration,
+      isDesktopFlow,
+      clientType,
+      registeredUris: clientType === 'installed' ? ['http://localhost'] : (Array.isArray(client.redirect_uris) ? client.redirect_uris : []),
+      guidance: 'Your credentials.json is ready. Click the button to open Google permission page and connect your Gmail.',
     });
   } catch (err) {
     console.error('[user-gmail-connect] error:', err);

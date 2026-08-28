@@ -1,15 +1,20 @@
 // ============================================================================
-// Gmail OAuth2 (Desktop credentials.json) — USER PANEL callback handler
+// Gmail OAuth2 (Desktop credentials.json) — USER PANEL callback + token exchange
 // ============================================================================
-// GET /api/user/gmail/connect/callback?code=<auth_code>&state=<base64-config>
+// Two modes:
 //
-// Google redirects back here after the user grants permission. We:
+// 1. WEB FLOW (GET /api/user/gmail/connect/callback?code=...&state=...)
+//    Google redirects the browser here directly. We exchange the code and save.
+//
+// 2. DESKTOP FLOW (POST /api/user/gmail/connect/callback)
+//    Body: { code, state }  — the frontend popup handler extracts the code from
+//    the http://localhost redirect URL and POSTs it here. We exchange the code
+//    using redirect_uri=http://localhost (same as the initiate step) and save.
+//
+// In both cases we:
 //   1. Exchange the auth code for { access_token, refresh_token }.
 //   2. Fetch the Gmail address from userinfo.
-//   3. Save EmailAccount with ownerId = the user who initiated the flow
-//      (from the state payload) so multi-tenant isolation works.
-//   4. Render a result page that posts a message to the opener (user panel)
-//      and auto-closes the popup.
+//   3. Save EmailAccount with ownerId = the user who initiated the flow.
 // ============================================================================
 import { NextResponse } from 'next/server';
 import { connectDB, EmailAccount } from '@/lib/core';
@@ -17,12 +22,13 @@ import { connectDB, EmailAccount } from '@/lib/core';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-export async function GET(req) {
-  const render = (msg, isError = false) =>
-    new NextResponse(renderResultPage(msg, isError), {
-      headers: { 'Content-Type': 'text/html; charset=utf-8' },
-    });
+const render = (msg, isError = false) =>
+  new NextResponse(renderResultPage(msg, isError), {
+    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+  });
 
+// ── GET: Web flow callback (Google redirects here) ──
+export async function GET(req) {
   try {
     const url = new URL(req.url);
     const code = url.searchParams.get('code');
@@ -36,7 +42,6 @@ export async function GET(req) {
       return render('Missing authorization code. Please retry the connection from the user panel.', true);
     }
 
-    // Decode the state payload (contains clientId/clientSecret/ownerId/redirectUris)
     let cfg;
     try {
       cfg = JSON.parse(Buffer.from(stateRaw, 'base64').toString('utf-8'));
@@ -48,31 +53,53 @@ export async function GET(req) {
       return render('Missing OAuth client credentials. Please re-upload your credentials.json.', true);
     }
 
-    // Resolve redirect_uri — must EXACTLY match the one used in the initiate step.
-    // We now store the exact URI used in the state payload (callbackUriUsed).
-    const origin = (process.env.NEXT_PUBLIC_SITE_URL ? process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, '') : (cfg.redirectOrigin || url.origin)).replace(/\/$/, '');
-    const defaultUri = `${origin}/api/user/gmail/connect/callback`;
+    // redirect_uri must match what was used in the initiate step
+    const redirectUri = cfg.callbackUriUsed || `${(process.env.NEXT_PUBLIC_SITE_URL || url.origin).replace(/\/$/, '')}/api/user/gmail/connect/callback`;
 
-    // Use the exact URI that was sent to Google in the initiate step (stored in state).
-    // This prevents redirect_uri_mismatch at the token exchange step.
-    let redirectUri;
-    if (cfg.callbackUriUsed) {
-      // The initiate step stored the exact URI it sent to Google — use it.
-      redirectUri = cfg.callbackUriUsed;
-    } else if (cfg.redirectUris && Array.isArray(cfg.redirectUris) && cfg.redirectUris.length > 0) {
-      const hostMatch = cfg.redirectUris.find(
-        (u) => typeof u === 'string' && u.includes('/api/user/gmail/connect/callback') &&
-              new URL(u).host === new URL(defaultUri).host
-      );
-      const anyCallback = cfg.redirectUris.find(
-        (u) => typeof u === 'string' && u.includes('/api/user/gmail/connect/callback')
-      );
-      redirectUri = hostMatch || anyCallback || defaultUri;
-    } else {
-      redirectUri = defaultUri;
+    const result = await exchangeAndSave(code, redirectUri, cfg);
+    return render(result.message, !result.success);
+  } catch (err) {
+    console.error('[user-gmail-connect-callback GET] error:', err);
+    return render(`Internal error: ${err.message}`, true);
+  }
+}
+
+// ── POST: Desktop flow (frontend sends code extracted from localhost popup) ──
+export async function POST(req) {
+  try {
+    const body = await req.json();
+    const { code, state } = body || {};
+
+    if (!code || !state) {
+      return NextResponse.json({ error: 'Missing code or state.' }, { status: 400 });
     }
 
-    // ---- Step 1: Exchange code for tokens ----
+    let cfg;
+    try {
+      cfg = JSON.parse(Buffer.from(state, 'base64').toString('utf-8'));
+    } catch {
+      return NextResponse.json({ error: 'Invalid state payload.' }, { status: 400 });
+    }
+
+    if (!cfg.clientId || !cfg.clientSecret) {
+      return NextResponse.json({ error: 'Missing OAuth client credentials.' }, { status: 400 });
+    }
+
+    // For Desktop flow, redirect_uri must be http://localhost (matching initiate)
+    const redirectUri = cfg.callbackUriUsed || 'http://localhost';
+
+    const result = await exchangeAndSave(code, redirectUri, cfg);
+    return NextResponse.json(result);
+  } catch (err) {
+    console.error('[user-gmail-connect-callback POST] error:', err);
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
+
+// ── Shared: exchange code → tokens → save EmailAccount ──
+async function exchangeAndSave(code, redirectUri, cfg) {
+  try {
+    // Step 1: Exchange code for tokens
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -88,12 +115,12 @@ export async function GET(req) {
     const tokenData = await tokenRes.json();
     if (!tokenRes.ok || !tokenData.refresh_token) {
       const detail = tokenData.error_description || tokenData.error || 'Unknown error';
-      return render(`Failed to exchange authorization code for tokens: ${detail}`, true);
+      return { success: false, message: `Failed to exchange authorization code for tokens: ${detail}` };
     }
 
     const { refresh_token, access_token, expires_in, scope: grantedScope } = tokenData;
 
-    // ---- Step 2: Fetch the Gmail address ----
+    // Step 2: Fetch the Gmail address
     let gmailAddress = '';
     try {
       const userinfoRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
@@ -108,10 +135,10 @@ export async function GET(req) {
     }
 
     if (!gmailAddress) {
-      return render('Could not determine the Gmail address from the OAuth response. Please ensure you granted permission.', true);
+      return { success: false, message: 'Could not determine the Gmail address from the OAuth response. Please ensure you granted permission.' };
     }
 
-    // ---- Step 3: Save EmailAccount (tagged with the owning user) ----
+    // Step 3: Save EmailAccount (tagged with the owning user)
     await connectDB();
 
     const credentials = {
@@ -123,9 +150,6 @@ export async function GET(req) {
       scope: grantedScope || '',
     };
 
-    // ownerId tags this account as belonging to the user who connected it.
-    // listSenders filters by ownerId so each user only sees their own accounts
-    // (+ the shared admin pool with ownerId = null).
     const ownerId = cfg.ownerId || null;
 
     await EmailAccount.findOneAndUpdate(
@@ -146,19 +170,16 @@ export async function GET(req) {
       { new: true, upsert: true, setDefaultsOnInsert: true }
     );
 
-    return render(`Gmail account <strong>${gmailAddress}</strong> connected successfully! You can close this window.`, false);
+    return { success: true, email: gmailAddress, message: `Gmail account ${gmailAddress} connected successfully!` };
   } catch (err) {
-    console.error('[user-gmail-connect-callback] error:', err);
-    return render(`Internal error: ${err.message}`, true);
+    return { success: false, message: `Internal error: ${err.message}` };
   }
 }
 
-// ----------------------------------------------------------------------------
-// HTML result page — posts result to opener (user panel) + auto-closes popup
-// ----------------------------------------------------------------------------
+// ── HTML result page (for GET/web flow) ──
 function renderResultPage(msg, isError) {
   const color = isError ? '#ef4444' : '#22c55e';
-  const icon = isError ? '✕' : '✓';
+  const icon = isError ? '\u2715' : '\u2713';
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -185,7 +206,6 @@ function renderResultPage(msg, isError) {
   </div>
   <script>
     try {
-      // Notify the user panel (opener) that OAuth completed
       if (window.opener && !window.opener.closed) {
         window.opener.postMessage({ type: 'user-gmail-oauth-result', success: ${!isError}, message: ${JSON.stringify(msg)} }, '*');
       }

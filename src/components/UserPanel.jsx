@@ -1252,41 +1252,90 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
         e.target.value = '';
         return;
       }
-      // Show redirect_uri registration guidance if needed
-      if (data.needsRegistration && data.ourCallbackUri) {
-        const isDesktop = data.clientType === 'installed';
-        const steps = isDesktop
-          ? `<div style="margin:8px 0;padding:8px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:6px;font-size:11px;line-height:1.5">
-               <b style="color:#fbbf24">⚠ Desktop App credentials detected</b><br>
-               Your credentials.json is a <b>Desktop app</b> type. Desktop apps only have <code>http://localhost</code> redirect URIs which <b>cannot work</b> with our server callback.<br><br>
-               <b>Fix (2 options):</b><br>
-               <b>Option A (Recommended):</b> Create a <b>Web Application</b> OAuth client instead.<br>
-               &nbsp;&nbsp;1. Google Cloud Console → APIs &amp; Services → Credentials → "Create Credentials" → "OAuth client ID"<br>
-               &nbsp;&nbsp;2. Application type: <b>Web application</b><br>
-               &nbsp;&nbsp;3. Under "Authorized redirect URIs" → click "ADD URI" → paste the URL below<br>
-               &nbsp;&nbsp;4. Click "Create" → download the new <b>credentials.json</b> → upload it here<br><br>
-               <b>Option B:</b> Keep your Desktop client but add our callback URI manually.<br>
-               &nbsp;&nbsp;Google Cloud Console → Credentials → your OAuth client → "Authorized redirect URIs" → Add URI below → Save → re-upload here
-             </div>`
-          : `<div style="margin:8px 0;padding:8px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:6px;font-size:11px;line-height:1.5">
-               <b style="color:#fbbf24">⚠ Redirect URI not registered yet</b><br>
-               Follow these steps to fix:<br>
-               &nbsp;&nbsp;<b>1.</b> Open <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:#a78bfa;text-decoration:underline">Google Cloud Console → Credentials</a><br>
-               &nbsp;&nbsp;<b>2.</b> Click your <b>OAuth 2.0 Client ID</b><br>
-               &nbsp;&nbsp;<b>3.</b> Scroll to <b>"Authorized redirect URIs"</b> → click <b>"ADD URI"</b><br>
-               &nbsp;&nbsp;<b>4.</b> Paste this exact URL → <b>Save</b><br>
-               &nbsp;&nbsp;<b>5.</b> Re-download credentials.json (optional) → re-upload it here
-             </div>`;
-        updateCampaign(campaignId, {
-          gmailConnectMsg: {
-            type: 'error',
-            text: `<b>&#9888; Setup required &mdash; Redirect URI not registered</b><br>${steps}<div style="margin-top:8px"><b style="color:#a78bfa;font-size:11px">📋 Copy this Redirect URI (add it to Google Cloud Console):</b><br><code style="display:block;margin:4px 0;padding:8px 12px;background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.4);border-radius:6px;font-size:10px;word-break:break-all;cursor:pointer;color:#c4b5fd" onclick="navigator.clipboard?.writeText(this.innerText);this.style.background='rgba(34,197,94,0.2)'">${data.ourCallbackUri}</code><span style="font-size:10px;color:#64748b">💡 Click the URL above to copy it</span></div>`,
-          },
-          connectingGmail: false,
-        });
+
+      // Desktop flow: Google redirects to http://localhost?code=XXX
+      // We open a popup and poll its URL. When Google redirects to localhost,
+      // the popup URL will contain ?code=... — we extract it and POST to our
+      // callback endpoint to exchange for tokens.
+      // Web flow: Google redirects to our /api/user/gmail/connect/callback which
+      // posts a message back to the opener.
+      if (data.isDesktopFlow) {
+        const popup = window.open(data.authUrl, 'gmail-oauth-desktop', 'width=520,height=720,left=200,top=100');
+        if (!popup) {
+          // Popup blocked — redirect the whole page
+          window.location.href = data.authUrl;
+          return;
+        }
+        updateCampaign(campaignId, { gmailConnectMsg: { type: 'success', text: 'Google permission page opened. Grant access to connect your Gmail.' } });
+
+        // Poll the popup URL for the localhost redirect with the code
+        const stateParam = data.authUrl.match(/state=([^&]+)/)?.[1] || '';
+        const pollInterval = setInterval(async () => {
+          try {
+            if (popup.closed) {
+              clearInterval(pollInterval);
+              updateCampaign(campaignId, { connectingGmail: false });
+              return;
+            }
+            // Try to read the popup URL — this will throw a cross-origin error
+            // until Google redirects to http://localhost (which is a different origin,
+            // but we can catch the error and check if the URL contains 'code=')
+            let popupUrl = '';
+            try {
+              popupUrl = popup.location.href;
+            } catch {
+              // Cross-origin — Google is still on accounts.google.com, keep waiting
+              return;
+            }
+            // If we can read the URL and it contains code=, extract it
+            if (popupUrl && popupUrl.includes('code=')) {
+              clearInterval(pollInterval);
+              const code = new URL(popupUrl).searchParams.get('code');
+              const errorParam = new URL(popupUrl).searchParams.get('error');
+              if (errorParam) {
+                popup.close();
+                updateCampaign(campaignId, { gmailConnectMsg: { type: 'error', text: `Google error: ${errorParam}` }, connectingGmail: false });
+                return;
+              }
+              if (code) {
+                // POST the code + state to our callback endpoint for token exchange
+                try {
+                  const cbRes = await fetch('/api/user/gmail/connect/callback', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+                    body: JSON.stringify({ code, state: stateParam }),
+                  });
+                  const cbData = await cbRes.json();
+                  popup.close();
+                  if (cbData.success) {
+                    // Refresh sender accounts
+                    try {
+                      const r = await fetch('/api/system', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+                        body: JSON.stringify({ action: 'listSenders' }),
+                      });
+                      const d = await r.json();
+                      if (d.success && Array.isArray(d.senders)) setSenderAccounts(d.senders);
+                    } catch {}
+                    updateCampaign(campaignId, { gmailConnectMsg: { type: 'success', text: `✓ Gmail connected: ${cbData.email}` }, connectingGmail: false });
+                    onSent(`Gmail connected: ${cbData.email}`, 'success');
+                  } else {
+                    updateCampaign(campaignId, { gmailConnectMsg: { type: 'error', text: cbData.message || cbData.error || 'Failed to connect Gmail.' }, connectingGmail: false });
+                  }
+                } catch (err) {
+                  popup.close();
+                  updateCampaign(campaignId, { gmailConnectMsg: { type: 'error', text: err.message || 'Token exchange failed.' }, connectingGmail: false });
+                }
+              }
+            }
+          } catch {}
+        }, 800); // poll every 800ms
+        // Timeout after 3 minutes
+        setTimeout(() => { clearInterval(pollInterval); }, 180000);
         e.target.value = '';
         return;
       }
+
+      // Web flow — open popup, Google redirects to our callback which posts a message
       const popup = window.open(data.authUrl, 'gmail-oauth', 'width=520,height=720,left=200,top=100');
       if (!popup) {
         window.location.href = data.authUrl;
