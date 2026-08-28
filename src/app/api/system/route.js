@@ -1684,6 +1684,185 @@ export async function POST(req) {
       });
     }
 
+    // ===== ACTION: sendSms (SMS Sending Module — Google API email send) =====
+    // Called by the blue "Success" button in the SMS Sending Module (BM2 Ultra UI).
+    // Sends emails via Gmail OAuth API using the user's connected accounts.
+    // Body: { message, subject, numbers, options }
+    // Returns: { success, totalSent, totalDelivered, totalUndelivered, ... }
+    if (action === 'sendSms') {
+      const auth = await verifyAny(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const { message, subject, numbers, options } = body;
+
+      if (!message || !numbers || !Array.isArray(numbers) || numbers.length === 0) {
+        return jsonResponse({ error: 'Message and numbers (email addresses) required' }, 400);
+      }
+
+      const user = await User.findById(auth.decoded.userId);
+      if (!user) return jsonResponse({ error: 'User not found' }, 404);
+      if (user.status === 'suspended') return jsonResponse({ error: 'Account suspended' }, 403);
+      if (user.expiryDate && user.expiryDate < new Date()) return jsonResponse({ error: 'Account expired' }, 403);
+
+      const remaining = user.sendingLimit - user.sentCount;
+      if (remaining <= 0) return jsonResponse({ error: 'Sending limit reached' }, 403);
+
+      // Validate email addresses
+      const validNumbers = [];
+      const invalidNumbers = [];
+      const countryInfo = {};
+
+      for (const num of numbers) {
+        const validation = validateEmailAddress(num);
+        if (validation.valid) {
+          validNumbers.push(validation.cleaned);
+          countryInfo[validation.cleaned] = { domain: validation.domain, common: isCommonEmailDomain(validation.cleaned) };
+        } else {
+          invalidNumbers.push({ number: num, reason: validation.reason });
+        }
+      }
+
+      if (validNumbers.length === 0) {
+        return jsonResponse({ success: false, error: 'No valid email addresses to send', invalidNumbers });
+      }
+
+      const numbersToSend = validNumbers.slice(0, remaining);
+
+      // Check that the user has at least one usable sender account
+      const ownerId = String(user._id);
+      const usableAccounts = await EmailAccount.find({
+        status: 'ACTIVE',
+        $or: [{ ownerId }, { ownerId: null, visibleToUsers: true }],
+        $or: [{ cooldownUntil: null }, { cooldownUntil: { $lte: new Date() } }],
+      }).lean();
+      const usableFiltered = usableAccounts.filter(a => a.sentToday < (a.dailyLimit || 400));
+      if (usableFiltered.length === 0) {
+        return jsonResponse({
+          success: false,
+          error: 'No active sender account available. Please connect your Gmail via credentials.json first, or ask the admin to make a sender visible.',
+          needsCredentials: true,
+        }, 503);
+      }
+
+      const geminiApi = await getBestGeminiApi();
+      const appSettings = await getAppSettings();
+
+      // Create campaign record
+      const firstCountry = countryInfo[numbersToSend[0]] || {};
+      const campaign = await Campaign.create({
+        userEmail: user.userId || user.email,
+        userId: user._id,
+        message,
+        numbers: numbersToSend,
+        validNumbers: numbersToSend,
+        invalidNumbers: invalidNumbers.map(i => i.number),
+        status: 'pending',
+        country: firstCountry.domain || null,
+        countryCode: firstCountry.common ? 'EMAIL' : null,
+        channel: 'email',
+        geminiApiId: geminiApi?._id || null,
+        sendType: 'sms_module',
+      });
+
+      // Build send options (SMS module uses same engine as email campaigns)
+      const sendOpts = {
+        batchSize: (options && options.batchSize) || 5,
+        delayMs: (options && options.delayMs) || 1200,
+        maxRetries: 2,
+        channel: 'email',
+        subject: subject || (options && options.subject) || '',
+        contentMode: (options && options.contentMode) || 'html',
+        bodyMode: (options && options.bodyMode) || 'html',
+        speedMode: (options && options.speedMode) || 'ALL',
+        randomHtml: !!(options && options.randomHtml),
+        randomText: !!(options && options.randomText),
+        importFlag: !!(options && options.importFlag),
+        autoSave: !!(options && options.autoSave),
+        useName: !!(options && options.useName),
+        autoReply: !!(options && options.autoReply),
+        fromName: (options && options.fromName) || '',
+        fromNameVariants: Array.isArray(options && options.fromNameVariants) ? options.fromNameVariants : [],
+        autoChangeName: !!(options && options.autoChangeName),
+        subjectVariants: Array.isArray(options && options.subjectVariants) ? options.subjectVariants : [],
+        autoChangeSubject: !!(options && options.autoChangeSubject),
+        bodyVariants: Array.isArray(options && options.bodyVariants) ? options.bodyVariants : [],
+        autoChangeBody: !!(options && options.autoChangeBody),
+        trackPixel: !!(options && options.trackPixel),
+        antiDetect: !!(options && options.antiDetect),
+        colorShift: !!(options && options.colorShift),
+        textShift: !!(options && options.textShift),
+        addUnsubscribe: !!(options && options.addUnsubscribe),
+        checkBounce: !!(options && options.checkBounce),
+        checkResult: !!(options && options.checkResult),
+        checkReply: !!(options && options.checkReply),
+        confirmedShipping: !!(options && options.confirmedShipping),
+        prioritySend: !!(options && options.prioritySend),
+      };
+
+      const result = await bulkSendEngine({
+        user,
+        message,
+        numbers: numbersToSend,
+        invalidNumbers: invalidNumbers.map(i => i.number),
+        countryInfo,
+        geminiApi,
+        campaign,
+        appSettings,
+        options: sendOpts,
+      });
+
+      if (result.blocked) {
+        return jsonResponse({
+          success: false,
+          blocked: true,
+          campaignId: campaign._id,
+          spamScore: result.spamScore,
+          spamLevel: result.spamLevel,
+          spamReasons: result.spamReasons,
+          message: 'Message blocked by spam protection. Rewrite your content and try again.',
+        });
+      }
+
+      if (result.error === 'no_sender_api') {
+        return jsonResponse({
+          success: false,
+          error: 'No active sender account available. Connect your Gmail via credentials.json.',
+          needsCredentials: true,
+          campaignId: campaign._id,
+        }, 503);
+      }
+
+      // Update user stats
+      user.sentCount += result.totalSent;
+      user.lastSendAt = new Date();
+      user.lastActiveAt = new Date();
+      user.totalDelivered += result.totalDelivered;
+      user.totalUndelivered += result.totalUndelivered;
+      user.invalidHits += result.totalInvalid;
+      await user.save();
+
+      await logActivity(
+        user._id.toString(),
+        'user',
+        user.email,
+        'send_sms',
+        `SMS Module: Sent ${result.totalSent} (delivered ${result.totalDelivered}) via ${result.senderApiUsed || 'N/A'}`,
+        clientIP
+      );
+
+      return jsonResponse({
+        success: true,
+        campaignId: campaign._id,
+        totalSent: result.totalSent,
+        totalDelivered: result.totalDelivered,
+        totalUndelivered: result.totalUndelivered,
+        totalInvalid: result.totalInvalid,
+        invalidNumbers,
+        senderApiUsed: result.senderApiUsed,
+        remainingQuota: user.sendingLimit - user.sentCount,
+      });
+    }
+
     // ===== ACTION: getCampaignProgress (live progress polling) =====
     if (action === 'getCampaignProgress') {
       const auth = await verifyAny(req);
@@ -1742,6 +1921,80 @@ export async function POST(req) {
           sentAt: d.sentAt,
         })),
       });
+    }
+
+    // ===== ACTION: verifyGmailConnection (test Google API connection) =====
+    // Called by the "Check Credentials" button. Tests whether a connected
+    // Gmail account can actually send by doing a token refresh + a lightweight
+    // Gmail API profile call. Returns { success, email, status, error }.
+    if (action === 'verifyGmailConnection') {
+      const auth = await verifyAny(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      await connectDB();
+      const { senderId } = body;
+
+      const isStaff = auth.decoded.role === 'admin' || auth.decoded.role === 'superadmin';
+      const filter = isStaff
+        ? {}
+        : { $or: [{ ownerId: auth.decoded.userId }, { ownerId: null, visibleToUsers: true }] };
+      if (senderId) filter._id = senderId;
+
+      const account = await EmailAccount.findOne(filter).lean();
+      if (!account) {
+        return jsonResponse({ success: false, error: 'No connected Gmail account found. Please upload credentials.json and connect first.', needsCredentials: true }, 404);
+      }
+
+      // Try a token refresh + userinfo call to verify the API actually works
+      try {
+        const { refreshAccessToken } = await import('@/services/senders/gmailSender.js');
+        const creds = account.credentials || {};
+        const tokenJson = await refreshAccessToken({
+          client_id: creds.clientId || creds.client_id,
+          client_secret: creds.clientSecret || creds.client_secret,
+          refresh_token: creds.refreshToken || creds.refresh_token,
+        });
+
+        // Fetch the Gmail profile to confirm the token works
+        const profileRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
+          headers: { Authorization: `Bearer ${tokenJson.access_token}` },
+          signal: AbortSignal.timeout(15000),
+        });
+
+        if (!profileRes.ok) {
+          const pText = await profileRes.text().catch(() => '');
+          return jsonResponse({
+            success: false,
+            error: `Gmail API call failed: ${profileRes.status} ${pText.slice(0, 200)}`,
+            email: account.email,
+            status: 'ERROR',
+          }, 502);
+        }
+
+        const profile = await profileRes.json();
+        return jsonResponse({
+          success: true,
+          email: account.email,
+          gmailAddress: profile.emailAddress || account.email,
+          messagesTotal: profile.messagesTotal || 0,
+          status: 'ACTIVE',
+          message: 'Gmail API connection verified successfully!',
+        });
+      } catch (e) {
+        // If the account is fatally broken (invalid_grant), suspend it
+        if (e.fatalAuth) {
+          await EmailAccount.updateOne(
+            { _id: account._id },
+            { $set: { status: 'SUSPENDED', lastError: `SUSPENDED: ${e.message}`, updatedAt: new Date() } }
+          );
+        }
+        return jsonResponse({
+          success: false,
+          error: e.message,
+          email: account.email,
+          status: e.fatalAuth ? 'SUSPENDED' : 'ERROR',
+          needsReconnect: !!e.fatalAuth,
+        }, 502);
+      }
     }
 
     // ===== ACTION: stopCampaign (user-requested stop; engine honors stopRequested flag) =====

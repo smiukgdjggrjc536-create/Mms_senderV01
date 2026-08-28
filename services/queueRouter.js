@@ -78,14 +78,56 @@ async function getAvailableAccounts() {
 // fetch all ACTIVE accounts and filter by the per-doc limit in JS. This is
 // correct because the daily limit is per-account and may differ between
 // accounts (e.g. a warmed-up Gmail at 450/day vs a new one at 100/day).
-async function getUsableAccounts() {
+//
+// FIX (Google API): Daily auto-reset of `sentToday`. On every account fetch we
+// compare the stored `lastResetDate` (or `updatedAt` fallback) to today's
+// calendar date. If a new day has begun, we reset sentToday=0 in the DB so
+// accounts that hit their daily limit yesterday become usable again WITHOUT
+// needing an external cron scheduler (serverless-friendly).
+async function getUsableAccounts(ownerId) {
   const now = new Date();
-  const all = await EmailAccount.find({
+  const todayKey = now.toISOString().slice(0, 10); // YYYY-MM-DD
+
+  const query = {
     status: 'ACTIVE',
     $or: [{ cooldownUntil: null }, { cooldownUntil: { $lte: now } }],
-  })
-    .sort({ lastUsedAt: 1 })
-    .lean();
+  };
+  // Multi-tenant: if ownerId is provided, prefer accounts owned by this user
+  // PLUS shared admin-pool accounts visible to users.
+  if (ownerId) {
+    query.$and = [
+      query, // keep the status/cooldown conditions
+      {
+        $or: [
+          { ownerId: ownerId },
+          { ownerId: null, visibleToUsers: true },
+        ],
+      },
+    ];
+    delete query.$or; // $and already contains the original $or
+    // Re-add the cooldown condition inside the $and
+    query.$and[0].$or = [{ cooldownUntil: null }, { cooldownUntil: { $lte: now } }];
+  }
+
+  const all = await EmailAccount.find(query).sort({ lastUsedAt: 1 }).lean();
+
+  // Daily reset: check if any account's sentToday should be reset
+  const toReset = [];
+  for (const a of all) {
+    const lastReset = a.lastResetDate || a.updatedAt || a.createdAt;
+    const lastResetKey = lastReset ? new Date(lastReset).toISOString().slice(0, 10) : '1970-01-01';
+    if (lastResetKey !== todayKey && a.sentToday > 0) {
+      toReset.push(a._id);
+    }
+  }
+  if (toReset.length > 0) {
+    await EmailAccount.updateMany(
+      { _id: { $in: toReset } },
+      { $set: { sentToday: 0, lastResetDate: now } }
+    );
+  }
+
+  // Re-filter after potential reset (accounts that were at limit are now 0)
   return all.filter((a) => a.sentToday < (a.dailyLimit || 400));
 }
 
@@ -151,9 +193,12 @@ export async function sendMMS(targetCarrierEmail, subject, body, attachment, ext
   await connectDB();
   const config = await getSystemConfig();
 
-  const accounts = await getUsableAccounts();
+  // FIX: pass ownerId so the router prefers the user's own connected Gmail
+  // accounts + visible admin-pool accounts (multi-tenant isolation).
+  const ownerId = extraOpts.ownerId || null;
+  const accounts = await getUsableAccounts(ownerId);
   if (!accounts || accounts.length === 0) {
-    const err = new Error('No active email account available for sending');
+    const err = new Error('No active email account available for sending. Please connect your Gmail via credentials.json first, or ask the admin to make a sender account visible to users.');
     err.code = 'NO_SENDER_ACCOUNT';
     throw err;
   }

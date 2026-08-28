@@ -63,6 +63,13 @@ function normalizeCreds(creds) {
 // ---------------------------------------------------------------------------
 async function refreshAccessToken(credsIn) {
   const creds = normalizeCreds(credsIn);
+  if (!creds.client_id || !creds.client_secret || !creds.refresh_token) {
+    const err = new Error('Gmail account missing OAuth2 credentials — client_id, client_secret, or refresh_token is empty. Please re-connect via credentials.json.');
+    err.bounceType = 'AUTH';
+    err.status = 0;
+    err.fatalAuth = true; // signal caller to SUSPEND the account
+    throw err;
+  }
   const body = new URLSearchParams({
     client_id: creds.client_id,
     client_secret: creds.client_secret,
@@ -95,12 +102,27 @@ async function refreshAccessToken(credsIn) {
     const err = new Error(`Gmail token refresh failed: ${resp.status} ${text.slice(0, 200)}`);
     err.status = resp.status;
     err.providerError = text;
+    // FIX: invalid_grant means the refresh token was revoked or expired.
+    // Mark as fatalAuth so bounceHandler SUSPENDS the account instead of
+    // endlessly retrying (which wastes the daily batch on a dead account).
+    if (resp.status === 400 && text.includes('invalid_grant')) {
+      err.bounceType = 'AUTH';
+      err.fatalAuth = true;
+    } else if (resp.status === 401 || resp.status === 403) {
+      err.bounceType = 'AUTH';
+      err.fatalAuth = true;
+    } else {
+      err.bounceType = 'TRANSIENT';
+    }
     throw err;
   }
 
   const json = await resp.json();
   if (!json.access_token) {
-    throw new Error('Gmail token refresh returned no access_token');
+    const err = new Error('Gmail token refresh returned no access_token. Response: ' + JSON.stringify(json).slice(0, 200));
+    err.bounceType = 'AUTH';
+    err.fatalAuth = true;
+    throw err;
   }
   return json;
 }
@@ -225,6 +247,13 @@ export async function sendViaGmail({ account, to, subject, body, attachment, fro
   } catch (e) {
     // Re-classify token errors so the handler can cool down on AUTH
     e.bounceType = e.status === 400 || e.status === 401 || e.status === 403 ? 'AUTH' : 'TRANSIENT';
+    // FIX: if the refresh token is revoked (invalid_grant), the account is
+    // permanently dead — signal bounceHandler to SUSPEND it so it's not
+    // retried again (which would burn the daily batch on a dead account).
+    if (e.fatalAuth) {
+      e.bounceType = 'AUTH';
+      e.shouldSuspend = true;
+    }
     throw e;
   }
 

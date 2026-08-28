@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { COUNTRY_SUPPORT, getCountryStats } from '@/lib/countrySupport';
+import SmsTab from './SmsTab';
 
 // ================================================================
 // Icon set (professional SVG, NO emoji in chrome — emoji only for flags)
@@ -11,6 +12,7 @@ const Icon = {
   Dashboard: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zm-10 9a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1v-5zm10-3a1 1 0 011-1h4a1 1 0 011 1v8a1 1 0 01-1 1h-4a1 1 0 01-1-1v-8z" /></svg>,
   Report: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>,
   Info: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+  Sms: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 4v-4z" /></svg>,
   Chat: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>,
   Close: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>,
   Send2: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>,
@@ -423,6 +425,7 @@ function UserDashboard({ user, onLogout, onRefresh }) {
   const tabs = [
     { k: 'dashboard', l: 'Dashboard', I: Icon.Dashboard },
     { k: 'send', l: 'Send Email', I: Icon.Send },
+    { k: 'sms', l: 'SMS Module', I: Icon.Sms },
     { k: 'countries', l: 'Deliverability', I: Icon.Shield },
     { k: 'inbox', l: 'Inbox & Auto-Reply', I: Icon.Inbox },
     { k: 'reports', l: 'Reports', I: Icon.Report },
@@ -548,6 +551,7 @@ function UserDashboard({ user, onLogout, onRefresh }) {
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white tracking-tight truncate">
                 {activeTab === 'dashboard' && 'Dashboard'}
                 {activeTab === 'send' && 'Send Email Campaign'}
+                {activeTab === 'sms' && 'SMS Sending Module'}
                 {activeTab === 'countries' && 'Deliverability'}
                 {activeTab === 'inbox' && 'Inbox & Auto-Reply'}
                 {activeTab === 'reports' && 'Delivery Reports'}
@@ -591,6 +595,13 @@ function UserDashboard({ user, onLogout, onRefresh }) {
                 onSent={(msg, type) => { show(msg, type); fetchAll(); }}
                 onCampaignClick={fetchDeliveryReports}
                 language={language}
+              />
+            )}
+            {activeTab === 'sms' && (
+              <SmsTab
+                user={user}
+                onToast={show}
+                onSent={(msg, type) => { show(msg, type); fetchAll(); }}
               />
             )}
             {activeTab === 'countries' && <CountrySupportTab />}

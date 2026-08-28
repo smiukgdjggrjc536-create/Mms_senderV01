@@ -55,6 +55,14 @@ const emailAccountSchema = new mongoose.Schema({
     default: 0,
   },
 
+  // FIX: Last date sentToday was reset (YYYY-MM-DD comparison). The queueRouter
+  // auto-resets sentToday to 0 when a new calendar day begins, making the
+  // daily limit enforcement serverless-friendly (no external cron needed).
+  lastResetDate: {
+    type: Date,
+    default: null,
+  },
+
   // ACTIVE = usable now. COOLDOWN = temporarily paused (rate limit/bounce).
   // SUSPENDED = manually disabled by admin or hard-banned by provider.
   status: {

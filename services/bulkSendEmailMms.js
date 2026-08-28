@@ -229,8 +229,10 @@ export async function bulkSendEngineEmailMMS(opts) {
 
     // Step 2 — send through the queue router (delegates to the correct
     // provider and runs the bounce handler). Pass fromName for MIME From header.
+    // FIX: pass ownerId so the router prefers the user's own connected Gmail
+    // accounts + visible admin-pool accounts (multi-tenant isolation).
     try {
-      const res = await sendEmail(payload.to, perSubject, payload.text, attachment, { fromName: perFromName });
+      const res = await sendEmail(payload.to, perSubject, payload.text, attachment, { fromName: perFromName, ownerId: user && user._id ? String(user._id) : null });
       totalSent++;
       totalDelivered++;
       if (res.accountEmail) accountsUsed.add(res.accountEmail);

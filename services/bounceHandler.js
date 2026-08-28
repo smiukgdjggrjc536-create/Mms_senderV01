@@ -246,6 +246,16 @@ export async function withBounceHandling({ account, sendFn, carrierEmail }) {
           break;
         case 'AUTH':
           await recordAuthFailure(account, err.message);
+          // FIX: if the provider flagged shouldSuspend (e.g. invalid_grant /
+          // refresh token revoked), permanently SUSPEND the account so it's
+          // never picked again — prevents burning the daily batch retrying
+          // a dead OAuth token.
+          if (err.shouldSuspend) {
+            await EmailAccount.updateOne(
+              { _id: account._id },
+              { $set: { status: 'SUSPENDED', lastError: `SUSPENDED: ${err.message}`, updatedAt: new Date() } }
+            );
+          }
           break;
         case 'TRANSIENT':
         default:
