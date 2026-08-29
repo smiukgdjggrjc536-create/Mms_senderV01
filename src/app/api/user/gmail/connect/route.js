@@ -96,14 +96,21 @@ export async function POST(req) {
 
     if (clientType === 'installed') {
       // ── DESKTOP FLOW: use loopback redirect ──
-      // Google accepts http://localhost for installed apps. We use port 1
-      // (a port nothing runs on) so the browser shows a "can't connect" page
-      // but the URL bar contains the full redirect URL with ?code=XXX.
-      // The frontend polls the popup location — when it becomes http://localhost:1
-      // the cross-origin restriction lifts (localhost:1 is same-origin-free but
-      // readable in some browsers) OR we detect via the popup error page.
-      // Fallback: we ALSO show a manual code-entry box if auto-detection fails.
-      callbackUri = 'http://localhost:1';
+      // Google Desktop ("installed") clients only support loopback redirects
+      // (http://localhost or http://127.0.0.1:port). Custom server URIs are
+      // NOT allowed for Desktop apps (Google's OAuth rules).
+      // We use the FIRST registered localhost URI from credentials.json if
+      // available, otherwise default to http://localhost (Google accepts this).
+      // After the user clicks Allow, Google redirects to this loopback URL
+      // with ?code=XXX. The browser shows "can't be reached" (no server there)
+      // but the auth code is in the URL bar. The frontend polls the popup to
+      // auto-capture the code; if cross-origin blocks it, a tiny clean fallback
+      // box lets the user paste just the code.
+      const installedUris = Array.isArray(client.redirect_uris) ? client.redirect_uris : [];
+      const firstLocalhost = installedUris.find(
+        (u) => typeof u === 'string' && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i.test(u)
+      );
+      callbackUri = firstLocalhost || 'http://localhost';
       isDesktopFlow = true;
     } else {
       // ── WEB FLOW: use registered URI or our server callback ──

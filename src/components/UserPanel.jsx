@@ -1253,43 +1253,24 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
         return;
       }
 
-      // Desktop flow: Google redirects to http://localhost?code=XXX
-      // We open a popup and poll its URL. When Google redirects to localhost,
-      // the popup URL will contain ?code=... — we extract it and POST to our
-      // callback endpoint to exchange for tokens.
-      // Web flow: Google redirects to our /api/user/gmail/connect/callback which
-      // posts a message back to the opener.
+      // Desktop flow: Google redirects to http://localhost?code=XXX (loopback).
+      // We open a popup, user grants permission, Google redirects to localhost
+      // which shows "can't be reached" — but the auth code is in the URL bar.
+      // We aggressively poll the popup location to auto-capture the code.
+      // If cross-origin security blocks the poll, we show a TINY clean fallback
+      // box so the user can paste just the code — not a huge confusing panel.
       if (data.isDesktopFlow) {
         const popup = window.open(data.authUrl, 'gmail-oauth-desktop', 'width=520,height=720,left=200,top=100');
-        // Show instructions + manual code entry box (fallback if popup detection fails)
         const stateParam = data.authUrl.match(/state=([^&]+)/)?.[1] || '';
-        updateCampaign(campaignId, {
-          gmailConnectMsg: {
-            type: 'success',
-            text: `<div style="line-height:1.6">
-              <b>✓ Google permission page opened.</b><br>
-              Grant access to your Gmail. After you click "Allow", Google will redirect to a page that says <b>"site can't be reached"</b> — <b>that's normal!</b><br><br>
-              <b>📋 Copy the code from the URL bar.</b> The URL looks like:<br>
-              <code style="display:block;margin:4px 0;padding:6px;background:rgba(167,139,250,0.15);border-radius:4px;font-size:10px;word-break:break-all">http://localhost:1/?code=<b>4/0AXXXX...</b>&scope=...</code><br>
-              <b>Copy ONLY the code part</b> (starts with <code>4/</code>) and paste below:
-              <input type="text" id="gmail-oauth-code-input" placeholder="Paste code here (4/0AXXXX...)"
-                style="display:block;width:100%;margin:6px 0;padding:6px 8px;background:rgba(15,23,42,0.8);border:1px solid rgba(167,139,250,0.4);border-radius:6px;color:#e2e8f0;font-size:11px" />
-              <button onclick="window.__submitGmailCode && window.__submitGmailCode()"
-                style="padding:5px 14px;background:#7c3aed;border:1px solid #6d28d9;border-radius:6px;color:#fff;font-size:11px;font-weight:bold;cursor:pointer">Connect Gmail</button>
-            </div>`,
-          },
-          connectingGmail: true,
-        });
-        // Expose a global function the button can call
-        window.__submitGmailCode = async () => {
-          const input = document.getElementById('gmail-oauth-code-input');
-          if (!input || !input.value.trim()) { alert('Please paste the code first.'); return; }
-          const code = input.value.trim();
+
+        // Shared submit function (used by both auto-detect and manual fallback)
+        const submitCode = async (code) => {
+          if (!code || !code.trim()) return;
           try {
             updateCampaign(campaignId, { connectingGmail: true });
             const cbRes = await fetch('/api/user/gmail/connect/callback', {
               method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-              body: JSON.stringify({ code, state: stateParam }),
+              body: JSON.stringify({ code: code.trim(), state: stateParam }),
             });
             const cbData = await cbRes.json();
             if (cbData.success) {
@@ -1301,32 +1282,72 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
               } catch {}
               updateCampaign(campaignId, { gmailConnectMsg: { type: 'success', text: `✓ Gmail connected: <b>${cbData.email}</b>` }, connectingGmail: false });
               onSent(`Gmail connected: ${cbData.email}`, 'success');
-              delete window.__submitGmailCode;
             } else {
-              updateCampaign(campaignId, { gmailConnectMsg: { type: 'error', text: cbData.message || cbData.error || 'Failed to connect. Check the code and try again.' }, connectingGmail: false });
+              updateCampaign(campaignId, { gmailConnectMsg: { type: 'error', text: cbData.message || cbData.error || 'Failed to connect. Please retry.' }, connectingGmail: false });
             }
           } catch (err) {
             updateCampaign(campaignId, { gmailConnectMsg: { type: 'error', text: err.message || 'Connection failed.' }, connectingGmail: false });
           }
         };
+        window.__submitGmailCode = () => {
+          const input = document.getElementById('gmail-oauth-code-input');
+          if (input && input.value.trim()) submitCode(input.value);
+        };
 
-        // ALSO poll the popup for auto-detection (best-effort)
-        const pollInterval = setInterval(async () => {
+        // Show a SIMPLE, clean status message (not a huge box)
+        updateCampaign(campaignId, {
+          gmailConnectMsg: {
+            type: 'success',
+            text: `✓ Google permission page opened — click <b>Allow</b> to connect your Gmail automatically.`,
+          },
+          connectingGmail: true,
+        });
+
+        // Aggressive auto-poll: try to read popup URL every 500ms.
+        // Most browsers block cross-origin reads, but we keep trying.
+        let manualShown = false;
+        const pollInterval = setInterval(() => {
           try {
             if (popup?.closed) { clearInterval(pollInterval); return; }
             let popupUrl = '';
-            try { popupUrl = popup?.location?.href || ''; } catch { return; }
+            try { popupUrl = popup?.location?.href || ''; } catch {
+              // cross-origin blocked — if popup navigated away from Google
+              // (i.e. user clicked Allow and got redirected to localhost),
+              // show the tiny manual fallback after a short delay.
+              if (!manualShown) {
+                setTimeout(() => {
+                  if (!manualShown && popup && !popup.closed) {
+                    manualShown = true;
+                    updateCampaign(campaignId, {
+                      gmailConnectMsg: {
+                        type: 'success',
+                        text: `Almost done! Google redirected to a page that says <b>"site can't be reached"</b> — that's normal. Copy the code from the URL bar (it starts with <code>4/</code>) and paste it here:
+                          <div style="display:flex;gap:4px;margin-top:5px;align-items:center">
+                            <input type="text" id="gmail-oauth-code-input" placeholder="Paste code (4/0A...)"
+                              style="flex:1;padding:5px 8px;background:rgba(15,23,42,0.9);border:1px solid rgba(167,139,250,0.4);border-radius:6px;color:#e2e8f0;font-size:11px" />
+                            <button onclick="window.__submitGmailCode && window.__submitGmailCode()"
+                              style="padding:5px 12px;background:#7c3aed;border:1px solid #6d28d9;border-radius:6px;color:#fff;font-size:11px;font-weight:bold;cursor:pointer;white-space:nowrap">Connect</button>
+                          </div>`,
+                      },
+                    });
+                  }
+                }, 4000);
+              }
+              return;
+            }
+            // If we CAN read the URL and it has a code — auto-capture!
             if (popupUrl && popupUrl.includes('code=')) {
               clearInterval(pollInterval);
               const code = new URL(popupUrl).searchParams.get('code');
-              if (code && window.__submitGmailCode) {
-                const input = document.getElementById('gmail-oauth-code-input');
-                if (input) { input.value = code; }
-                window.__submitGmailCode();
+              if (code) {
+                updateCampaign(campaignId, {
+                  gmailConnectMsg: { type: 'success', text: `✓ Permission granted! Connecting your Gmail…` },
+                });
+                submitCode(code);
               }
             }
           } catch {}
-        }, 800);
+        }, 500);
         setTimeout(() => { clearInterval(pollInterval); }, 180000);
         e.target.value = '';
         return;
