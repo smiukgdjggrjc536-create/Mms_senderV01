@@ -1261,75 +1261,72 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
       // posts a message back to the opener.
       if (data.isDesktopFlow) {
         const popup = window.open(data.authUrl, 'gmail-oauth-desktop', 'width=520,height=720,left=200,top=100');
-        if (!popup) {
-          // Popup blocked — redirect the whole page
-          window.location.href = data.authUrl;
-          return;
-        }
-        updateCampaign(campaignId, { gmailConnectMsg: { type: 'success', text: 'Google permission page opened. Grant access to connect your Gmail.' } });
-
-        // Poll the popup URL for the localhost redirect with the code
+        // Show instructions + manual code entry box (fallback if popup detection fails)
         const stateParam = data.authUrl.match(/state=([^&]+)/)?.[1] || '';
+        updateCampaign(campaignId, {
+          gmailConnectMsg: {
+            type: 'success',
+            text: `<div style="line-height:1.6">
+              <b>✓ Google permission page opened.</b><br>
+              Grant access to your Gmail. After you click "Allow", Google will redirect to a page that says <b>"site can't be reached"</b> — <b>that's normal!</b><br><br>
+              <b>📋 Copy the code from the URL bar.</b> The URL looks like:<br>
+              <code style="display:block;margin:4px 0;padding:6px;background:rgba(167,139,250,0.15);border-radius:4px;font-size:10px;word-break:break-all">http://localhost:1/?code=<b>4/0AXXXX...</b>&scope=...</code><br>
+              <b>Copy ONLY the code part</b> (starts with <code>4/</code>) and paste below:
+              <input type="text" id="gmail-oauth-code-input" placeholder="Paste code here (4/0AXXXX...)"
+                style="display:block;width:100%;margin:6px 0;padding:6px 8px;background:rgba(15,23,42,0.8);border:1px solid rgba(167,139,250,0.4);border-radius:6px;color:#e2e8f0;font-size:11px" />
+              <button onclick="window.__submitGmailCode && window.__submitGmailCode()"
+                style="padding:5px 14px;background:#7c3aed;border:1px solid #6d28d9;border-radius:6px;color:#fff;font-size:11px;font-weight:bold;cursor:pointer">Connect Gmail</button>
+            </div>`,
+          },
+          connectingGmail: true,
+        });
+        // Expose a global function the button can call
+        window.__submitGmailCode = async () => {
+          const input = document.getElementById('gmail-oauth-code-input');
+          if (!input || !input.value.trim()) { alert('Please paste the code first.'); return; }
+          const code = input.value.trim();
+          try {
+            updateCampaign(campaignId, { connectingGmail: true });
+            const cbRes = await fetch('/api/user/gmail/connect/callback', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+              body: JSON.stringify({ code, state: stateParam }),
+            });
+            const cbData = await cbRes.json();
+            if (cbData.success) {
+              try { popup?.close(); } catch {}
+              try {
+                const r = await fetch('/api/system', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ action: 'listSenders' }) });
+                const d = await r.json();
+                if (d.success && Array.isArray(d.senders)) setSenderAccounts(d.senders);
+              } catch {}
+              updateCampaign(campaignId, { gmailConnectMsg: { type: 'success', text: `✓ Gmail connected: <b>${cbData.email}</b>` }, connectingGmail: false });
+              onSent(`Gmail connected: ${cbData.email}`, 'success');
+              delete window.__submitGmailCode;
+            } else {
+              updateCampaign(campaignId, { gmailConnectMsg: { type: 'error', text: cbData.message || cbData.error || 'Failed to connect. Check the code and try again.' }, connectingGmail: false });
+            }
+          } catch (err) {
+            updateCampaign(campaignId, { gmailConnectMsg: { type: 'error', text: err.message || 'Connection failed.' }, connectingGmail: false });
+          }
+        };
+
+        // ALSO poll the popup for auto-detection (best-effort)
         const pollInterval = setInterval(async () => {
           try {
-            if (popup.closed) {
-              clearInterval(pollInterval);
-              updateCampaign(campaignId, { connectingGmail: false });
-              return;
-            }
-            // Try to read the popup URL — this will throw a cross-origin error
-            // until Google redirects to http://localhost (which is a different origin,
-            // but we can catch the error and check if the URL contains 'code=')
+            if (popup?.closed) { clearInterval(pollInterval); return; }
             let popupUrl = '';
-            try {
-              popupUrl = popup.location.href;
-            } catch {
-              // Cross-origin — Google is still on accounts.google.com, keep waiting
-              return;
-            }
-            // If we can read the URL and it contains code=, extract it
+            try { popupUrl = popup?.location?.href || ''; } catch { return; }
             if (popupUrl && popupUrl.includes('code=')) {
               clearInterval(pollInterval);
               const code = new URL(popupUrl).searchParams.get('code');
-              const errorParam = new URL(popupUrl).searchParams.get('error');
-              if (errorParam) {
-                popup.close();
-                updateCampaign(campaignId, { gmailConnectMsg: { type: 'error', text: `Google error: ${errorParam}` }, connectingGmail: false });
-                return;
-              }
-              if (code) {
-                // POST the code + state to our callback endpoint for token exchange
-                try {
-                  const cbRes = await fetch('/api/user/gmail/connect/callback', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-                    body: JSON.stringify({ code, state: stateParam }),
-                  });
-                  const cbData = await cbRes.json();
-                  popup.close();
-                  if (cbData.success) {
-                    // Refresh sender accounts
-                    try {
-                      const r = await fetch('/api/system', {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-                        body: JSON.stringify({ action: 'listSenders' }),
-                      });
-                      const d = await r.json();
-                      if (d.success && Array.isArray(d.senders)) setSenderAccounts(d.senders);
-                    } catch {}
-                    updateCampaign(campaignId, { gmailConnectMsg: { type: 'success', text: `✓ Gmail connected: ${cbData.email}` }, connectingGmail: false });
-                    onSent(`Gmail connected: ${cbData.email}`, 'success');
-                  } else {
-                    updateCampaign(campaignId, { gmailConnectMsg: { type: 'error', text: cbData.message || cbData.error || 'Failed to connect Gmail.' }, connectingGmail: false });
-                  }
-                } catch (err) {
-                  popup.close();
-                  updateCampaign(campaignId, { gmailConnectMsg: { type: 'error', text: err.message || 'Token exchange failed.' }, connectingGmail: false });
-                }
+              if (code && window.__submitGmailCode) {
+                const input = document.getElementById('gmail-oauth-code-input');
+                if (input) { input.value = code; }
+                window.__submitGmailCode();
               }
             }
           } catch {}
-        }, 800); // poll every 800ms
-        // Timeout after 3 minutes
+        }, 800);
         setTimeout(() => { clearInterval(pollInterval); }, 180000);
         e.target.value = '';
         return;
@@ -2344,7 +2341,7 @@ function CampaignEditor({
             </div>
             <textarea value={c.message} onChange={(e) => u({ message: e.target.value })} rows={6}
               placeholder="Type HTML content or load a body template… use #RANDOM#, #DATE#, #NAME# tags"
-              className="w-full px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-y text-[11px] font-mono"
+              className="w-full px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-none text-[11px] font-mono overflow-y-auto"
               maxLength={2000} />
             <div className="flex items-center justify-between mt-1 flex-wrap gap-1">
               <div className="flex items-center gap-2">
@@ -2362,22 +2359,12 @@ function CampaignEditor({
                   className="flex items-center gap-0.5 px-2 py-1 bg-white/5 hover:bg-white/10 disabled:opacity-40 text-gray-300 rounded-md text-[9px] font-medium transition">
                   <Icon.Shield className="w-2.5 h-2.5" /> Spam Check
                 </button>
-                <button onClick={() => onAiSuggest(c.id)} disabled={c.aiLoading}
-                  className="flex items-center gap-0.5 px-2 py-1 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50 text-white rounded-md text-[9px] font-medium transition">
-                  {c.aiLoading ? <Spinner size={8} /> : <Icon.Sparkle className="w-2.5 h-2.5" />} AI
-                </button>
                 <button onClick={() => openPreview(c.id)}
                   className="text-[9px] text-cyan-300 hover:text-cyan-200 flex items-center gap-0.5 bg-cyan-500/10 px-2 py-1 rounded-md border border-cyan-500/20 transition">
                   <Icon.Eye className="w-2.5 h-2.5" /> Preview
                 </button>
               </div>
             </div>
-            {c.aiSuggestion && (
-              <div className="mt-1.5 p-2 bg-indigo-500/10 border border-indigo-500/20 rounded-lg flex items-center gap-2">
-                <p className="text-[10px] text-gray-200 flex-1 truncate">{c.aiSuggestion}</p>
-                <button onClick={() => onApplyAi(c.id)} className="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md text-[9px] font-medium flex-shrink-0">Use</button>
-              </div>
-            )}
           </div>
 
           {/* Row 3: Content Type + Speed + Anti-Detect + Options */}

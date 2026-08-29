@@ -96,9 +96,14 @@ export async function POST(req) {
 
     if (clientType === 'installed') {
       // ── DESKTOP FLOW: use loopback redirect ──
-      // Google accepts http://localhost for installed apps. The frontend will
-      // intercept the popup URL change to extract the auth code.
-      callbackUri = 'http://localhost';
+      // Google accepts http://localhost for installed apps. We use port 1
+      // (a port nothing runs on) so the browser shows a "can't connect" page
+      // but the URL bar contains the full redirect URL with ?code=XXX.
+      // The frontend polls the popup location — when it becomes http://localhost:1
+      // the cross-origin restriction lifts (localhost:1 is same-origin-free but
+      // readable in some browsers) OR we detect via the popup error page.
+      // Fallback: we ALSO show a manual code-entry box if auto-detection fails.
+      callbackUri = 'http://localhost:1';
       isDesktopFlow = true;
     } else {
       // ── WEB FLOW: use registered URI or our server callback ──
