@@ -2218,6 +2218,17 @@ function CampaignEditor({
             <input ref={fileInputRef} type="file" accept=".json,application/json" onChange={(e) => onConnectGmail(e, c.id)} className="hidden" disabled={c.connectingGmail} />
           </label>
           <span className="text-[9px] text-gray-500 flex-shrink-0">Any <code className="text-violet-300">.json</code> file from Google Cloud Console</span>
+          {/* Helper: one-time auto-connect setup hint */}
+          <button
+            type="button"
+            onClick={() => {
+              const uri = (typeof window !== 'undefined' ? window.location.origin : '') + '/api/user/gmail/connect/callback';
+              navigator.clipboard?.writeText(uri).catch(() => {});
+              alert('For ONE-TIME auto-connect setup (Allow = done, no code copy):\n\n1. Google Cloud Console → APIs & Services → Credentials\n2. Create Credentials → OAuth client ID → "Web application"\n3. Under "Authorized redirect URIs" add this URL (already copied to clipboard):\n\n' + uri + '\n\n4. Download the Web app credentials.json\n5. Upload it here — next time, clicking Allow connects automatically!\n\n(Desktop App credentials also work but need a one-time code paste.)');
+            }}
+            className="text-[9px] text-violet-400/70 hover:text-violet-300 underline flex-shrink-0"
+            title="How to set up one-time auto-connect"
+          >Want auto-connect (Allow = done)? Click here</button>
           {/* Sender select */}
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <select value={c.activeSenderIdx} onChange={(e) => u({ activeSenderIdx: Number(e.target.value) })}
