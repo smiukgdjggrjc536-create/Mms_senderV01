@@ -122,6 +122,52 @@ const emailAccountSchema = new mongoose.Schema({
     default: null,
   },
 
+  // ── v4.0 Google API Smart Threshold & Resume Loop ──────────────────
+  // Per-credential threshold tracking. The sending engine checks
+  // sentToday against thresholdLimit (from FeatureToggle.packageConfig
+  // .googleApiThreshold or per-credential override). When sentToday
+  // reaches the threshold, the credential is auto-paused (status →
+  // COOLDOWN) WITHOUT crashing the campaign — the engine rotates to the
+  // next available credential, and if none are available, pauses the
+  // campaign at the exact index (pausedIndex) for seamless resume.
+  thresholdLimit: {
+    type: Number,
+    default: 500,
+  },
+
+  // Whether this credential has been auto-paused due to threshold
+  thresholdPaused: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
+
+  // The exact recipient index the campaign was paused at (for resume)
+  pausedIndex: {
+    type: Number,
+    default: 0,
+  },
+
+  // When the threshold pause happened (for the resume countdown / UI)
+  pausedAt: {
+    type: Date,
+    default: null,
+  },
+
+  // The campaign ID that was paused due to this credential's threshold
+  pausedCampaignId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Campaign',
+    default: null,
+  },
+
+  // Whether this is a newly-added credential (triggers enterprise alert modal)
+  isNewCredential: {
+    type: Boolean,
+    default: true,
+    index: true,
+  },
+
   createdAt: {
     type: Date,
     default: Date.now,

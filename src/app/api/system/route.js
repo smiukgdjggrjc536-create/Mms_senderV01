@@ -63,6 +63,22 @@ import {
   geminiSpamReview,
   enforceCountryRules,
   computeExpiryDate,
+  // v4.0 MASTER RELEASE — God-Mode Matrix + Background AI Engine + Threshold
+  FeatureToggle,
+  AiPool,
+  generateRandomName,
+  generateRandomSubject,
+  generateNameBatch,
+  generateSubjectBatch,
+  restockAiPoolIfNeeded,
+  generateAiPoolBatch,
+  consumeFromAiPool,
+  getAiPoolStats,
+  checkCredentialThreshold,
+  pauseCredentialAtThreshold,
+  resetCredentialThreshold,
+  acknowledgeNewCredential,
+  getThresholdStatusForUser,
 } from '@/lib/core';
 import mongoose from 'mongoose';
 import { getKeepAliveStatus } from '@/lib/keepAlive';
@@ -2777,6 +2793,236 @@ User question: ${message}`;
       if (!sendId) return jsonResponse({ error: 'sendId required' }, 400);
       await ScheduledSend.findByIdAndDelete(sendId);
       return jsonResponse({ success: true });
+    }
+
+    // ==================================================================
+    // v4.0 MASTER RELEASE — God-Mode Matrix + Background AI Engine + Threshold
+    // ==================================================================
+
+    // ===== ACTION: getFeatureToggles (admin — God-Mode Matrix) =====
+    if (action === 'getFeatureToggles') {
+      const auth = await verifyAdmin(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      try {
+        await connectDB();
+        const ft = await FeatureToggle.getOrCreate();
+        return jsonResponse({ success: true, toggles: ft.toggles, packageConfig: ft.packageConfig });
+      } catch (e) {
+        return jsonResponse({ success: false, error: e.message }, 500);
+      }
+    }
+
+    // ===== ACTION: updateFeatureToggle (admin — flip a single toggle) =====
+    if (action === 'updateFeatureToggle') {
+      const auth = await verifyAdmin(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      try {
+        await connectDB();
+        const { key, visible, enabled, locked } = body;
+        if (!key) return jsonResponse({ error: 'key required' }, 400);
+        const ft = await FeatureToggle.getOrCreate();
+        const toggle = ft.toggles.find(t => t.key === key);
+        if (!toggle) return jsonResponse({ error: 'Toggle not found' }, 404);
+        if (visible !== undefined) toggle.visible = !!visible;
+        if (enabled !== undefined) toggle.enabled = !!enabled;
+        if (locked !== undefined) toggle.locked = !!locked;
+        ft.updatedAt = new Date();
+        await ft.save();
+        return jsonResponse({ success: true, toggle });
+      } catch (e) {
+        return jsonResponse({ success: false, error: e.message }, 500);
+      }
+    }
+
+    // ===== ACTION: bulkUpdateFeatureToggles (admin — update multiple toggles) =====
+    if (action === 'bulkUpdateFeatureToggles') {
+      const auth = await verifyAdmin(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      try {
+        await connectDB();
+        const { updates } = body;
+        if (!Array.isArray(updates)) return jsonResponse({ error: 'updates array required' }, 400);
+        const ft = await FeatureToggle.getOrCreate();
+        for (const u of updates) {
+          const toggle = ft.toggles.find(t => t.key === u.key);
+          if (toggle) {
+            if (u.visible !== undefined) toggle.visible = !!u.visible;
+            if (u.enabled !== undefined) toggle.enabled = !!u.enabled;
+            if (u.locked !== undefined) toggle.locked = !!u.locked;
+          }
+        }
+        ft.updatedAt = new Date();
+        await ft.save();
+        return jsonResponse({ success: true, toggles: ft.toggles });
+      } catch (e) {
+        return jsonResponse({ success: false, error: e.message }, 500);
+      }
+    }
+
+    // ===== ACTION: updatePackageConfig (admin — resource manager) =====
+    if (action === 'updatePackageConfig') {
+      const auth = await verifyAdmin(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      try {
+        await connectDB();
+        const { packageConfig } = body;
+        if (!packageConfig || typeof packageConfig !== 'object') return jsonResponse({ error: 'packageConfig object required' }, 400);
+        const ft = await FeatureToggle.getOrCreate();
+        // Merge provided fields (only known fields are accepted)
+        const allowed = ['maxCampaigns','maxRecipientsPerSend','maxBatchSize','minDelayMs','googleApiThreshold','aiQuotaPerDay','aiPoolMinSize','aiPoolTargetSize','autoRestockEnabled','globalSpeedCapPerMin'];
+        for (const k of allowed) {
+          if (packageConfig[k] !== undefined) {
+            ft.packageConfig[k] = packageConfig[k];
+          }
+        }
+        ft.updatedAt = new Date();
+        await ft.save();
+        return jsonResponse({ success: true, packageConfig: ft.packageConfig });
+      } catch (e) {
+        return jsonResponse({ success: false, error: e.message }, 500);
+      }
+    }
+
+    // ===== ACTION: getUserFeatureToggles (user — fetch toggles for panel rendering) =====
+    if (action === 'getUserFeatureToggles') {
+      const auth = await verifyAny(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      try {
+        await connectDB();
+        const ft = await FeatureToggle.getOrCreate();
+        // Users only get the visible/enabled/locked state — not the admin controls
+        const userToggles = ft.toggles.map(t => ({
+          key: t.key,
+          label: t.label,
+          category: t.category,
+          visible: t.visible,
+          enabled: t.enabled,
+          locked: t.locked,
+        }));
+        return jsonResponse({
+          success: true,
+          toggles: userToggles,
+          packageConfig: {
+            maxCampaigns: ft.packageConfig.maxCampaigns,
+            maxRecipientsPerSend: ft.packageConfig.maxRecipientsPerSend,
+            googleApiThreshold: ft.packageConfig.googleApiThreshold,
+          },
+        });
+      } catch (e) {
+        return jsonResponse({ success: false, error: e.message }, 500);
+      }
+    }
+
+    // ===== ACTION: getAiPoolStats (admin — AI engine dashboard) =====
+    if (action === 'getAiPoolStats') {
+      const auth = await verifyAdmin(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      try {
+        const stats = await getAiPoolStats();
+        const ft = await FeatureToggle.getOrCreate();
+        return jsonResponse({
+          success: true,
+          stats,
+          config: {
+            aiPoolMinSize: ft.packageConfig.aiPoolMinSize,
+            aiPoolTargetSize: ft.packageConfig.aiPoolTargetSize,
+            autoRestockEnabled: ft.packageConfig.autoRestockEnabled,
+          },
+        });
+      } catch (e) {
+        return jsonResponse({ success: false, error: e.message }, 500);
+      }
+    }
+
+    // ===== ACTION: generateAiPool (admin — manually generate pool items) =====
+    if (action === 'generateAiPool') {
+      const auth = await verifyAdmin(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      try {
+        const { poolType, count } = body;
+        if (!poolType || !['sender_name', 'subject_line'].includes(poolType)) {
+          return jsonResponse({ error: 'poolType required (sender_name or subject_line)' }, 400);
+        }
+        const n = Math.min(Math.max(parseInt(count) || 1000, 1), 50000);
+        const result = await generateAiPoolBatch(poolType, n);
+        if (result.error) return jsonResponse({ success: false, error: result.error }, 500);
+        return jsonResponse({ success: true, ...result });
+      } catch (e) {
+        return jsonResponse({ success: false, error: e.message }, 500);
+      }
+    }
+
+    // ===== ACTION: restockAiPool (admin — trigger auto-restock check) =====
+    if (action === 'restockAiPool') {
+      const auth = await verifyAdmin(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      try {
+        const result = await restockAiPoolIfNeeded();
+        return jsonResponse({ success: true, ...result });
+      } catch (e) {
+        return jsonResponse({ success: false, error: e.message }, 500);
+      }
+    }
+
+    // ===== ACTION: getThresholdStatus (user — per-credential threshold tracking) =====
+    if (action === 'getThresholdStatus') {
+      const auth = await verifyAny(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      try {
+        const result = await getThresholdStatusForUser(auth.decoded.userId);
+        if (result.error) return jsonResponse({ success: false, error: result.error }, 500);
+        return jsonResponse(result);
+      } catch (e) {
+        return jsonResponse({ success: false, error: e.message }, 500);
+      }
+    }
+
+    // ===== ACTION: acknowledgeNewCredential (user — dismiss enterprise alert modal) =====
+    if (action === 'acknowledgeNewCredential') {
+      const auth = await verifyAny(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      try {
+        const { accountId } = body;
+        if (!accountId) return jsonResponse({ error: 'accountId required' }, 400);
+        const result = await acknowledgeNewCredential(accountId);
+        if (result.error) return jsonResponse({ success: false, error: result.error }, 500);
+        return jsonResponse(result);
+      } catch (e) {
+        return jsonResponse({ success: false, error: e.message }, 500);
+      }
+    }
+
+    // ===== ACTION: resumePausedCredential (user — resume from exact paused index) =====
+    if (action === 'resumePausedCredential') {
+      const auth = await verifyAny(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      try {
+        await connectDB();
+        const { accountId } = body;
+        if (!accountId) return jsonResponse({ error: 'accountId required' }, 400);
+        const result = await resetCredentialThreshold(accountId);
+        if (result.error) return jsonResponse({ success: false, error: result.error }, 500);
+        return jsonResponse(result);
+      } catch (e) {
+        return jsonResponse({ success: false, error: e.message }, 500);
+      }
+    }
+
+    // ===== ACTION: setCredentialThreshold (admin — set per-credential limit) =====
+    if (action === 'setCredentialThreshold') {
+      const auth = await verifyAdmin(req);
+      if (auth.error) return jsonResponse({ error: auth.error }, auth.code);
+      try {
+        await connectDB();
+        const { accountId, thresholdLimit } = body;
+        if (!accountId) return jsonResponse({ error: 'accountId required' }, 400);
+        const limit = Math.min(Math.max(parseInt(thresholdLimit) || 500, 1), 10000);
+        const account = await EmailAccount.findByIdAndUpdate(accountId, { $set: { thresholdLimit: limit } }, { new: true });
+        if (!account) return jsonResponse({ error: 'Account not found' }, 404);
+        return jsonResponse({ success: true, accountId, thresholdLimit: limit });
+      } catch (e) {
+        return jsonResponse({ success: false, error: e.message }, 500);
+      }
     }
 
     // ===== Unknown action =====

@@ -73,6 +73,10 @@ const Icon = {
   Edit: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>,
   DocText: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>,
   Folder: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>,
+  Settings: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
+  Hash: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M7 20l4-16m2 16l4-16M6 9h16M4 15h16" /></svg>,
+  Gauge: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 12a9 9 0 1118 0M3 12h2m14 0h2M12 3v2m0 14v2m-6.364-6.364l1.414 1.414m9.9-9.9l1.414 1.414M12 12l3-3" /></svg>,
+  AlertTriangle: (p) => <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-7.36 3.45A2 2 0 016.92 20h10.16a2 2 0 001.79-1.05l7.36-13a2 2 0 00-1.79-2.95H4.57a2 2 0 00-1.79 2.95l7.36 13z" transform="translate(0, -1)" /></svg>,
 };
 
 // ================================================================
@@ -432,8 +436,8 @@ function UserDashboard({ user, onLogout, onRefresh }) {
   ];
 
   return (
-    <div className="h-screen bg-slate-950 relative overflow-hidden flex flex-col">
-      {/* Ambient background glow */}
+    <div className="h-screen relative overflow-hidden flex flex-col" style={{ backgroundColor: '#0B0F19' }}>
+      {/* v4.0 Slate/Charcoal ambient glow */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-0 left-1/3 w-[500px] h-[500px] bg-purple-600/5 rounded-full blur-[150px]" />
         <div className="absolute bottom-0 right-1/3 w-[500px] h-[500px] bg-indigo-600/5 rounded-full blur-[150px]" />
@@ -846,6 +850,52 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
   // Terms of Agreement gate
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
+
+  // v4.0 — Google API Threshold state (per-credential sent volume tracking)
+  const [thresholdStatus, setThresholdStatus] = useState(null);
+  const [thresholdLoading, setThresholdLoading] = useState(false);
+  const [resumeLoading, setResumeLoading] = useState(null);
+
+  // Fetch threshold status for all credentials
+  const fetchThresholdStatus = useCallback(async () => {
+    try {
+      setThresholdLoading(true);
+      const res = await fetch('/api/system', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ action: 'getThresholdStatus' }) });
+      const data = await res.json();
+      if (data.ok && data.credentials) setThresholdStatus(data.credentials);
+    } catch (e) { /* silent fail */ }
+    finally { setThresholdLoading(false); }
+  }, []);
+
+  // Acknowledge new credential (dismiss enterprise alert)
+  const handleAcknowledgeCredential = async (accountId) => {
+    try {
+      const res = await fetch('/api/system', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ action: 'acknowledgeNewCredential', accountId }) });
+      const data = await res.json();
+      if (data.ok) fetchThresholdStatus();
+    } catch (e) { /* silent */ }
+  };
+
+  // Resume from paused index
+  const handleResumePaused = async (accountId, campaignId) => {
+    try {
+      setResumeLoading(accountId);
+      const res = await fetch('/api/system', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ action: 'resumePausedCredential', accountId }) });
+      const data = await res.json();
+      if (data.ok) {
+        updateCampaign(campaignId, { limitExhausted: false, resumeFrom: 0, paused: false });
+        fetchThresholdStatus();
+        onSent(`Credential resumed from index ${data.pausedIndex || 0}`, 'success');
+      } else {
+        onSent(data.error || 'Resume failed', 'error');
+      }
+    } catch (e) { onSent('Resume failed — network error', 'error'); }
+    finally { setResumeLoading(null); }
+  };
+
+  // Fetch threshold status on mount + when senderAccounts change
+  useEffect(() => { fetchThresholdStatus(); }, [fetchThresholdStatus]);
+  useEffect(() => { if (senderAccounts.length > 0) fetchThresholdStatus(); }, [senderAccounts, fetchThresholdStatus]);
   const [termsChecked, setTermsChecked] = useState(false);
 
   // Live Monitor filter
@@ -932,6 +982,14 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
     aiSuggestion: '',
     spamChecking: false,
     spamPreview: null,
+    // ── v4.0 MASTER RELEASE: Dedicated Parameter Inputs ──
+    tfnNumber: '',
+    helpDeskLink: '',
+    invoiceFormat: 'INV-{NUM}',
+    transactionFormat: 'TXN-{NUM}',
+    // ── v4.0 MASTER RELEASE: Threshold tracking state ──
+    thresholdData: null,
+    showCredentialAlert: false,
     // Status
     status: 'idle',
   });
@@ -1104,6 +1162,14 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
     { tag: '#RANDOM_LETTERS#', desc: 'Random letters (6)', sample: 'QmXpLz' },
     { tag: '#UNSUB_LINK#', desc: 'Unsubscribe placeholder', sample: '[unsubscribe]' },
     { tag: '#SENDER_NAME#', desc: 'Sender display name', sample: 'Support Team' },
+    // ── v4.0 MASTER RELEASE directive tags ──
+    { tag: '#EMAIL#', desc: 'Recipient email address (auto-filled)', sample: 'user@email.com' },
+    { tag: '#INVOICE#', desc: 'Auto-generated invoice number', sample: 'INV-483920' },
+    { tag: '#SNUMBER#', desc: 'Auto-generated serial/sequence number', sample: '7293847' },
+    { tag: '#BOILING_SUMMARY#', desc: 'Randomized financial summary text', sample: 'Your account summary has been updated...' },
+    { tag: '#TFN#', desc: 'TFN Number (from dedicated input)', sample: 'XX-XXX-XXX' },
+    { tag: '#HELPDESK#', desc: 'Help Desk link (from dedicated input)', sample: 'https://helpdesk.support.com' },
+    { tag: '#TRANSACTION#', desc: 'Auto-generated transaction number', sample: 'TXN-283746' },
   ];
 
   const insertTag = (tagStr) => {
@@ -1396,15 +1462,14 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
   // ════════════════════════════════════════════════════════════════════════
   // Check Bounce — enterprise loading animation (per campaign)
   // ════════════════════════════════════════════════════════════════════════
+  // v4.0 MASTER RELEASE — 5-Second "Cognitive Trust" Data Validator
+  // 5 canonical steps, ~1s each → ~5s total cognitive trust sequence
   const validationSteps = [
-    'Analyzing recipient data...',
-    'Checking bounce response...',
-    'Checking valid format...',
-    'Removing duplicates...',
-    'Validating email syntax...',
-    'Filtering disposable domains...',
-    'MX record verification...',
-    'Finalizing results...',
+    'Initializing Data Streams…',
+    'Scanning Syntax…',
+    'Removing Duplicates…',
+    'Filtering Bounce Risks…',
+    'Clean Data Ready',
   ];
 
   const handleCheckBounce = async (campaignId) => {
@@ -1413,8 +1478,8 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
     const emails = camp.numbersText.split(/[\n,\s]/).map(n => n.trim()).filter(Boolean);
     if (emails.length === 0) return;
     updateCampaign(campaignId, { checkingBounce: true, bounceResults: null, validationStep: 0 });
-    // Enterprise-level loading: cycle through dynamic text (~3s each step)
-    const stepDuration = 3000;
+    // v4.0 Cognitive Trust — 5 steps × 1s = ~5s cognitive trust sequence
+    const stepDuration = 1000;
     for (let i = 0; i < validationSteps.length; i++) {
       updateCampaign(campaignId, { validationStep: i });
       await new Promise(r => setTimeout(r, stepDuration));
@@ -1825,7 +1890,7 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
   // MAIN LAYOUT
   // ════════════════════════════════════════════════════════════════════════
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2" style={{ backgroundColor: "#0B0F19" }}>
       {/* ═══ LIVE MONITOR BAR (TOP, ADVANCED) ═══ */}
       <div className="relative overflow-hidden rounded-xl border border-white/5 bg-gradient-to-r from-green-600/10 via-violet-600/8 to-transparent px-3 py-2 flex-shrink-0">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,197,94,0.08),transparent_60%)]" />
@@ -2371,9 +2436,10 @@ function CampaignEditor({
                 <button onClick={() => openTagPicker(c.id, 'body')} className="text-[9px] text-amber-300 hover:text-amber-200 flex items-center gap-0.5"><Icon.Tag className="w-2.5 h-2.5" /> Tags</button>
               </div>
             </div>
-            <textarea value={c.message} onChange={(e) => u({ message: e.target.value })} rows={6}
-              placeholder="Type HTML content or load a body template… use #RANDOM#, #DATE#, #NAME# tags"
+            <textarea data-camp-body={c.id} value={c.message} onChange={(e) => u({ message: e.target.value })} rows={6}
+              placeholder="Type HTML content or load a body template… use #RANDOM#, #DATE#, #NAME#, #EMAIL#, #INVOICE#, #TFN#, #HELPDESK# tags"
               className="w-full px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-none text-[11px] font-mono overflow-y-auto"
+              style={{ maxHeight: '480px', overflowY: 'auto' }}
               maxLength={2000} />
             <div className="flex items-center justify-between mt-1 flex-wrap gap-1">
               <div className="flex items-center gap-2">
@@ -2395,6 +2461,28 @@ function CampaignEditor({
                   className="text-[9px] text-cyan-300 hover:text-cyan-200 flex items-center gap-0.5 bg-cyan-500/10 px-2 py-1 rounded-md border border-cyan-500/20 transition">
                   <Icon.Eye className="w-2.5 h-2.5" /> Preview
                 </button>
+              </div>
+            </div>
+            {/* v4.0 — Interactive tag pills (click to insert at cursor) */}
+            <div className="mt-1.5 pt-1.5 border-t border-white/5">
+              <p className="text-[8px] text-gray-500 mb-1 uppercase tracking-wider">Quick Tags — click to insert</p>
+              <div className="flex flex-wrap gap-1">
+                {['#EMAIL#','#INVOICE#','#SNUMBER#','#BOILING_SUMMARY#','#TFN#','#HELPDESK#','#DATE#','#TRANSACTION#','#NAME#','#RANDOM#'].map(t => (
+                  <button key={t} onClick={() => {
+                    const ta = document.querySelector(`[data-camp-body="${c.id}"]`);
+                    if (ta) {
+                      const start = ta.selectionStart, end = ta.selectionEnd;
+                      const next = c.message.slice(0, start) + t + c.message.slice(end);
+                      u({ message: next });
+                      requestAnimationFrame(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = start + t.length; });
+                    } else {
+                      u({ message: c.message + t });
+                    }
+                  }}
+                    className="px-1.5 py-0.5 rounded-full text-[8px] font-mono font-bold bg-violet-500/10 text-violet-300 border border-violet-500/20 hover:bg-violet-500/25 hover:text-violet-200 transition cursor-pointer">
+                    {t}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -2454,6 +2542,39 @@ function CampaignEditor({
                   <MiniToggle label="Save" value={c.autoSave} onChange={(v) => u({ autoSave: v })} icon="Save" accent="cyan" />
                   <MiniToggle label="Random" value={c.randomText} onChange={(v) => u({ randomText: v })} icon="Sparkle" accent="yellow" />
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* v4.0 — Dedicated Parameter Inputs (TFN, Help Desk, Invoice/Transaction formats) */}
+          <div className="bg-slate-900/50 border border-violet-500/10 rounded-xl p-2.5">
+            <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1.5 flex items-center gap-1"><Icon.Settings className="w-3 h-3 text-violet-400" /> Dedicated Parameters <span className="text-violet-300 normal-case tracking-normal">— used by #TFN#, #HELPDESK#, #INVOICE#, #TRANSACTION# tags</span></p>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+              <div>
+                <label className="block text-[10px] text-gray-300 mb-1 flex items-center gap-1"><Icon.Hash className="w-3 h-3 text-cyan-400" /> TFN Number</label>
+                <input value={c.tfnNumber} onChange={(e) => u({ tfnNumber: e.target.value })}
+                  placeholder="e.g. 123 456 789"
+                  className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 text-[11px] font-mono" />
+              </div>
+              <div>
+                <label className="block text-[10px] text-gray-300 mb-1 flex items-center gap-1"><Icon.Link className="w-3 h-3 text-cyan-400" /> Help Desk Link</label>
+                <input value={c.helpDeskLink} onChange={(e) => u({ helpDeskLink: e.target.value })}
+                  placeholder="https://helpdesk.support.com"
+                  className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 text-[11px] font-mono" />
+              </div>
+              <div>
+                <label className="block text-[10px] text-gray-300 mb-1 flex items-center gap-1"><Icon.FileCode className="w-3 h-3 text-violet-400" /> Invoice Format</label>
+                <input value={c.invoiceFormat} onChange={(e) => u({ invoiceFormat: e.target.value })}
+                  placeholder="INV-{NUM}"
+                  className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 text-[11px] font-mono" />
+                <p className="text-[8px] text-gray-600 mt-0.5">Use {`{NUM}`} for auto-numbering</p>
+              </div>
+              <div>
+                <label className="block text-[10px] text-gray-300 mb-1 flex items-center gap-1"><Icon.FileCode className="w-3 h-3 text-violet-400" /> Transaction Format</label>
+                <input value={c.transactionFormat} onChange={(e) => u({ transactionFormat: e.target.value })}
+                  placeholder="TXN-{NUM}"
+                  className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 text-[11px] font-mono" />
+                <p className="text-[8px] text-gray-600 mt-0.5">Use {`{NUM}`} for auto-numbering</p>
               </div>
             </div>
           </div>
@@ -2567,6 +2688,52 @@ function CampaignEditor({
                   {c.result.spamReasons.map((r, i) => <span key={i} className="text-[9px] bg-red-500/10 px-1.5 py-0.5 rounded text-red-300">{r}</span>)}
                 </div>
               )}
+            </div>
+          )}
+          {/* v4.0 — Google API Smart Threshold & Resume Loop */}
+          {thresholdStatus && thresholdStatus.length > 0 && (
+            <div className="bg-slate-900/50 border border-violet-500/15 rounded-xl p-2.5">
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[9px] text-gray-500 uppercase tracking-wider flex items-center gap-1 font-semibold"><Icon.Gauge className="w-3 h-3 text-violet-400" /> Google API Threshold</p>
+                <button onClick={fetchThresholdStatus} disabled={thresholdLoading} className="text-[8px] text-gray-500 hover:text-gray-300 disabled:opacity-40 flex items-center gap-0.5">
+                  <Icon.Refresh className={`w-2.5 h-2.5 ${thresholdLoading ? 'animate-spin' : ''}`} /> Refresh
+                </button>
+              </div>
+              <div className="space-y-1.5 max-h-[180px] overflow-y-auto pr-1">
+                {thresholdStatus.map((cred) => {
+                  const pct = cred.thresholdLimit > 0 ? Math.min((cred.sentToday / cred.thresholdLimit) * 100, 100) : 0;
+                  const paused = cred.thresholdPaused;
+                  const isNew = cred.isNewCredential;
+                  return (
+                    <div key={cred._id} className={`rounded-lg p-1.5 border ${paused ? 'bg-amber-500/10 border-amber-500/30' : isNew ? 'bg-cyan-500/10 border-cyan-500/30' : 'bg-white/5 border-white/10'}`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] text-gray-200 font-mono truncate flex-1">{cred.email || cred.name || cred._id}</span>
+                        {paused && <span className="text-[8px] text-amber-300 font-bold ml-1 flex items-center gap-0.5 flex-shrink-0"><Icon.Pause className="w-2.5 h-2.5" /> PAUSED</span>}
+                        {isNew && !paused && <span className="text-[8px] text-cyan-300 font-bold ml-1 flex-shrink-0">NEW</span>}
+                      </div>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <div className="flex-1 bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                          <div className={`h-full rounded-full transition-all duration-500 ${paused ? 'bg-amber-500' : pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-gradient-to-r from-violet-500 to-indigo-500'}`}
+                            style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-[9px] text-gray-400 font-mono flex-shrink-0">{cred.sentToday}/{cred.thresholdLimit}</span>
+                      </div>
+                      {paused && (
+                        <button onClick={() => handleResumePaused(cred._id, c.id)} disabled={resumeLoading === cred._id}
+                          className="w-full flex items-center justify-center gap-1 px-2 py-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white rounded-md text-[9px] font-bold transition">
+                          {resumeLoading === cred._id ? <Spinner size={9} /> : <Icon.Play className="w-2.5 h-2.5" />} Resume from index {cred.pausedIndex || 0}
+                        </button>
+                      )}
+                      {isNew && !paused && (
+                        <button onClick={() => handleAcknowledgeCredential(cred._id)}
+                          className="w-full flex items-center justify-center gap-1 px-2 py-1 bg-cyan-600 hover:bg-cyan-500 text-white rounded-md text-[9px] font-bold transition">
+                          <Icon.CheckCircle className="w-2.5 h-2.5" /> Acknowledge Credential
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>

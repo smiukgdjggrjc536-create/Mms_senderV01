@@ -28,6 +28,8 @@ import { emailAccountSchema } from '../../models/emailAccount.js';
 import { carrierCacheSchema } from '../../models/carrierCache.js';
 import { systemConfigSchema } from '../../models/systemConfig.js';
 import { proxyConfigSchema } from '../../models/proxyConfig.js';
+import { featureToggleSchema } from '../../models/featureToggle.js';
+import { aiPoolItemSchema } from '../../models/aiPool.js';
 
 // ============================================================================
 // Headless Enterprise Email-to-MMS Gateway Engine — service imports
@@ -674,6 +676,10 @@ const ProxyConfig = mongoose.models.ProxyConfig || mongoose.model('ProxyConfig',
 const SubjectCategory = mongoose.models.SubjectCategory || mongoose.model('SubjectCategory', subjectCategorySchema);
 const SubjectTemplate = mongoose.models.SubjectTemplate || mongoose.model('SubjectTemplate', subjectTemplateSchema);
 const BodyTemplate = mongoose.models.BodyTemplate || mongoose.model('BodyTemplate', bodyTemplateSchema);
+
+// ── v4.0 MASTER RELEASE: God-Mode Matrix + Background AI Engine ──
+const FeatureToggle = mongoose.models.FeatureToggle || mongoose.model('FeatureToggle', featureToggleSchema);
+const AiPool = mongoose.models.AiPool || mongoose.model('AiPool', aiPoolItemSchema);
 
 // ============================================================================
 // Admin Credential Management
@@ -2236,6 +2242,318 @@ function jsonResponse(data, status = 200) {
 }
 
 // ============================================================================
+// v4.0 MASTER RELEASE — Background AI Engine + Google API Smart Threshold
+// ============================================================================
+
+// ── Background AI Engine: randomized sender name + subject line generation ──
+// Generates large batches of randomized names and subject lines in-memory
+// (no Gemini API call needed for basic generation — uses weighted random
+// combinations of first/last names and subject templates). When a Gemini API
+// key is available, we can optionally enhance with AI-generated variants.
+
+const FIRST_NAMES = [
+  'Sarah','John','Emily','Michael','Lisa','David','Anna','James','Maria','Robert',
+  'Linda','Chris','Jessica','Mark','Patricia','Steven','Karen','Brian','Nancy','Kevin',
+  'Amanda','Daniel','Laura','Thomas','Rachel','Andrew','Sandra','Matthew','Rebecca','Justin',
+  'Stephanie','Ryan','Christine','Tyler','Samantha','Eric','Nicole','Jacob','Victoria','Nicholas',
+  'Olivia','Anthony','Hannah','Joshua','Grace','Andrew','Madison','Ryan','Chloe','Dylan',
+  'Lauren','Nathan','Allison','Connor','Megan','Ethan','Jasmine','Logan','Sophie','Mason',
+  'Abigail','Lucas','Isabella','Henry',' Natalie','Jackson','Zoe','Levi','Lily','Caleb',
+  'Ava','Owen','Mia','Hunter','Ella','Isaac','Scarlett','Gabriel','Aria','Anthony',
+];
+
+const LAST_NAMES = [
+  'Mitchell','Carter','Bennett','Foster','Reed','Hayes','Brooks','Coleman','Morgan','Hughes',
+  'Wallace','Sullivan','Parker','Bryant','Russell','Griffin','Perry','Powell','Long','Patterson',
+  'Sanders','Cole','Jenkins','Morris','Rogers','Dixon','Hamilton','Graham','Wallace','Sims',
+  'Marshall','Owens','Freeman','Gibson','Crawford','Ellis','Bishop','Boyd','Gordon','Sutton',
+  'Murray','Lane','Hunter','Webb','Hanson','Stephen','Mason','Rose','Spencer','Bates',
+  'Bradley','Dunn','Bates','Hart','Wells','Strickland','Lambert','Walsh','Bates','Chapman',
+  'Weber','Frost','Mills','York','Vargas','Reyes','Pace','Hood','Bridges','Tran',
+];
+
+const SUBJECT_TEMPLATES = [
+  'Important Update Regarding Your Account #{SNUMBER#}',
+  'Your Recent Transaction — Invoice #{INVOICE#}',
+  'Action Required: Verify Your Information',
+  'Account Status Notification — Reference #{SNUMBER#}',
+  'Confirmation of Your Recent Request',
+  'Security Alert: Review Your Account Activity',
+  'Your Invoice #{INVOICE#} is Ready for Review',
+  'Update: {COMPANY} Service Notification',
+  'Important: Please Review Your Transaction Details',
+  'Account Maintenance Notice — #{SNUMBER#}',
+  'Your Recent Order Confirmation — Invoice #{INVOICE#}',
+  'Service Update: Please Review at Your Earliest Convenience',
+  'Notification: Your Account Requires Attention',
+  'Transaction Receipt — Invoice #{INVOICE#}',
+  'Important Account Communication — Reference #{SNUMBER#}',
+  'Please Review: Recent Activity on Your Account',
+  'Your Request Has Been Processed — Invoice #{INVOICE#}',
+  'Account Verification Required — #{SNUMBER#}',
+  'Service Confirmation: Your Details Have Been Updated',
+  'Notice: Important Information About Your Account',
+];
+
+const SUBJECT_PREFIXES = ['RE:', 'FW:', 'Update:', 'Notice:', 'Alert:', 'Confirmation:', ''];
+const COMPANY_NAMES = ['Support Team', 'Billing Dept', 'Account Services', 'Customer Care', 'Help Desk', 'Verification Center'];
+
+function generateRandomName() {
+  const first = FIRST_NAMES[Math.floor(Math.random() * FIRST_NAMES.length)];
+  const last = LAST_NAMES[Math.floor(Math.random() * LAST_NAMES.length)];
+  return `${first} ${last}`;
+}
+
+function generateRandomSubject() {
+  const template = SUBJECT_TEMPLATES[Math.floor(Math.random() * SUBJECT_TEMPLATES.length)];
+  const prefix = SUBJECT_PREFIXES[Math.floor(Math.random() * SUBJECT_PREFIXES.length)];
+  const company = COMPANY_NAMES[Math.floor(Math.random() * COMPANY_NAMES.length)];
+  const snumber = String(Math.floor(Math.random() * 9000000) + 1000000);
+  const invoice = 'INV-' + String(Math.floor(Math.random() * 900000) + 100000);
+  let subject = template
+    .replace('{SNUMBER#}', snumber)
+    .replace('{INVOICE#}', invoice)
+    .replace('{COMPANY}', company)
+    .replace('#SNUMBER#', snumber)
+    .replace('#INVOICE#', invoice);
+  if (prefix && Math.random() > 0.5) subject = prefix + ' ' + subject;
+  return subject;
+}
+
+// Generate a batch of N random sender names
+function generateNameBatch(count) {
+  const names = new Set();
+  while (names.size < count) {
+    names.add(generateRandomName());
+  }
+  return [...names];
+}
+
+// Generate a batch of N random subject lines
+function generateSubjectBatch(count) {
+  const subjects = new Set();
+  let attempts = 0;
+  while (subjects.size < count && attempts < count * 3) {
+    subjects.add(generateRandomSubject());
+    attempts++;
+  }
+  return [...subjects];
+}
+
+// Background AI Engine: restock the pool if available count is below minimum
+async function restockAiPoolIfNeeded() {
+  try {
+    await connectDB();
+    const ft = await FeatureToggle.getOrCreate();
+    const config = ft.packageConfig || {};
+    if (!config.autoRestockEnabled) return { restocked: false, reason: 'auto-restock disabled' };
+
+    const minSize = config.aiPoolMinSize || 5000;
+    const targetSize = config.aiPoolTargetSize || 50000;
+
+    const stats = await AiPool.getStats();
+    const batchId = 'restock-' + Date.now();
+    let restocked = 0;
+
+    // Restock sender names if below minimum
+    if (stats.senderName.available < minSize) {
+      const needed = Math.min(targetSize - stats.senderName.available, 10000);
+      if (needed > 0) {
+        const names = generateNameBatch(needed);
+        const result = await AiPool.addItems('sender_name', names, batchId);
+        restocked += result.inserted;
+      }
+    }
+
+    // Restock subject lines if below minimum
+    if (stats.subjectLine.available < minSize) {
+      const needed = Math.min(targetSize - stats.subjectLine.available, 10000);
+      if (needed > 0) {
+        const subjects = generateSubjectBatch(needed);
+        const result = await AiPool.addItems('subject_line', subjects, batchId);
+        restocked += result.inserted;
+      }
+    }
+
+    return { restocked: restocked > 0, count: restocked, batchId, stats: await AiPool.getStats() };
+  } catch (e) {
+    return { restocked: false, error: e.message };
+  }
+}
+
+// Manually generate and add items to a pool (for the admin UI "Generate" button)
+async function generateAiPoolBatch(poolType, count) {
+  try {
+    await connectDB();
+    const batchId = 'manual-' + Date.now();
+    let contents;
+    if (poolType === 'sender_name') {
+      contents = generateNameBatch(count);
+    } else if (poolType === 'subject_line') {
+      contents = generateSubjectBatch(count);
+    } else {
+      return { error: 'Invalid pool type' };
+    }
+    const result = await AiPool.addItems(poolType, contents, batchId);
+    return { success: true, inserted: result.inserted, batchId, stats: await AiPool.getStats() };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+// Consume N items from a pool (used by the sending engine for name/subject rotation)
+async function consumeFromAiPool(poolType, count, userId = null) {
+  try {
+    await connectDB();
+    return await AiPool.consume(poolType, count, userId);
+  } catch (e) {
+    return [];
+  }
+}
+
+// Get AI pool statistics
+async function getAiPoolStats() {
+  try {
+    await connectDB();
+    return await AiPool.getStats();
+  } catch (e) {
+    return { senderName: { available: 0, used: 0, total: 0 }, subjectLine: { available: 0, used: 0, total: 0 }, error: e.message };
+  }
+}
+
+// ── Google API Smart Threshold & Resume Loop ──
+
+// Check if a credential has reached its threshold limit
+// Returns { atLimit, sentToday, thresholdLimit, remaining }
+async function checkCredentialThreshold(accountId) {
+  try {
+    await connectDB();
+    const account = await EmailAccount.findById(accountId).lean();
+    if (!account) return { error: 'Account not found' };
+    const ft = await FeatureToggle.getOrCreate();
+    const globalThreshold = ft.packageConfig?.googleApiThreshold || 500;
+    const limit = account.thresholdLimit || globalThreshold;
+    const sentToday = account.sentToday || 0;
+    const atLimit = sentToday >= limit;
+    return {
+      atLimit,
+      sentToday,
+      thresholdLimit: limit,
+      remaining: Math.max(0, limit - sentToday),
+      thresholdPaused: !!account.thresholdPaused,
+    };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+// Auto-pause a credential when it hits the threshold (NO crash — graceful pause)
+// Sets thresholdPaused=true, status=COOLDOWN, and records the paused index/campaign
+async function pauseCredentialAtThreshold(accountId, pausedIndex, campaignId) {
+  try {
+    await connectDB();
+    await EmailAccount.findByIdAndUpdate(accountId, {
+      $set: {
+        thresholdPaused: true,
+        status: 'COOLDOWN',
+        pausedIndex,
+        pausedAt: new Date(),
+        pausedCampaignId: campaignId,
+        cooldownUntil: null, // threshold pause is not time-based; manual resume or daily reset
+      },
+    });
+    return { success: true, paused: true, pausedIndex, accountId };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+// Reset a credential's threshold pause (either manually or after daily reset)
+async function resetCredentialThreshold(accountId) {
+  try {
+    await connectDB();
+    await EmailAccount.findByIdAndUpdate(accountId, {
+      $set: {
+        thresholdPaused: false,
+        status: 'ACTIVE',
+        pausedIndex: 0,
+        pausedAt: null,
+        pausedCampaignId: null,
+        cooldownUntil: null,
+        sentToday: 0,
+      },
+    });
+    return { success: true, reset: true, accountId };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+// Mark a credential as no longer new (after the enterprise alert modal is acknowledged)
+async function acknowledgeNewCredential(accountId) {
+  try {
+    await connectDB();
+    await EmailAccount.findByIdAndUpdate(accountId, { $set: { isNewCredential: false } });
+    return { success: true, accountId };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+// Get threshold status for all credentials (for the user panel threshold UI)
+async function getThresholdStatusForUser(userId) {
+  try {
+    await connectDB();
+    const ft = await FeatureToggle.getOrCreate();
+    const globalThreshold = ft.packageConfig?.googleApiThreshold || 500;
+
+    const ownerId = String(userId);
+    const accounts = await EmailAccount.find({
+      $or: [{ ownerId }, { ownerId: null, visibleToUsers: true }],
+    }).sort({ createdAt: 1 }).lean();
+
+    const credentials = accounts.map(a => {
+      const limit = a.thresholdLimit || globalThreshold;
+      const sentToday = a.sentToday || 0;
+      return {
+        _id: a._id,
+        email: a.email,
+        label: a.label || a.email,
+        provider: a.provider,
+        thresholdLimit: limit,
+        sentToday,
+        remaining: Math.max(0, limit - sentToday),
+        atLimit: sentToday >= limit,
+        thresholdPaused: !!a.thresholdPaused,
+        pausedIndex: a.pausedIndex || 0,
+        pausedAt: a.pausedAt || null,
+        isNewCredential: !!a.isNewCredential,
+        status: a.status,
+      };
+    });
+
+    // Find any new credentials (trigger enterprise alert modal)
+    const newCredentials = credentials.filter(c => c.isNewCredential);
+
+    // Find any paused credentials (show resume option)
+    const pausedCredentials = credentials.filter(c => c.thresholdPaused);
+
+    return {
+      success: true,
+      globalThreshold,
+      credentials,
+      newCredentials,
+      pausedCredentials,
+      totalCapacity: credentials.reduce((sum, c) => sum + c.thresholdLimit, 0),
+      totalSent: credentials.reduce((sum, c) => sum + c.sentToday, 0),
+      totalRemaining: credentials.reduce((sum, c) => sum + c.remaining, 0),
+    };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+// ============================================================================
 // Exports
 // ============================================================================
 
@@ -2414,4 +2732,20 @@ export {
   recordProxyResult,
   invalidateProxyCache,
   getProxyStatus,
+  // v4.0 MASTER RELEASE — God-Mode Matrix + Background AI Engine + Threshold
+  FeatureToggle,
+  AiPool,
+  generateRandomName,
+  generateRandomSubject,
+  generateNameBatch,
+  generateSubjectBatch,
+  restockAiPoolIfNeeded,
+  generateAiPoolBatch,
+  consumeFromAiPool,
+  getAiPoolStats,
+  checkCredentialThreshold,
+  pauseCredentialAtThreshold,
+  resetCredentialThreshold,
+  acknowledgeNewCredential,
+  getThresholdStatusForUser,
 };

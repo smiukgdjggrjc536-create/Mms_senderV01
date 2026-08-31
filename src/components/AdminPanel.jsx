@@ -489,6 +489,7 @@ function AdminDashboard({ user, onLogout, onRefresh }) {
     },
     {
       group: 'System', items: [
+        { id: 'godmode', label: 'God-Mode Matrix', icon: <Icon.Lock /> },
         { id: 'content', label: 'Content & Templates', icon: <Icon.Content /> },
         { id: 'alerts', label: 'Alerts & Notifications', icon: <Icon.Bell /> },
         { id: 'subadmins', label: 'Sub-Admins', icon: <Icon.Users />, superadminOnly: true },
@@ -584,6 +585,7 @@ function AdminDashboard({ user, onLogout, onRefresh }) {
           {tab === 'campaigns' && <CampaignsTab />}
           {tab === 'scheduled' && <ScheduledSendsTab />}
           {tab === 'content' && <ContentTab />}
+          {tab === 'godmode' && <GodModeMatrixTab />}
           {tab === 'alerts' && <AlertsTab />}
           {tab === 'subadmins' && (user?.role === 'admin' ? <SubAdminsTab /> : <div className="text-gray-400 p-8 text-center">Access denied — Super Admin only</div>)}
           {tab === 'database' && <DatabaseTab />}
@@ -3584,6 +3586,260 @@ function ScheduledSendsTab() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================================================
+// v4.0 MASTER RELEASE — GOD-MODE MATRIX TAB
+// Universal feature toggle system + Package/Resource Manager + AI Engine Dashboard
+// ============================================================================
+function GodModeMatrixTab() {
+  const [toggles, setToggles] = useState([]);
+  const [pkg, setPkg] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [aiStats, setAiStats] = useState(null);
+  const [generating, setGenerating] = useState(false);
+  const [restocking, setRestocking] = useState(false);
+  const [genCount, setGenCount] = useState(5000);
+  const [genType, setGenType] = useState('sender_name');
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [ft, ai] = await Promise.all([
+        api('getFeatureToggles'),
+        api('getAiPoolStats'),
+      ]);
+      if (ft.success) { setToggles(ft.toggles || []); setPkg(ft.packageConfig || {}); }
+      if (ai.success) setAiStats(ai.stats);
+    } catch (e) {
+      console.error('GodMode load error:', e);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const toggleField = async (key, field, value) => {
+    // Optimistic update
+    setToggles(prev => prev.map(t => t.key === key ? { ...t, [field]: value } : t));
+    try {
+      await api('updateFeatureToggle', { key, [field]: value });
+    } catch (e) {
+      // Revert on error
+      setToggles(prev => prev.map(t => t.key === key ? { ...t, [field]: !value } : t));
+    }
+  };
+
+  const savePkg = async () => {
+    setSaving(true);
+    try {
+      const data = await api('updatePackageConfig', { packageConfig: pkg });
+      if (data.success) { setPkg(data.packageConfig); alert('Package config saved'); }
+      else alert(data.error || 'Failed to save');
+    } catch (e) { alert('Network error'); }
+    setSaving(false);
+  };
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      const data = await api('generateAiPool', { poolType: genType, count: genCount });
+      if (data.success) {
+        alert(`Generated ${data.inserted} ${genType === 'sender_name' ? 'sender names' : 'subject lines'}`);
+        const ai = await api('getAiPoolStats');
+        if (ai.success) setAiStats(ai.stats);
+      } else alert(data.error || 'Generation failed');
+    } catch (e) { alert('Network error'); }
+    setGenerating(false);
+  };
+
+  const handleRestock = async () => {
+    setRestocking(true);
+    try {
+      const data = await api('restockAiPool');
+      if (data.success) {
+        alert(`Restocked ${data.count || 0} items`);
+        const ai = await api('getAiPoolStats');
+        if (ai.success) setAiStats(ai.stats);
+      } else alert(data.error || 'Restock failed');
+    } catch (e) { alert('Network error'); }
+    setRestocking(false);
+  };
+
+  // Group toggles by category
+  const categories = {};
+  toggles.forEach(t => {
+    if (!categories[t.category]) categories[t.category] = [];
+    categories[t.category].push(t);
+  });
+  const categoryLabels = {
+    dedicated_inputs: 'Dedicated Parameter Inputs',
+    content_editor: 'Content Editor',
+    sending_options: 'Sending Options',
+    validation: 'Validation & Trust',
+    ai_engine: 'Background AI Engine',
+    threshold: 'Google API Threshold',
+    sender_management: 'Sender Management',
+  };
+
+  if (loading) return <SkeletonGrid count={4} />;
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-gray-200 flex items-center gap-2">
+            <Icon.Lock className="text-amber-400" /> God-Mode Matrix
+          </h2>
+          <p className="text-gray-500 text-sm mt-0.5">Universal feature toggle system — control every user panel field from one place</p>
+        </div>
+        <button onClick={load} className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-gray-300 rounded-lg text-sm transition border border-slate-700">
+          <Icon.Refresh className="w-4 h-4" /> Refresh
+        </button>
+      </div>
+
+      {/* AI Engine Dashboard */}
+      <DetailBox title="Background AI Engine" subtitle="Pre-generated sender names + subject lines pool" icon="zap" accent="violet">
+        <div className="mt-3 space-y-4">
+          {/* Pool stats */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+              <h4 className="text-sm font-semibold text-gray-300 mb-2">Sender Name Pool</h4>
+              {aiStats?.senderName ? (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs"><span className="text-green-400">Available</span><span className="text-green-400 font-bold text-base">{aiStats.senderName.available.toLocaleString()}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-gray-500">Used</span><span className="text-gray-400">{aiStats.senderName.used.toLocaleString()}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-gray-500">Total</span><span className="text-gray-400">{aiStats.senderName.total.toLocaleString()}</span></div>
+                  <div className="mt-2 h-2 bg-slate-700 rounded-full overflow-hidden">
+                    <div className="h-full bg-green-500 rounded-full" style={{ width: `${aiStats.senderName.total > 0 ? (aiStats.senderName.available / aiStats.senderName.total) * 100 : 0}%` }} />
+                  </div>
+                </div>
+              ) : <p className="text-gray-500 text-xs">Loading...</p>}
+            </div>
+            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+              <h4 className="text-sm font-semibold text-gray-300 mb-2">Subject Line Pool</h4>
+              {aiStats?.subjectLine ? (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs"><span className="text-green-400">Available</span><span className="text-green-400 font-bold text-base">{aiStats.subjectLine.available.toLocaleString()}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-gray-500">Used</span><span className="text-gray-400">{aiStats.subjectLine.used.toLocaleString()}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-gray-500">Total</span><span className="text-gray-400">{aiStats.subjectLine.total.toLocaleString()}</span></div>
+                  <div className="mt-2 h-2 bg-slate-700 rounded-full overflow-hidden">
+                    <div className="h-full bg-cyan-500 rounded-full" style={{ width: `${aiStats.subjectLine.total > 0 ? (aiStats.subjectLine.available / aiStats.subjectLine.total) * 100 : 0}%` }} />
+                  </div>
+                </div>
+              ) : <p className="text-gray-500 text-xs">Loading...</p>}
+            </div>
+          </div>
+
+          {/* Generate controls */}
+          <div className="flex flex-wrap items-center gap-3 bg-slate-800/30 border border-slate-700/50 rounded-xl p-4">
+            <select value={genType} onChange={e => setGenType(e.target.value)} className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm">
+              <option value="sender_name">Sender Names</option>
+              <option value="subject_line">Subject Lines</option>
+            </select>
+            <input type="number" value={genCount} onChange={e => setGenCount(parseInt(e.target.value) || 1000)} min="100" max="50000" className="w-32 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" />
+            <button onClick={handleGenerate} disabled={generating} className="flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition">
+              {generating ? <><Icon.Refresh className="w-4 h-4 animate-spin" /> Generating...</> : <><Icon.Plus className="w-4 h-4" /> Generate Batch</>}
+            </button>
+            <button onClick={handleRestock} disabled={restocking} className="flex items-center gap-1.5 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition">
+              {restocking ? <><Icon.Refresh className="w-4 h-4 animate-spin" /> Restocking...</> : <><Icon.Refresh className="w-4 h-4" /> Auto-Restock Check</>}
+            </button>
+          </div>
+        </div>
+      </DetailBox>
+
+      {/* Package & Resource Manager */}
+      <DetailBox title="Package & Resource Manager" subtitle="Global limits, API thresholds, and AI quotas" icon="settings" accent="sky">
+        <div className="mt-3 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <label className="text-gray-400 text-sm font-medium block mb-1.5">Max Campaigns per User</label>
+              <input type="number" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={pkg.maxCampaigns ?? 4} onChange={e => setPkg({ ...pkg, maxCampaigns: parseInt(e.target.value) || 4 })} />
+            </div>
+            <div>
+              <label className="text-gray-400 text-sm font-medium block mb-1.5">Max Recipients per Send</label>
+              <input type="number" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={pkg.maxRecipientsPerSend ?? 10000} onChange={e => setPkg({ ...pkg, maxRecipientsPerSend: parseInt(e.target.value) || 10000 })} />
+            </div>
+            <div>
+              <label className="text-gray-400 text-sm font-medium block mb-1.5">Max Batch Size</label>
+              <input type="number" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={pkg.maxBatchSize ?? 50} onChange={e => setPkg({ ...pkg, maxBatchSize: parseInt(e.target.value) || 50 })} />
+            </div>
+            <div>
+              <label className="text-gray-400 text-sm font-medium block mb-1.5">Min Delay (ms)</label>
+              <input type="number" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={pkg.minDelayMs ?? 500} onChange={e => setPkg({ ...pkg, minDelayMs: parseInt(e.target.value) || 500 })} />
+            </div>
+            <div>
+              <label className="text-gray-400 text-sm font-medium block mb-1.5">Google API Threshold (per credential)</label>
+              <input type="number" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={pkg.googleApiThreshold ?? 500} onChange={e => setPkg({ ...pkg, googleApiThreshold: parseInt(e.target.value) || 500 })} />
+            </div>
+            <div>
+              <label className="text-gray-400 text-sm font-medium block mb-1.5">AI Quota per Day</label>
+              <input type="number" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={pkg.aiQuotaPerDay ?? 10000} onChange={e => setPkg({ ...pkg, aiQuotaPerDay: parseInt(e.target.value) || 10000 })} />
+            </div>
+            <div>
+              <label className="text-gray-400 text-sm font-medium block mb-1.5">AI Pool Min Size (restock trigger)</label>
+              <input type="number" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={pkg.aiPoolMinSize ?? 5000} onChange={e => setPkg({ ...pkg, aiPoolMinSize: parseInt(e.target.value) || 5000 })} />
+            </div>
+            <div>
+              <label className="text-gray-400 text-sm font-medium block mb-1.5">AI Pool Target Size</label>
+              <input type="number" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={pkg.aiPoolTargetSize ?? 50000} onChange={e => setPkg({ ...pkg, aiPoolTargetSize: parseInt(e.target.value) || 50000 })} />
+            </div>
+            <div>
+              <label className="text-gray-400 text-sm font-medium block mb-1.5">Global Speed Cap (per min, 0=unlimited)</label>
+              <input type="number" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" value={pkg.globalSpeedCapPerMin ?? 0} onChange={e => setPkg({ ...pkg, globalSpeedCapPerMin: parseInt(e.target.value) || 0 })} />
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-gray-300">
+            <input type="checkbox" checked={pkg.autoRestockEnabled ?? true} onChange={e => setPkg({ ...pkg, autoRestockEnabled: e.target.checked })} />
+            Auto-Restock AI Pools when below minimum
+          </label>
+          <button onClick={savePkg} disabled={saving} className="flex items-center gap-1.5 px-4 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition">
+            {saving ? 'Saving...' : 'Save Package Config'}
+          </button>
+        </div>
+      </DetailBox>
+
+      {/* Feature Toggle Matrix */}
+      <DetailBox title="Feature Toggle Matrix" subtitle="Show/hide/enable/disable any user panel field" icon="shield" accent="amber">
+        <div className="mt-3 space-y-4">
+          {Object.entries(categories).map(([cat, items]) => (
+            <div key={cat} className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-4">
+              <h4 className="text-sm font-bold text-amber-400 mb-3 uppercase tracking-wide">{categoryLabels[cat] || cat}</h4>
+              <div className="space-y-2">
+                {items.map(t => (
+                  <div key={t.key} className="flex items-center justify-between py-2 px-3 bg-slate-800/50 rounded-lg border border-slate-700/30">
+                    <span className="text-sm text-gray-300">{t.label}</span>
+                    <div className="flex items-center gap-3">
+                      {/* Visible toggle */}
+                      <label className="flex items-center gap-1 text-xs cursor-pointer">
+                        <span className={t.visible ? 'text-green-400' : 'text-gray-600'}>Visible</span>
+                        <input type="checkbox" checked={t.visible} disabled={t.locked} onChange={e => toggleField(t.key, 'visible', e.target.checked)} className="sr-only peer" />
+                        <div className="relative w-9 h-5 bg-slate-700 peer-checked:bg-green-600 rounded-full transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-transform peer-checked:after:translate-x-4" />
+                      </label>
+                      {/* Enabled toggle */}
+                      <label className="flex items-center gap-1 text-xs cursor-pointer">
+                        <span className={t.enabled ? 'text-violet-400' : 'text-gray-600'}>Enabled</span>
+                        <input type="checkbox" checked={t.enabled} disabled={t.locked} onChange={e => toggleField(t.key, 'enabled', e.target.checked)} className="sr-only peer" />
+                        <div className="relative w-9 h-5 bg-slate-700 peer-checked:bg-violet-600 rounded-full transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-transform peer-checked:after:translate-x-4" />
+                      </label>
+                      {/* Lock toggle */}
+                      <label className="flex items-center gap-1 text-xs cursor-pointer">
+                        <span className={t.locked ? 'text-rose-400' : 'text-gray-600'}>Lock</span>
+                        <input type="checkbox" checked={t.locked} onChange={e => toggleField(t.key, 'locked', e.target.checked)} className="sr-only peer" />
+                        <div className="relative w-9 h-5 bg-slate-700 peer-checked:bg-rose-600 rounded-full transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-transform peer-checked:after:translate-x-4" />
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </DetailBox>
     </div>
   );
 }

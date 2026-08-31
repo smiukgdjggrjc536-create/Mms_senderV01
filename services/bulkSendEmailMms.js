@@ -39,6 +39,9 @@ import { prepareEmailPayload } from './prepareEmail.js';
 // ---------------------------------------------------------------------------
 
 // ── Tag resolution: replaces all #TAG# tokens in subject & body ──
+// v4.0: now accepts a `params` object with dedicated inputs (tfnNumber,
+// helpDeskLink, invoiceFormat, transactionFormat, boilingSummary, senderEmail)
+// so the new directive tags can resolve to real user-provided values.
 const RANDOM_NAMES = ['Sarah','John','Emily','Michael','Lisa','David','Anna','James','Maria','Robert','Linda','Chris','Jessica','Mark','Patricia','Steven','Karen','Brian','Nancy','Kevin'];
 const RANDOM_CITIES = ['Chicago','Austin','Seattle','Boston','Denver','Portland','Miami','Atlanta','Phoenix','Dallas','Nashville','San Diego','Minneapolis','Charlotte'];
 const RANDOM_WORDS = ['JHKHJdsk09','Kx7mP2qNz','QmXpLz3rT','bN5vR8wKj','Hg2fD6sLp','Yt9cE4mNb','Vr1aU7iOq','Wz3xS6tLk','Pj8oF2hMv','Cd5rG9nBy'];
@@ -50,13 +53,38 @@ function randomStr(n) {
   return s;
 }
 
-function resolveTags(text) {
+// v4.0: generate a random invoice number using the user's format or a default
+function genInvoiceNumber(format) {
+  const fmt = format || 'INV-{NUM}';
+  const num = String(Math.floor(Math.random() * 900000) + 100000);
+  return fmt.replace(/\{NUM\}/g, num).replace(/NUM/g, num);
+}
+
+// v4.0: generate a random serial/sequence number
+function genSerialNumber() {
+  return String(Math.floor(Math.random() * 9000000) + 1000000);
+}
+
+// v4.0: generate a boiling summary (a short randomized financial summary string)
+const BOILING_SUMMARIES = [
+  'Total outstanding balance reviewed and updated in your account ledger.',
+  'Recent transaction activity has been reconciled with your payment history.',
+  'Your account summary reflects all pending and completed transactions for this period.',
+  'Billing summary compiled from your latest account activity and service records.',
+  'Account statement generated with current balance, recent payments, and pending charges.',
+  'Financial overview updated: all transactions verified and recorded in your file.',
+  'Your recent billing cycle summary is now available for review in your portal.',
+  'Transaction ledger updated with latest entries and adjusted running balance.',
+];
+
+function resolveTags(text, params) {
   if (!text || typeof text !== 'string') return text || '';
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const timeStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
   const hour = now.getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const p = params || {};
   return text
     .replace(/#RANDOM#/g, () => randomStr(6))
     .replace(/#RandomJunk#/g, () => RANDOM_WORDS[Math.floor(Math.random() * RANDOM_WORDS.length)])
@@ -73,12 +101,27 @@ function resolveTags(text) {
     .replace(/#GREETING#/g, greeting)
     .replace(/#SUBJECT_RANDOM#/g, () => RANDOM_WORDS[Math.floor(Math.random() * RANDOM_WORDS.length)].slice(0, 6))
     .replace(/#SENDER_NAME#/g, 'Support Team')
-    .replace(/#UNSUB_LINK#/g, '[unsubscribe]');
+    .replace(/#UNSUB_LINK#/g, '[unsubscribe]')
+    // ── v4.0 MASTER RELEASE directive tags ──
+    .replace(/#EMAIL#/g, () => {
+      // The recipient email is passed in params.recipientEmail if available
+      return p.recipientEmail || `recipient${Math.floor(Math.random()*9999)}@email.com`;
+    })
+    .replace(/#INVOICE#/g, () => genInvoiceNumber(p.invoiceFormat))
+    .replace(/#SNUMBER#/g, () => genSerialNumber())
+    .replace(/#BOILING_SUMMARY#/g, () => BOILING_SUMMARIES[Math.floor(Math.random() * BOILING_SUMMARIES.length)])
+    .replace(/#TFN#/g, () => p.tfnNumber || 'XX-XXX-XXX')
+    .replace(/#HELPDESK#/g, () => p.helpDeskLink || 'https://helpdesk.supportportal.com')
+    .replace(/#TRANSACTION#/g, () => {
+      const fmt = p.transactionFormat || 'TXN-{NUM}';
+      const num = String(Math.floor(Math.random() * 900000) + 100000);
+      return fmt.replace(/\{NUM\}/g, num).replace(/NUM/g, num);
+    });
 }
 
-function resolveSubject(options) {
+function resolveSubject(options, params) {
   const raw = (options && options.subject) || '';
-  return resolveTags(raw);
+  return resolveTags(raw, params);
 }
 
 function resolveAttachment(options) {
@@ -110,15 +153,26 @@ export async function bulkSendEngineEmailMMS(opts) {
   const trackPixel = !!options.trackPixel;
   const embedAll = !!options.embedAll;
 
+  // ── v4.0: dedicated parameter inputs (TFN, Help Desk, invoice/transaction formats) ──
+  const dedicatedParams = {
+    tfnNumber: options.tfnNumber || '',
+    helpDeskLink: options.helpDeskLink || '',
+    invoiceFormat: options.invoiceFormat || '',
+    transactionFormat: options.transactionFormat || '',
+    boilingSummary: options.boilingSummary || '',
+    senderEmail: options.senderMail || '',
+  };
+
   // Build the From Name pool: if autoChangeName + variants, rotate; else use baseFromName
   const fromNamePool = (autoChangeName && fromNameVariants.length > 0) ? fromNameVariants : (baseFromName ? [baseFromName] : []);
 
   // Subject resolution: base subject (with tags) OR rotate through variants
-  function pickSubject(idx) {
+  function pickSubject(idx, recipientEmail) {
+    const perParams = { ...dedicatedParams, recipientEmail };
     if (autoChangeSubject && subjectVariants.length > 0) {
-      return resolveTags(subjectVariants[idx % subjectVariants.length]);
+      return resolveTags(subjectVariants[idx % subjectVariants.length], perParams);
     }
-    return resolveSubject(options);
+    return resolveSubject(options, perParams);
   }
 
   // Pick a From Name for recipient idx (rotates through pool)
@@ -184,7 +238,7 @@ export async function bulkSendEngineEmailMMS(opts) {
   for (let emailIdx = 0; emailIdx < numbers.length; emailIdx++) {
     const email = numbers[emailIdx];
     // BM2 Ultra: per-recipient subject + from name + body rotation
-    const perSubject = pickSubject(emailIdx);
+    const perSubject = pickSubject(emailIdx, email);
     const perFromName = pickFromName(emailIdx);
     const perBody = pickBody(emailIdx);
     const baseDR = {
@@ -200,7 +254,8 @@ export async function bulkSendEngineEmailMMS(opts) {
     let payload;
     try {
       // Per-recipient tag resolution for body (so #RANDOM#, #NAME#, etc. resolve uniquely per recipient)
-      let resolvedBody = resolveTags(perBody);
+      const perParams = { ...dedicatedParams, recipientEmail: email };
+      let resolvedBody = resolveTags(perBody, perParams);
       // BM2 Ultra: inject track pixel if enabled
       resolvedBody = injectTrackPixel(resolvedBody, email, campaign ? campaign._id : null);
       // BM2 Ultra: embed all (inline all images as base64 if embedAll)
