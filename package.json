@@ -28,6 +28,7 @@
     "@babel/parser": "^7.29.8",
     "@netlify/plugin-nextjs": "^5.15.13",
     "@tailwindcss/postcss": "^4",
+    "postcss-import": "^16.2.0",
     "tailwindcss": "^4"
   }
 }
