@@ -2063,6 +2063,12 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
           allCampaigns={campaignList}
           onSelectCampaign={setActiveCampaignId}
           onDeleteCampaignFromList={handleDeleteCampaign}
+          thresholdStatus={thresholdStatus}
+          thresholdLoading={thresholdLoading}
+          resumeLoading={resumeLoading}
+          onRefreshThreshold={fetchThresholdStatus}
+          onResumePaused={handleResumePaused}
+          onAcknowledgeCredential={handleAcknowledgeCredential}
         />
       ) : (
         /* ── CAMPAIGN SELECTOR (list of campaign cards) ── */
@@ -2223,6 +2229,7 @@ function CampaignEditor({
   Icon, Spinner, MiniToggle, contentTypes, speedModes, campaignStatusColors,
   subjectCategories, subjectTemplates, bodyTemplates, senderAccounts, remaining, stats,
   validationSteps, allCampaigns, onSelectCampaign,
+  thresholdStatus, thresholdLoading, resumeLoading, onRefreshThreshold, onResumePaused, onAcknowledgeCredential,
 }) {
   const c = campaign;
   const u = (updates) => updateCampaign(c.id, updates);
@@ -2695,7 +2702,7 @@ function CampaignEditor({
             <div className="bg-slate-900/50 border border-violet-500/15 rounded-xl p-2.5">
               <div className="flex items-center justify-between mb-1.5">
                 <p className="text-[9px] text-gray-500 uppercase tracking-wider flex items-center gap-1 font-semibold"><Icon.Gauge className="w-3 h-3 text-violet-400" /> Google API Threshold</p>
-                <button onClick={fetchThresholdStatus} disabled={thresholdLoading} className="text-[8px] text-gray-500 hover:text-gray-300 disabled:opacity-40 flex items-center gap-0.5">
+                <button onClick={onRefreshThreshold} disabled={thresholdLoading} className="text-[8px] text-gray-500 hover:text-gray-300 disabled:opacity-40 flex items-center gap-0.5">
                   <Icon.Refresh className={`w-2.5 h-2.5 ${thresholdLoading ? 'animate-spin' : ''}`} /> Refresh
                 </button>
               </div>
@@ -2719,13 +2726,13 @@ function CampaignEditor({
                         <span className="text-[9px] text-gray-400 font-mono flex-shrink-0">{cred.sentToday}/{cred.thresholdLimit}</span>
                       </div>
                       {paused && (
-                        <button onClick={() => handleResumePaused(cred._id, c.id)} disabled={resumeLoading === cred._id}
+                        <button onClick={() => onResumePaused(cred._id, c.id)} disabled={resumeLoading === cred._id}
                           className="w-full flex items-center justify-center gap-1 px-2 py-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white rounded-md text-[9px] font-bold transition">
                           {resumeLoading === cred._id ? <Spinner size={9} /> : <Icon.Play className="w-2.5 h-2.5" />} Resume from index {cred.pausedIndex || 0}
                         </button>
                       )}
                       {isNew && !paused && (
-                        <button onClick={() => handleAcknowledgeCredential(cred._id)}
+                        <button onClick={() => onAcknowledgeCredential(cred._id)}
                           className="w-full flex items-center justify-center gap-1 px-2 py-1 bg-cyan-600 hover:bg-cyan-500 text-white rounded-md text-[9px] font-bold transition">
                           <Icon.CheckCircle className="w-2.5 h-2.5" /> Acknowledge Credential
                         </button>
