@@ -10,6 +10,8 @@
     "generate-config": "node init-configs.js"
   },
   "dependencies": {
+    "@netlify/plugin-nextjs": "^5.15.13",
+    "@tailwindcss/postcss": "^4",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.81.3",
     "imapflow": "^1.7.2",
@@ -21,13 +23,11 @@
     "nodemailer": "^6.10.1",
     "opossum": "^8.5.0",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "tailwindcss": "^4"
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",
-    "@babel/parser": "^7.29.8",
-    "@netlify/plugin-nextjs": "^5.15.13",
-    "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4"
+    "@babel/parser": "^7.29.8"
   }
 }
