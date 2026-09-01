@@ -17,6 +17,8 @@ import { Skeleton, SkeletonText, SkeletonList, SkeletonStatGrid } from '@/compon
 import { PageTransition, StaggerList, StaggerItem } from '@/components/userpanel/PageTransition.jsx';
 // V7 P9.1 — Orchestrator 3-zone campaign composer command deck.
 import Orchestrator from '@/components/userpanel/Orchestrator.jsx';
+// V7 SEND STUDIO — god-level single-screen campaign composer (replaces old cluttered editor body)
+import SendStudio from '@/components/userpanel/SendStudio.jsx';
 // V7 P9.2 — LivingDashboard real-time animated counters.
 import LivingDashboard, { LiveCounter, useCountUp, useLivePoll } from '@/components/userpanel/LivingDashboard.jsx';
 // V7 P9.3 — Mission Control cinematic send experience.
@@ -323,6 +325,14 @@ function UserDashboard({ user, onLogout, onRefresh }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
+  // V7 P5 — God-Mode Matrix: server-authoritative toggles fetched from
+  // /api/toggles. Every user-panel control gate-checks its toggle before
+  // rendering. The UI NEVER trusts itself — admin changes a toggle →
+  // the control disappears/disables here within the poll interval.
+  // Falls back to "everything visible" if the endpoint is unreachable,
+  // so a misconfigured deploy never bricks the panel.
+  const [godToggles, setGodToggles] = useState(null); // null = not yet loaded
+
   // Tab registry — declared here (before paletteCommands) to avoid TDZ:
   // paletteCommands useMemo references `tabs` in its deps array, and a `const`
   // used before its declaration throws "Cannot access before initialization".
@@ -425,6 +435,37 @@ function UserDashboard({ user, onLogout, onRefresh }) {
     return () => clearInterval(t);
   }, [fetchAll]);
 
+  // V7 P5 — God-Mode Matrix fetch. Polls /api/toggles every 20s so admin
+  // changes propagate to the user panel without a page reload. On failure
+  // we keep the previous toggles (or null = all-visible fallback).
+  const fetchGodToggles = useCallback(async () => {
+    try {
+      const res = await fetch('/api/toggles', { method: 'GET', credentials: 'include' });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data && data.toggles) {
+        // Build a quick-lookup map: { key: { visible, enabled, locked } }
+        const map = {};
+        for (const t of data.toggles) map[t.key] = t;
+        setGodToggles(map);
+      }
+    } catch { /* network error — keep previous toggles */ }
+  }, []);
+
+  useEffect(() => {
+    fetchGodToggles();
+    const t = setInterval(fetchGodToggles, 20000);
+    return () => clearInterval(t);
+  }, [fetchGodToggles]);
+
+  // Helper: is a given toggle key visible+enabled? null godToggles = all visible (safe fallback)
+  const toggleOn = useCallback((key) => {
+    if (!godToggles) return true; // not yet loaded → render everything (safe)
+    const t = godToggles[key];
+    if (!t) return true; // unknown key → show (not in registry, probably core)
+    return !!(t.visible && t.enabled);
+  }, [godToggles]);
+
   const fetchDeliveryReports = useCallback(async (campaignId) => {
     try {
       const res = await fetch('/api/system', {
@@ -435,6 +476,48 @@ function UserDashboard({ user, onLogout, onRefresh }) {
       if (data.reports) setDeliveryReports(data.reports);
     } catch {}
   }, []);
+
+  // v4.0 — Google API Threshold state (lifted to UserDashboard so BOTH
+  // DeliveryCenter / Reports tab AND SendTab / CampaignEditor can access).
+  const [thresholdStatus, setThresholdStatus] = useState(null);
+  const [thresholdLoading, setThresholdLoading] = useState(false);
+  const [resumeLoading, setResumeLoading] = useState(null);
+
+  const fetchThresholdStatus = useCallback(async () => {
+    try {
+      setThresholdLoading(true);
+      const res = await fetch('/api/system', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ action: 'getThresholdStatus' }) });
+      const data = await res.json();
+      if (data.ok && data.credentials) setThresholdStatus(data.credentials);
+    } catch (e) { /* silent fail */ }
+    finally { setThresholdLoading(false); }
+  }, []);
+
+  const handleAcknowledgeCredential = useCallback(async (accountId) => {
+    try {
+      const res = await fetch('/api/system', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ action: 'acknowledgeNewCredential', accountId }) });
+      const data = await res.json();
+      if (data.ok) fetchThresholdStatus();
+    } catch (e) { /* silent */ }
+  }, [fetchThresholdStatus]);
+
+  const handleResumePaused = useCallback(async (accountId, campaignId) => {
+    try {
+      setResumeLoading(accountId);
+      const res = await fetch('/api/system', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ action: 'resumePausedCredential', accountId }) });
+      const data = await res.json();
+      if (data.ok) {
+        fetchThresholdStatus();
+        show(`Credential resumed from index ${data.pausedIndex || 0}`, 'success');
+      } else {
+        show(data.error || 'Resume failed', 'error');
+      }
+    } catch (e) { show('Resume failed — network error', 'error'); }
+    finally { setResumeLoading(null); }
+  }, [fetchThresholdStatus, show]);
+
+  // Fetch threshold status on mount
+  useEffect(() => { fetchThresholdStatus(); }, [fetchThresholdStatus]);
 
   const platformName = settings?.platformName || 'Gmail Mailer';
   const logoUrl = settings?.logoUrl || '';
@@ -590,6 +673,13 @@ function UserDashboard({ user, onLogout, onRefresh }) {
                   onSent={(msg, type) => { show(msg, type); fetchAll(); }}
                   onCampaignClick={fetchDeliveryReports}
                   language={language}
+                  toggleOn={toggleOn}
+                  thresholdStatus={thresholdStatus}
+                  thresholdLoading={thresholdLoading}
+                  resumeLoading={resumeLoading}
+                  fetchThresholdStatus={fetchThresholdStatus}
+                  handleResumePaused={handleResumePaused}
+                  handleAcknowledgeCredential={handleAcknowledgeCredential}
                 />
               )}
               {activeTab === 'countries' && <CountrySupportTab />}
@@ -810,7 +900,7 @@ function StepIndicator({ current, steps }) {
 // ================================================================
 // SEND TAB — ENTERPRISE anti-spam sending configuration
 // ================================================================
-function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, language }) {
+function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, language, toggleOn, thresholdStatus, thresholdLoading, resumeLoading, fetchThresholdStatus, handleResumePaused, handleAcknowledgeCredential }) {
   // ════════════════════════════════════════════════════════════════════════
   // MULTI-CAMPAIGN STATE — each campaign has its own independent state
   // ════════════════════════════════════════════════════════════════════════
@@ -825,6 +915,10 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
   const [subjectCategories, setSubjectCategories] = useState([]);
   const [subjectTemplates, setSubjectTemplates] = useState([]);
   const [bodyTemplates, setBodyTemplates] = useState([]);
+
+  // Refetch threshold status when sender accounts change (lifted to UserDashboard,
+  // but SendTab owns senderAccounts so it triggers the refetch here)
+  useEffect(() => { if (senderAccounts.length > 0 && fetchThresholdStatus) fetchThresholdStatus(); }, [senderAccounts, fetchThresholdStatus]);
 
   // Modal/UI state (shared)
   const [nameModalOpen, setNameModalOpen] = useState(false);
@@ -843,51 +937,6 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
 
-  // v4.0 — Google API Threshold state (per-credential sent volume tracking)
-  const [thresholdStatus, setThresholdStatus] = useState(null);
-  const [thresholdLoading, setThresholdLoading] = useState(false);
-  const [resumeLoading, setResumeLoading] = useState(null);
-
-  // Fetch threshold status for all credentials
-  const fetchThresholdStatus = useCallback(async () => {
-    try {
-      setThresholdLoading(true);
-      const res = await fetch('/api/system', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ action: 'getThresholdStatus' }) });
-      const data = await res.json();
-      if (data.ok && data.credentials) setThresholdStatus(data.credentials);
-    } catch (e) { /* silent fail */ }
-    finally { setThresholdLoading(false); }
-  }, []);
-
-  // Acknowledge new credential (dismiss enterprise alert)
-  const handleAcknowledgeCredential = async (accountId) => {
-    try {
-      const res = await fetch('/api/system', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ action: 'acknowledgeNewCredential', accountId }) });
-      const data = await res.json();
-      if (data.ok) fetchThresholdStatus();
-    } catch (e) { /* silent */ }
-  };
-
-  // Resume from paused index
-  const handleResumePaused = async (accountId, campaignId) => {
-    try {
-      setResumeLoading(accountId);
-      const res = await fetch('/api/system', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ action: 'resumePausedCredential', accountId }) });
-      const data = await res.json();
-      if (data.ok) {
-        updateCampaign(campaignId, { limitExhausted: false, resumeFrom: 0, paused: false });
-        fetchThresholdStatus();
-        onSent(`Credential resumed from index ${data.pausedIndex || 0}`, 'success');
-      } else {
-        onSent(data.error || 'Resume failed', 'error');
-      }
-    } catch (e) { onSent('Resume failed — network error', 'error'); }
-    finally { setResumeLoading(null); }
-  };
-
-  // Fetch threshold status on mount + when senderAccounts change
-  useEffect(() => { fetchThresholdStatus(); }, [fetchThresholdStatus]);
-  useEffect(() => { if (senderAccounts.length > 0) fetchThresholdStatus(); }, [senderAccounts, fetchThresholdStatus]);
   const [termsChecked, setTermsChecked] = useState(false);
 
   // Live Monitor filter
@@ -2062,6 +2111,7 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
           onResumePaused={handleResumePaused}
           onAcknowledgeCredential={handleAcknowledgeCredential}
           agreedTerms={agreedTerms}
+          toggleOn={toggleOn}
         />
       ) : (
         /* ── CAMPAIGN SELECTOR (list of campaign cards) ── */
@@ -2223,796 +2273,63 @@ function CampaignEditor({
   validationSteps, allCampaigns, onSelectCampaign,
   thresholdStatus, thresholdLoading, resumeLoading, onRefreshThreshold, onResumePaused, onAcknowledgeCredential,
   agreedTerms,
+  toggleOn,
 }) {
-  const c = campaign;
-  const u = (updates) => updateCampaign(c.id, updates);
-  const parsedEmails = (c.numbersText || '').split(/[\n,\s]/).map(n => n.trim()).filter(Boolean);
-  const totalTarget = parsedEmails.length;
-  const emails = c.numbersText || '';
-
-  // Connect Gmail file input ref
-  const fileInputRef = useRef(null);
-
-  // V7 P9.1 — Orchestrator view mode toggle ('classic' | 'orchestrator')
-  const [viewMode, setViewMode] = useState('orchestrator');
-
-  // V7 P9.3 — Mission Control cinematic send modal state
-  const [missionControlOpen, setMissionControlOpen] = useState(false);
-
-  // V7 P9.7 — Confirm dialog state for destructive actions
-  const [confirmState, setConfirmState] = useState({ open: false, action: null, name: '' });
-
-  const requestDelete = () => {
-    setConfirmState({ open: true, action: () => onDeleteCampaign(c.id), name: c.name });
-  };
-
-  const handleConfirm = () => {
-    try {
-      if (typeof confirmState.action === 'function') confirmState.action();
-    } catch { /* ignore */ }
-    setConfirmState({ open: false, action: null, name: '' });
-  };
-
-  const handleCancelConfirm = () => {
-    setConfirmState({ open: false, action: null, name: '' });
-  };
-
+  // V7 SEND STUDIO — delegates the entire editor body to the clean 3-zone
+  // single-screen composer. All props pass through unchanged (PRESERVES the
+  // existing handler contract, MissionControl modal, ConfirmDialog, etc.).
   return (
-    <div className="flex flex-col gap-2">
-      {/* HEADER: Back + Campaign Name + Status + Quick campaign switcher */}
-      <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-violet-500/20 bg-slate-900/50 flex-shrink-0 flex-wrap">
-        <button onClick={onBack} className="flex items-center gap-1 px-2.5 py-1.5 bg-white/5 hover:bg-white/10 text-gray-300 rounded-lg text-[11px] font-medium transition flex-shrink-0">
-          <Icon.ChevronLeft className="w-3.5 h-3.5" /> Campaigns
-        </button>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-lg">
-            <Icon.Rocket className="w-3.5 h-3.5 text-white" />
-          </div>
-          <input value={c.name} onChange={(e) => u({ name: e.target.value })}
-            className="px-2 py-1 bg-white/5 border border-white/10 rounded-lg text-gray-100 text-sm font-bold focus:outline-none focus:ring-1 focus:ring-violet-500 min-w-[120px]" />
-        </div>
-        <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold flex-shrink-0 ${campaignStatusColors[c.status] || ''}`}>{c.status}</span>
-        {/* V7 P9.1 — Orchestrator / Classic view toggle */}
-        <button onClick={() => setViewMode(viewMode === 'orchestrator' ? 'classic' : 'orchestrator')}
-          className={`flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-bold transition flex-shrink-0 ${viewMode === 'orchestrator' ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30' : 'bg-white/5 text-gray-400 border border-white/5 hover:text-gray-200'}`}
-          title="Toggle 3-zone Orchestrator view">
-          <Icon.Layers2 className="w-3 h-3" /> {viewMode === 'orchestrator' ? 'Orchestrator' : 'Classic'}
-        </button>
-        {/* Quick switcher to other campaigns */}
-        <div className="flex items-center gap-1 flex-wrap">
-          {allCampaigns.filter(o => o.id !== c.id).map(o => (
-            <button key={o.id} onClick={() => onSelectCampaign(o.id)} title={`Open ${o.name}`}
-              className="px-2 py-1 bg-white/5 hover:bg-violet-500/15 text-gray-400 hover:text-violet-300 rounded-md text-[9px] font-medium transition flex items-center gap-1">
-              {o.name}
-              {o.status === 'running' && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />}
-            </button>
-          ))}
-        </div>
-        <button onClick={requestDelete}
-          className="ml-auto flex items-center gap-1 px-2 py-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-md text-[10px] font-medium transition flex-shrink-0">
-          <Icon.Trash className="w-3.5 h-3.5" /> Delete
-        </button>
-      </div>
-
-      {/* CREDENTIAL.JSON CONNECT BAR — per campaign */}
-      <div className="relative overflow-hidden rounded-xl border border-white/5 bg-gradient-to-r from-violet-600/10 to-transparent px-3 py-2 flex-shrink-0">
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg">
-              <Icon.Key className="w-3.5 h-3.5 text-white" />
-            </div>
-            <div className="leading-none">
-              <p className="text-[8px] text-violet-300/80 uppercase tracking-widest font-semibold">Credentials</p>
-              <p className="text-[11px] text-white mt-0.5">{senderAccounts.length} connected</p>
-            </div>
-          </div>
-          {/* Connect via credential.json — accepts ANY .json filename */}
-          <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition flex-shrink-0 ${c.connectingGmail ? 'bg-slate-700 text-gray-400' : 'bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-600/30'}`}>
-            {c.connectingGmail ? <Spinner size={12} /> : <Icon.Upload className="w-3.5 h-3.5" />}
-            {c.connectingGmail ? 'Connecting…' : 'Upload credential.json'}
-            <input ref={fileInputRef} type="file" accept=".json,application/json" onChange={(e) => onConnectGmail(e, c.id)} className="hidden" disabled={c.connectingGmail} />
-          </label>
-          <span className="text-[9px] text-gray-500 flex-shrink-0">Any <code className="text-violet-300">.json</code> file from Google Cloud Console</span>
-          {/* Helper: one-time auto-connect setup hint */}
-          <button
-            type="button"
-            onClick={() => {
-              const uri = (typeof window !== 'undefined' ? window.location.origin : '') + '/api/user/gmail/connect/callback';
-              navigator.clipboard?.writeText(uri).catch(() => {});
-              alert('For ONE-TIME auto-connect setup (Allow = done, no code copy):\n\n1. Google Cloud Console → APIs & Services → Credentials\n2. Create Credentials → OAuth client ID → "Web application"\n3. Under "Authorized redirect URIs" add this URL (already copied to clipboard):\n\n' + uri + '\n\n4. Download the Web app credentials.json\n5. Upload it here — next time, clicking Allow connects automatically!\n\n(Desktop App credentials also work but need a one-time code paste.)');
-            }}
-            className="text-[9px] text-violet-400/70 hover:text-violet-300 underline flex-shrink-0"
-            title="How to set up one-time auto-connect"
-          >Want auto-connect (Allow = done)? Click here</button>
-          {/* Sender select */}
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <select value={c.activeSenderIdx} onChange={(e) => u({ activeSenderIdx: Number(e.target.value) })}
-              className="px-2 py-1 bg-white/5 border border-white/10 rounded-md text-gray-200 text-[10px] focus:outline-none focus:ring-1 focus:ring-violet-500 min-w-[140px]">
-              {senderAccounts.length === 0 && <option value={0}>No accounts — Upload credential.json</option>}
-              {senderAccounts.map((s, i) => (<option key={i} value={i}>{s.email}</option>))}
-            </select>
-            <button onClick={() => u({ senderRotate: !c.senderRotate })}
-              className={`flex items-center gap-0.5 px-2 py-1 rounded-md text-[9px] font-medium border transition flex-shrink-0 ${c.senderRotate ? 'bg-violet-500/15 text-violet-300 border-violet-500/30' : 'bg-white/5 text-gray-500 border-white/5'}`}
-              title="Auto-rotate sender accounts">
-              <Icon.Refresh className={`w-2.5 h-2.5 ${c.senderRotate ? 'animate-spin' : ''}`} style={c.senderRotate ? { animationDuration: '3s' } : {}} /> Rotate
-            </button>
-          </div>
-        </div>
-        {/* Gmail connect message (OAuth guidance / errors) */}
-        {c.gmailConnectMsg && (
-          <div className={`mt-1.5 px-2.5 py-1.5 rounded-lg text-[10px] flex items-start gap-1.5 ${c.gmailConnectMsg.type === 'success' ? 'bg-green-500/10 text-green-300 border border-green-500/20' : 'bg-red-500/10 text-red-300 border border-red-500/20'}`}>
-            <span className="flex-shrink-0">{c.gmailConnectMsg.type === 'success' ? '✓' : '✕'}</span>
-            <span className="leading-snug" dangerouslySetInnerHTML={{ __html: c.gmailConnectMsg.text }} />
-          </div>
-        )}
-      </div>
-
-      {/* V7 P9.1 — Orchestrator 3-zone command deck overview (when viewMode='orchestrator') */}
-      {viewMode === 'orchestrator' && (
-        <Orchestrator
-          campaign={c}
-          updateCampaign={updateCampaign}
-          thresholdStatus={thresholdStatus}
-          audienceZone={
-            <div className="space-y-2">
-              <div className="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] border border-white/5">
-                <span className="text-[10px] text-gray-400">Total recipients</span>
-                <span className="text-lg font-bold text-cyan-400">{totalTarget}</span>
-              </div>
-              <div className="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] border border-white/5">
-                <span className="text-[10px] text-gray-400">Sender accounts</span>
-                <span className="text-sm font-bold text-violet-400">{senderAccounts.length}</span>
-              </div>
-              <div className="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] border border-white/5">
-                <span className="text-[10px] text-gray-400">Quota remaining</span>
-                <span className="text-sm font-bold text-emerald-400">{remaining}</span>
-              </div>
-            </div>
-          }
-          messageZone={
-            <div className="space-y-2">
-              <div className="p-2 rounded-lg bg-white/[0.02] border border-white/5">
-                <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1">Subject</p>
-                <p className="text-[11px] text-gray-200 font-medium truncate">{c.subject || <span className="text-gray-600 italic">Not set</span>}</p>
-              </div>
-              <div className="p-2 rounded-lg bg-white/[0.02] border border-white/5">
-                <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1">Body preview</p>
-                <p className="text-[10px] text-gray-400 font-mono line-clamp-3 max-h-12 overflow-hidden">{(c.message || '').slice(0, 150) || <span className="text-gray-600 italic">Not set</span>}</p>
-              </div>
-            </div>
-          }
-          intelZone={
-            <div className="space-y-2">
-              <div className="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] border border-white/5">
-                <span className="text-[10px] text-gray-400">Status</span>
-                <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${campaignStatusColors[c.status] || ''}`}>{c.status}</span>
-              </div>
-              <div className="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] border border-white/5">
-                <span className="text-[10px] text-gray-400">Sent</span>
-                <span className="text-sm font-bold text-blue-400">{c.sentCount || 0}</span>
-              </div>
-              <div className="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] border border-white/5">
-                <span className="text-[10px] text-gray-400">Delivery</span>
-                <span className="text-sm font-bold text-emerald-400">{c.deliveryRate || 0}%</span>
-              </div>
-              {thresholdStatus && thresholdStatus.length > 0 && (
-                <div className="p-2 rounded-lg bg-amber-500/5 border border-amber-500/20">
-                  <p className="text-[9px] text-amber-400 font-bold uppercase tracking-wider mb-1">Threshold Alerts</p>
-                  <p className="text-[10px] text-gray-400">{thresholdStatus.filter(t => t.paused).length} paused · {thresholdStatus.length} total</p>
-                </div>
-              )}
-            </div>
-          }
-        />
-      )}
-
-      {/* MAIN GRID: Center config (left) + Receiver List (right) */}
-      <div className={`grid lg:grid-cols-[1fr_280px] gap-2 ${viewMode === 'orchestrator' ? 'mt-3 pt-3 border-t border-white/5' : ''}`}>
-        {/* ── CENTER CONFIG (all options visible, no hidden overflow) ── */}
-        <div className="flex flex-col gap-2">
-          {/* Row 1: Subject + Sender Name */}
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
-            {/* Subject */}
-            <div className="bg-slate-900/50 border border-violet-500/20 rounded-xl p-2.5">
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-[11px] text-gray-200 font-semibold flex items-center gap-1"><Icon.Mail className="w-3 h-3 text-violet-400" /> Subject</label>
-                <div className="flex items-center gap-1.5">
-                  <button onClick={() => openTagPicker(c.id, 'subject')} className="text-[9px] text-amber-300 hover:text-amber-200 flex items-center gap-0.5"><Icon.Tag className="w-2.5 h-2.5" /> Tags</button>
-                  <button onClick={openSubjectCatModal} className="text-[9px] text-violet-300 hover:text-violet-200 flex items-center gap-0.5 bg-violet-500/10 px-1.5 py-0.5 rounded-md border border-violet-500/20 transition"><Icon.Folder className="w-2.5 h-2.5" /> Manage</button>
-                </div>
-              </div>
-              <input value={c.subject} onChange={(e) => u({ subject: e.target.value })}
-                data-tag-target="subject" data-campaign={c.id}
-                placeholder="Enter subject or use category rotation…"
-                className="w-full px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 text-[11px]"
-                maxLength={120} />
-              <div className="flex items-center gap-1.5 mt-1.5">
-                <select value={c.activeSubjectCat} onChange={(e) => u({ activeSubjectCat: e.target.value })}
-                  className="flex-1 px-2 py-1 bg-white/5 border border-white/10 rounded-md text-gray-300 text-[10px] focus:outline-none focus:ring-1 focus:ring-violet-500 min-w-0">
-                  <option value="">Category…</option>
-                  {subjectCategories.map(cat => <option key={cat._id} value={cat._id}>{cat.name} ({cat.count || 0})</option>)}
-                </select>
-                <button onClick={() => onPickSubject(c.id)} disabled={!c.activeSubjectCat}
-                  className="flex items-center gap-0.5 px-2 py-1 bg-violet-500/15 hover:bg-violet-500/25 text-violet-300 rounded-md text-[9px] font-medium border border-violet-500/20 transition disabled:opacity-40 flex-shrink-0">
-                  <Icon.Refresh className="w-2.5 h-2.5" /> Pick
-                </button>
-                <button onClick={() => u({ autoChangeSubject: !c.autoChangeSubject })}
-                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-medium border transition flex-shrink-0 ${c.autoChangeSubject ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-white/5 text-gray-500 border-white/5'}`}
-                  title="Auto-rotate subject per batch">
-                  <Icon.Refresh className={`w-2.5 h-2.5 ${c.autoChangeSubject ? 'animate-spin' : ''}`} style={c.autoChangeSubject ? { animationDuration: '4s' } : {}} /> Auto
-                </button>
-              </div>
-              <p className="text-[9px] text-gray-500 mt-0.5">{c.subject.length}/120 {c.autoChangeSubject && subjectTemplates.length > 0 && <span className="text-amber-300">· {subjectTemplates.length} rotating</span>}</p>
-            </div>
-
-            {/* Sender Name + Gear */}
-            <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="flex items-center gap-1 text-[10px] text-gray-300 mb-1">
-                    <Icon.User className="w-3 h-3 text-green-400" /> From Name
-                    <button onClick={() => openNameModal(c.id)} className="ml-auto text-green-400 hover:text-green-300 transition" title="Manage name rotation list">
-                      <Icon.Gear className="w-3.5 h-3.5" />
-                    </button>
-                  </label>
-                  <input value={c.fromName} onChange={(e) => u({ fromName: e.target.value })}
-                    placeholder="Support Team"
-                    className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-green-500 text-[11px]" />
-                </div>
-                <div>
-                  <label className="block text-[10px] text-gray-300 mb-1 flex items-center gap-1"><Icon.Refresh className="w-3 h-3 text-green-400" /> Variants <span className="text-gray-600 text-[9px]">(comma)</span></label>
-                  <input value={c.fromNameVariants} onChange={(e) => u({ fromNameVariants: e.target.value })}
-                    placeholder="Support, Sales, Billing"
-                    className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-green-500 text-[11px]" />
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5 mt-2">
-                <button onClick={() => u({ autoChangeName: !c.autoChangeName })}
-                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-medium border transition flex-shrink-0 ${c.autoChangeName ? 'bg-green-500/15 text-green-300 border-green-500/30' : 'bg-white/5 text-gray-500 border-white/5'}`}
-                  title="Auto-change sender name per N emails">
-                  <Icon.Refresh className={`w-2.5 h-2.5 ${c.autoChangeName ? 'animate-spin' : ''}`} style={c.autoChangeName ? { animationDuration: '3s' } : {}} /> Auto-Name
-                </button>
-                {c.autoChangeName && (
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <span className="text-[9px] text-gray-500">every</span>
-                    <input type="number" min="1" max="999" value={c.autoNameInterval} onChange={(e) => u({ autoNameInterval: Math.max(1, Number(e.target.value)) })}
-                      className="w-12 px-1.5 py-0.5 bg-white/5 border border-white/10 rounded-md text-gray-100 text-[10px] font-mono focus:outline-none focus:ring-1 focus:ring-green-500" />
-                  </div>
-                )}
-                {c.autoChangeName && (
-                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-green-500/10 border border-green-500/20 flex-1 min-w-0">
-                    {c.aiNameGenLoading ? <Spinner size={9} /> : <Icon.Sparkle className="w-2.5 h-2.5 text-green-400 flex-shrink-0" />}
-                    <span className="text-[9px] text-green-300 truncate">{c.aiNameGenLoading ? 'AI generating…' : `${c.aiNamePool.length - c.aiNameUsed} AI names`}</span>
-                    <button onClick={() => onGenerateAiNames(c.id)} disabled={c.aiNameGenLoading} className="text-[8px] text-green-300 hover:text-green-200 ml-auto flex-shrink-0 disabled:opacity-40">↻</button>
-                  </div>
-                )}
-              </div>
-              {/* Sender Mail manual override */}
-              <div className="grid grid-cols-2 gap-2 mt-2">
-                <div>
-                  <label className="block text-[10px] text-gray-300 mb-1 flex items-center gap-1"><Icon.Mail className="w-3 h-3 text-cyan-400" /> Sender Mail</label>
-                  <input value={c.senderMail} onChange={(e) => u({ senderMail: e.target.value })}
-                    placeholder="auto (empty)"
-                    className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 text-[11px] font-mono" />
-                </div>
-                <div>
-                  <label className="block text-[10px] text-gray-300 mb-1 flex items-center gap-1"><Icon.Users className="w-3 h-3 text-amber-400" /> Recipients</label>
-                  <div className="px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-amber-300 text-[11px] font-bold tabular-nums">{parsedEmails.length}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Row 2: Email Body */}
-          <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5">
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-[11px] text-gray-300 flex items-center gap-1"><Icon.FileCode className="w-3 h-3 text-violet-400" /> Email Body</label>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <div className="flex gap-0.5 bg-white/5 rounded-md p-0.5">
-                  <button onClick={() => u({ bodyMode: 'html' })} className={`px-1.5 py-0.5 rounded text-[9px] font-medium transition ${c.bodyMode === 'html' ? 'bg-violet-600 text-white' : 'text-gray-400'}`}>HTML</button>
-                  <button onClick={() => u({ bodyMode: 'plain' })} className={`px-1.5 py-0.5 rounded text-[9px] font-medium transition ${c.bodyMode === 'plain' ? 'bg-violet-600 text-white' : 'text-gray-400'}`}>Plain</button>
-                </div>
-                <select onChange={(e) => { if (e.target.value) onLoadBodyTemplate(e.target.value, c.id); e.target.value=''; }}
-                  className="px-1.5 py-1 bg-white/5 border border-white/10 rounded-md text-[9px] text-gray-300 focus:outline-none cursor-pointer">
-                  <option value="">Load body…</option>
-                  {bodyTemplates.map(t => <option key={t._id} value={t._id}>{t.name}</option>)}
-                </select>
-                <button onClick={openBodyModal} className="text-[9px] text-cyan-300 hover:text-cyan-200 flex items-center gap-0.5 bg-cyan-500/10 px-1.5 py-0.5 rounded-md border border-cyan-500/20 transition"><Icon.DocText className="w-2.5 h-2.5" /> Manage</button>
-                <button onClick={() => u({ autoChangeBody: !c.autoChangeBody })}
-                  className={`flex items-center gap-0.5 px-1.5 py-1 rounded-md text-[9px] font-medium border transition ${c.autoChangeBody ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' : 'bg-white/5 text-gray-500 border-white/5'}`}
-                  title="Auto-rotate body per batch">
-                  <Icon.Refresh className={`w-2.5 h-2.5 ${c.autoChangeBody ? 'animate-spin' : ''}`} style={c.autoChangeBody ? { animationDuration: '4s' } : {}} /> Auto
-                </button>
-                <button onClick={() => openTagPicker(c.id, 'body')} className="text-[9px] text-amber-300 hover:text-amber-200 flex items-center gap-0.5"><Icon.Tag className="w-2.5 h-2.5" /> Tags</button>
-              </div>
-            </div>
-            <EditorArea data-camp-body={c.id} data-tag-target="body" data-campaign={c.id} mode={c.bodyMode}
-              value={c.message} onChange={(next) => u({ message: next })}
-              placeholder="Type HTML content or load a body template… use #RANDOM#, #DATE#, #NAME#, #EMAIL#, #INVOICE#, #TFN#, #HELPDESK# tags"
-              maxLength={2000} />
-            <div className="flex items-center justify-between mt-1 flex-wrap gap-1">
-              <div className="flex items-center gap-2">
-                {c.spamChecking && <p className="text-[9px] text-gray-500 animate-pulse flex items-center gap-0.5"><Spinner size={8} /> AI spam…</p>}
-                {c.spamPreview && !c.spamChecking && (
-                  <p className={`text-[9px] font-semibold flex items-center gap-0.5 ${c.spamPreview.level === 'high' ? 'text-red-400' : c.spamPreview.level === 'moderate' ? 'text-amber-400' : 'text-green-400'}`}>
-                    Spam: {c.spamPreview.score}/100 · {c.spamPreview.level}
-                  </p>
-                )}
-                {c.autoChangeBody && bodyTemplates.length > 0 && <span className="text-[9px] text-cyan-300">· {bodyTemplates.length} rotating</span>}
-              </div>
-              <div className="flex items-center gap-1.5">
-                <button onClick={() => onSpamCheck(c.id)} disabled={c.spamChecking || !c.message.trim()}
-                  className="flex items-center gap-0.5 px-2 py-1 bg-white/5 hover:bg-white/10 disabled:opacity-40 text-gray-300 rounded-md text-[9px] font-medium transition">
-                  <Icon.Shield className="w-2.5 h-2.5" /> Spam Check
-                </button>
-                <button onClick={() => openPreview(c.id)}
-                  className="text-[9px] text-cyan-300 hover:text-cyan-200 flex items-center gap-0.5 bg-cyan-500/10 px-2 py-1 rounded-md border border-cyan-500/20 transition">
-                  <Icon.Eye className="w-2.5 h-2.5" /> Preview
-                </button>
-              </div>
-            </div>
-            {/* v4.0 — Interactive tag pills (click to insert at cursor) */}
-            <div className="mt-1.5 pt-1.5 border-t border-white/5">
-              <p className="text-[8px] text-gray-500 mb-1 uppercase tracking-wider">Quick Tags — click to insert</p>
-              <div className="flex flex-wrap gap-1">
-                {['#EMAIL#','#INVOICE#','#SNUMBER#','#BOILING_SUMMARY#','#TFN#','#HELPDESK#','#DATE#','#TRANSACTION#','#NAME#','#RANDOM#'].map(t => (
-                  <button key={t} onClick={() => {
-                    const ta = document.querySelector(`[data-camp-body="${c.id}"]`);
-                    if (ta) {
-                      const start = ta.selectionStart, end = ta.selectionEnd;
-                      const next = c.message.slice(0, start) + t + c.message.slice(end);
-                      u({ message: next });
-                      requestAnimationFrame(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = start + t.length; });
-                    } else {
-                      u({ message: c.message + t });
-                    }
-                  }}
-                    className="px-1.5 py-0.5 rounded-full text-[8px] font-mono font-bold bg-violet-500/10 text-violet-300 border border-violet-500/20 hover:bg-violet-500/25 hover:text-violet-200 transition cursor-pointer">
-                    {t}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Row 3: Content Type + Speed + Anti-Detect + Options */}
-          <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-              {/* Content Type */}
-              <div>
-                <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-1"><Icon.Layers className="w-2.5 h-2.5 text-violet-400" /> Content</p>
-                <div className="grid grid-cols-3 gap-0.5">
-                  {contentTypes.map(ct => {
-                    const Ic = Icon[ct.icon] || Icon.Layers;
-                    return (
-                      <button key={ct.key} onClick={() => u({ contentMode: ct.key })}
-                        className={`flex flex-col items-center gap-0.5 p-1 rounded-md border transition ${c.contentMode === ct.key ? 'border-violet-500 bg-violet-500/10' : 'border-white/5 bg-white/[0.02] hover:border-white/10'}`}>
-                        <Ic className={`w-3 h-3 ${c.contentMode === ct.key ? 'text-violet-300' : 'text-gray-400'}`} />
-                        <span className={`text-[8px] font-medium ${c.contentMode === ct.key ? 'text-violet-300' : 'text-gray-400'}`}>{ct.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              {/* Speed + Change After */}
-              <div>
-                <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-1"><Icon.Zap className="w-2.5 h-2.5 text-amber-400" /> Speed</p>
-                <div className="flex gap-0.5">
-                  {speedModes.map(sp => (
-                    <button key={sp.key} onClick={() => u({ speedMode: sp.key })}
-                      className={`flex-1 px-1 py-1 rounded-md text-[9px] font-medium transition ${c.speedMode === sp.key ? 'bg-amber-600 text-white' : 'bg-white/5 text-gray-400 hover:text-white'}`}>{sp.label}</button>
-                  ))}
-                </div>
-                <div className="flex items-center gap-1 mt-1">
-                  <span className="text-[8px] text-gray-500">After</span>
-                  <input type="number" min="1" max="999" value={c.changeAfterStart} onChange={(e) => u({ changeAfterStart: Number(e.target.value) })}
-                    className="w-12 px-1 py-0.5 bg-white/5 border border-white/10 rounded-md text-gray-100 text-[9px] font-mono focus:outline-none focus:ring-1 focus:ring-violet-500" />
-                </div>
-              </div>
-              {/* Anti-Detection */}
-              <div>
-                <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-1"><Icon.Shield className="w-2.5 h-2.5 text-green-400" /> Anti-Detect</p>
-                <div className="grid grid-cols-2 gap-1">
-                  <MiniToggle label="Detect" value={c.antiDetect} onChange={(v) => u({ antiDetect: v })} icon="Shield" accent="green" />
-                  <MiniToggle label="Color" value={c.colorShift} onChange={(v) => u({ colorShift: v })} icon="Palette" accent="violet" />
-                  <MiniToggle label="Text" value={c.textShift} onChange={(v) => u({ textShift: v })} icon="Sparkle" accent="violet" />
-                  <MiniToggle label="Unsub" value={c.addUnsubscribe} onChange={(v) => u({ addUnsubscribe: v })} icon="Link" accent="cyan" />
-                </div>
-              </div>
-              {/* Options */}
-              <div>
-                <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1">Options</p>
-                <div className="grid grid-cols-2 gap-1">
-                  <MiniToggle label="Name" value={c.useName} onChange={(v) => u({ useName: v })} icon="User" accent="yellow" />
-                  <MiniToggle label="Pixel" value={c.trackPixel} onChange={(v) => u({ trackPixel: v })} icon="Eye" accent="cyan" />
-                  <MiniToggle label="Bounce" value={c.checkBounce} onChange={(v) => u({ checkBounce: v })} icon="Shield" accent="green" />
-                  <MiniToggle label="Reply" value={c.autoReply} onChange={(v) => u({ autoReply: v })} icon="Reply" accent="yellow" />
-                  <MiniToggle label="Save" value={c.autoSave} onChange={(v) => u({ autoSave: v })} icon="Save" accent="cyan" />
-                  <MiniToggle label="Random" value={c.randomText} onChange={(v) => u({ randomText: v })} icon="Sparkle" accent="yellow" />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* v4.0 — Dedicated Parameter Inputs (TFN, Help Desk, Invoice/Transaction formats) */}
-          <div className="bg-slate-900/50 border border-violet-500/10 rounded-xl p-2.5">
-            <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1.5 flex items-center gap-1"><Icon.Settings className="w-3 h-3 text-violet-400" /> Dedicated Parameters <span className="text-violet-300 normal-case tracking-normal">— used by #TFN#, #HELPDESK#, #INVOICE#, #TRANSACTION# tags</span></p>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-              <div>
-                <label className="block text-[10px] text-gray-300 mb-1 flex items-center gap-1"><Icon.Hash className="w-3 h-3 text-cyan-400" /> TFN Number</label>
-                <input value={c.tfnNumber} onChange={(e) => u({ tfnNumber: e.target.value })}
-                  placeholder="e.g. 123 456 789"
-                  className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 text-[11px] font-mono" />
-              </div>
-              <div>
-                <label className="block text-[10px] text-gray-300 mb-1 flex items-center gap-1"><Icon.Link className="w-3 h-3 text-cyan-400" /> Help Desk Link</label>
-                <input value={c.helpDeskLink} onChange={(e) => u({ helpDeskLink: e.target.value })}
-                  placeholder="https://helpdesk.support.com"
-                  className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 text-[11px] font-mono" />
-              </div>
-              <div>
-                <label className="block text-[10px] text-gray-300 mb-1 flex items-center gap-1"><Icon.FileCode className="w-3 h-3 text-violet-400" /> Invoice Format</label>
-                <input value={c.invoiceFormat} onChange={(e) => u({ invoiceFormat: e.target.value })}
-                  placeholder="INV-{NUM}"
-                  className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 text-[11px] font-mono" />
-                <p className="text-[8px] text-gray-600 mt-0.5">Use {`{NUM}`} for auto-numbering</p>
-              </div>
-              <div>
-                <label className="block text-[10px] text-gray-300 mb-1 flex items-center gap-1"><Icon.FileCode className="w-3 h-3 text-violet-400" /> Transaction Format</label>
-                <input value={c.transactionFormat} onChange={(e) => u({ transactionFormat: e.target.value })}
-                  placeholder="TXN-{NUM}"
-                  className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 text-[11px] font-mono" />
-                <p className="text-[8px] text-gray-600 mt-0.5">Use {`{NUM}`} for auto-numbering</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Row 4: Send Rate + Extra Flags + Test Mail */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
-            {/* Send Rate */}
-            <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5">
-              <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1.5 flex items-center gap-1"><Icon.Bolt className="w-3 h-3 text-amber-400" /> Send Rate</p>
-              <div className="grid grid-cols-3 gap-1.5">
-                <div>
-                  <label className="text-[8px] text-gray-400 flex justify-between"><span>Batch</span><span className="text-violet-300 font-medium">{c.batchSize}</span></label>
-                  <input type="range" min="1" max="20" value={c.batchSize} onChange={(e) => u({ batchSize: Number(e.target.value) })} className="w-full accent-violet-500 mt-0.5" />
-                </div>
-                <div>
-                  <label className="text-[8px] text-gray-400 flex justify-between"><span>Delay</span><span className="text-violet-300 font-medium">{c.delayMs}ms</span></label>
-                  <input type="number" min="100" max="10000" step="100" value={c.delayMs} onChange={(e) => u({ delayMs: Math.max(100, Number(e.target.value) || 100) })}
-                    className="w-full px-1 py-0.5 bg-white/5 border border-white/10 rounded-md text-gray-100 text-[9px] font-mono focus:outline-none focus:ring-1 focus:ring-violet-500 mt-0.5" />
-                </div>
-                <div>
-                  <label className="text-[8px] text-gray-400 flex justify-between"><span>Jitter</span><span className="text-violet-300 font-medium">{c.jitterPct}%</span></label>
-                  <input type="range" min="0" max="100" value={c.jitterPct} onChange={(e) => u({ jitterPct: Number(e.target.value) })} className="w-full accent-violet-500 mt-0.5" />
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-1 mt-1.5">
-                <MiniToggle label="Humanize" value={c.humanize} onChange={(v) => u({ humanize: v })} icon="Shield" accent="green" />
-                <MiniToggle label="Drip" value={c.dripMode} onChange={(v) => u({ dripMode: v })} icon="Clock" accent="cyan" />
-                <MiniToggle label="Polymorph" value={c.polymorph} onChange={(v) => u({ polymorph: v })} icon="Sparkle" accent="violet" />
-              </div>
-            </div>
-            {/* Extra Flags */}
-            <div className="bg-slate-900/50 border border-white/5 rounded-xl p-2.5">
-              <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1.5">Extra Flags</p>
-              <div className="grid grid-cols-2 gap-1">
-                <MiniToggle label="Confirmed" value={c.confirmedShipping} onChange={(v) => u({ confirmedShipping: v })} icon="Check" accent="green" />
-                <MiniToggle label="Priority" value={c.prioritySend} onChange={(v) => u({ prioritySend: v })} icon="Star" accent="yellow" />
-                <MiniToggle label="Humanize" value={c.humanize} onChange={(v) => u({ humanize: v })} icon="Shield" accent="green" />
-                <MiniToggle label="Polymorph" value={c.polymorph} onChange={(v) => u({ polymorph: v })} icon="Sparkle" accent="violet" />
-              </div>
-              <div className="flex items-center gap-1.5 mt-1.5">
-                <label className="flex items-center gap-0.5 px-2 py-1 bg-white/5 hover:bg-white/10 text-gray-300 rounded-md text-[9px] font-medium cursor-pointer transition border border-white/5">
-                  <Icon.Upload className="w-2.5 h-2.5" /> Import
-                  <input type="file" accept=".csv,.txt" onChange={(e) => onBulkImport(e, c.id)} className="hidden" />
-                </label>
-                <button onClick={() => openTagPicker(c.id, 'subject')}
-                  className="flex items-center gap-0.5 px-2 py-1 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 rounded-md text-[9px] font-medium transition border border-amber-500/20">
-                  <Icon.Tag className="w-2.5 h-2.5" /> All Tags
-                </button>
-              </div>
-            </div>
-            {/* Test Mail */}
-            <div className={`rounded-xl p-2.5 border transition ${c.testResult?.ok ? 'border-cyan-500/40 bg-cyan-500/5' : 'border-white/5 bg-slate-900/50'}`}>
-              <p className="text-[9px] text-gray-300 font-semibold flex items-center gap-1 mb-1.5"><Icon.Eye className="w-3 h-3 text-cyan-400" /> Test Mail</p>
-              <div className="flex gap-1.5">
-                <input value={c.testRecipient} onChange={(e) => u({ testRecipient: e.target.value })}
-                  placeholder="test@example.com"
-                  className="flex-1 px-2 py-1.5 bg-white/5 border border-white/10 rounded-md text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 text-[10px] font-mono min-w-0" />
-                <button onClick={() => onTestMail(c.id)} disabled={c.testing || !c.testRecipient.trim() || !c.message.trim()}
-                  className="flex items-center gap-1 px-2.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 text-white rounded-md text-[10px] font-medium transition flex-shrink-0">
-                  {c.testing ? <Spinner size={10} /> : <Icon.Send className="w-3 h-3" />} Test
-                </button>
-              </div>
-              {c.testResult && (
-                <p className={`text-[9px] px-2 py-1 rounded-md mt-1.5 ${c.testResult.ok ? 'bg-green-500/10 text-green-300' : 'bg-red-500/10 text-red-300'}`}>
-                  {c.testResult.ok ? `✓ ${c.testResult.recipient} via ${c.testResult.sender || 'auto'}` : c.testResult.blocked ? `✕ Blocked (${c.testResult.score})` : `✕ ${c.testResult.error || 'Failed'}`}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Row 5: Live progress (per campaign) */}
-          {c.progress && (
-            <div className="bg-gradient-to-r from-violet-600/10 to-indigo-600/5 border border-violet-500/20 rounded-xl p-2.5">
-              <div className="flex items-center justify-between mb-1">
-                <h4 className="text-[11px] font-bold text-white flex items-center gap-1.5"><Icon.Activity className="w-3.5 h-3.5 text-violet-400" /> Campaign Progress</h4>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${c.progress.status === 'sent' ? 'bg-green-500/20 text-green-300' : c.progress.status === 'partial' ? 'bg-amber-500/20 text-amber-300' : c.progress.status === 'failed' ? 'bg-red-500/20 text-red-300' : 'bg-blue-500/20 text-blue-300 animate-pulse'}`}>{c.progress.status === 'pending' ? 'Ready' : c.progress.status === 'running' ? 'Sending…' : c.progress.status === 'sent' ? 'Success' : c.progress.status}</span>
-              </div>
-              {c.limitExhausted && (
-                <div className="mb-1.5">
-                  <QuotaNotice
-                    message={c.progress?.limitMessage || c.progress?.message || 'সেন্ডিং লিমিট শেষ — অ্যাকাউন্ট সাইন-আউট হয়েছে। \nঅন্য ইমেইল কানেক্ট করুন বা রিসেট হওয়া পর্যন্ত অপেক্ষা করুন।'}
-                    onAction={onRefreshThreshold}
-                    actionLabel={thresholdLoading ? 'রিফ্রেশ হচ্ছে…' : 'ক্রেডেনশিয়াল রিফ্রেশ করুন'}
-                  />
-                </div>
-              )}
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-[10px] text-violet-300 font-semibold flex-shrink-0">Sent</span>
-                <div className="flex-1 bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                  <div className="bg-gradient-to-r from-violet-500 to-indigo-500 h-full rounded-full transition-all duration-500"
-                    style={{ width: `${c.progress.totalSent > 0 ? Math.round((c.progress.totalSent / Math.max(c.progress.totalSent + c.progress.totalUndelivered, 1)) * 100) : 0}%` }} />
-                </div>
-                <span className="text-[11px] font-black text-white tabular-nums flex-shrink-0">{c.progress.totalSent || 0}<span className="text-gray-500 text-[9px] font-normal">/{(c.progress.totalSent || 0) + (c.progress.totalUndelivered || 0) || totalTarget}</span></span>
-              </div>
-              <div className="grid grid-cols-3 gap-1.5">
-                <div className="bg-white/5 rounded-md p-1 text-center"><div className="text-xs font-bold text-white">{c.progress.totalSent || 0}</div><div className="text-[8px] text-gray-500">Sent</div></div>
-                <div className="bg-white/5 rounded-md p-1 text-center"><div className="text-xs font-bold text-green-400">{c.progress.totalDelivered || 0}</div><div className="text-[8px] text-gray-500">Delivered</div></div>
-                <div className="bg-white/5 rounded-md p-1 text-center"><div className="text-xs font-bold text-red-400">{c.progress.totalUndelivered || 0}</div><div className="text-[8px] text-gray-500">Undel.</div></div>
-              </div>
-              {c.progress.senderApiName && (
-                <div className="flex items-center gap-1.5 text-[9px] text-gray-500 mt-1">
-                  <Icon.Refresh className="w-3 h-3 text-violet-400" />
-                  Sender: <span className="text-cyan-400">{c.progress.senderApiName}</span> · Batch: {c.progress.batchSize} · Delay: {(c.progress.delayMs / 1000).toFixed(1)}s{c.senderRotate && <span className="text-violet-300"> · auto-rotating</span>}
-                </div>
-              )}
-            </div>
-          )}
-          {/* Blocked result */}
-          {c.result && c.result.blocked && !c.progress && (
-            <div className="p-2.5 bg-red-500/10 border border-red-500/20 rounded-xl">
-              <p className="text-[11px] font-bold text-red-300 mb-0.5">⚠ Message Blocked — Spam Protection (Score: {c.result.spamScore}/100)</p>
-              {c.result.spamReasons && (
-                <div className="flex flex-wrap gap-1">
-                  {c.result.spamReasons.map((r, i) => <span key={i} className="text-[9px] bg-red-500/10 px-1.5 py-0.5 rounded text-red-300">{r}</span>)}
-                </div>
-              )}
-            </div>
-          )}
-          {/* v4.0 — Google API Smart Threshold & Resume Loop */}
-          {thresholdStatus && thresholdStatus.length > 0 && (
-            <div className="bg-slate-900/50 border border-violet-500/15 rounded-xl p-2.5">
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="text-[9px] text-gray-500 uppercase tracking-wider flex items-center gap-1 font-semibold"><Icon.Gauge className="w-3 h-3 text-violet-400" /> Google API Threshold</p>
-                <button onClick={onRefreshThreshold} disabled={thresholdLoading} className="text-[8px] text-gray-500 hover:text-gray-300 disabled:opacity-40 flex items-center gap-0.5">
-                  <Icon.Refresh className={`w-2.5 h-2.5 ${thresholdLoading ? 'animate-spin' : ''}`} /> Refresh
-                </button>
-              </div>
-              <div className="space-y-1.5 max-h-[180px] overflow-y-auto pr-1">
-                {thresholdStatus.map((cred) => {
-                  const pct = cred.thresholdLimit > 0 ? Math.min((cred.sentToday / cred.thresholdLimit) * 100, 100) : 0;
-                  const paused = cred.thresholdPaused;
-                  const isNew = cred.isNewCredential;
-                  return (
-                    <div key={cred._id} className={`rounded-lg p-1.5 border ${paused ? 'bg-amber-500/10 border-amber-500/30' : isNew ? 'bg-cyan-500/10 border-cyan-500/30' : 'bg-white/5 border-white/10'}`}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[10px] text-gray-200 font-mono truncate flex-1">{cred.email || cred.name || cred._id}</span>
-                        {paused && <span className="text-[8px] text-amber-300 font-bold ml-1 flex items-center gap-0.5 flex-shrink-0"><Icon.Pause className="w-2.5 h-2.5" /> PAUSED</span>}
-                        {isNew && !paused && <span className="text-[8px] text-cyan-300 font-bold ml-1 flex-shrink-0">NEW</span>}
-                      </div>
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <div className="flex-1 bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                          <div className={`h-full rounded-full transition-all duration-500 ${paused ? 'bg-amber-500' : pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-gradient-to-r from-violet-500 to-indigo-500'}`}
-                            style={{ width: `${pct}%` }} />
-                        </div>
-                        <span className="text-[9px] text-gray-400 font-mono flex-shrink-0">{cred.sentToday}/{cred.thresholdLimit}</span>
-                      </div>
-                      {paused && (
-                        <button onClick={() => onResumePaused(cred._id, c.id)} disabled={resumeLoading === cred._id}
-                          className="w-full flex items-center justify-center gap-1 px-2 py-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white rounded-md text-[9px] font-bold transition">
-                          {resumeLoading === cred._id ? <Spinner size={9} /> : <Icon.Play className="w-2.5 h-2.5" />} Resume from index {cred.pausedIndex || 0}
-                        </button>
-                      )}
-                      {isNew && !paused && (
-                        <button onClick={() => onAcknowledgeCredential(cred._id)}
-                          className="w-full flex items-center justify-center gap-1 px-2 py-1 bg-cyan-600 hover:bg-cyan-500 text-white rounded-md text-[9px] font-bold transition">
-                          <Icon.CheckCircle className="w-2.5 h-2.5" /> Acknowledge Credential
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── RIGHT: RECEIVER LIST (LARGER BOX + advanced loading) ── */}
-        <div className="bg-slate-900/50 border border-amber-500/20 rounded-xl p-2.5 flex flex-col order-3 lg:order-2 min-h-[400px]">
-          <div className="flex items-center justify-between mb-1.5 flex-shrink-0">
-            <p className="text-[10px] text-amber-400 uppercase tracking-wider flex items-center gap-1 font-semibold"><Icon.Users className="w-3 h-3" /> Receiver List</p>
-            <div className="flex items-center gap-1">
-              <button onClick={() => onPasteEmails(c.id)} className="flex items-center gap-0.5 text-[9px] text-violet-300 hover:text-violet-200 bg-violet-500/10 px-1.5 py-0.5 rounded-md border border-violet-500/20 transition">
-                <Icon.Clipboard className="w-2.5 h-2.5" /> Paste
-              </button>
-              <label className="flex items-center gap-0.5 text-[9px] text-cyan-300 hover:text-cyan-200 bg-cyan-500/10 px-1.5 py-0.5 rounded-md border border-cyan-500/20 cursor-pointer transition">
-                <Icon.Upload className="w-2.5 h-2.5" /> Import
-                <input type="file" accept=".csv,.txt" onChange={(e) => onBulkImport(e, c.id)} className="hidden" />
-              </label>
-            </div>
-          </div>
-          {/* LARGE textarea — much bigger than the old 2-row box */}
-          <textarea data-recipient-textarea value={c.numbersText} onChange={(e) => u({ numbersText: e.target.value })} rows={10}
-            placeholder={"user1@gmail.com\nuser2@yahoo.com\nuser3@outlook.com\n…"}
-            className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-y text-[10px] font-mono flex-shrink-0 mb-2 min-h-[160px]" />
-          {/* CHECK BOUNCE — per campaign, with advanced loading animation */}
-          <div className="flex-shrink-0 mb-2">
-            <button onClick={() => onCheckBounce(c.id)} disabled={c.checkingBounce || parsedEmails.length === 0}
-              className={`w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-bold transition ${c.checkBounce ? 'bg-green-600 hover:bg-green-500 text-white' : 'bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10'} disabled:opacity-40`}>
-              {c.checkingBounce ? <Spinner size={12} /> : <Icon.Shield className="w-3.5 h-3.5" />} Check Bounce
-            </button>
-            {/* Advanced loading animation — rotating status text ~3s each */}
-            {c.checkingBounce && (
-              <div className="mt-1.5 px-2.5 py-2 rounded-lg bg-violet-500/10 border border-violet-500/20">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <Spinner size={10} />
-                  <span key={c.validationStep} className="text-[11px] text-violet-200 font-medium truncate animate-pulse flex-1">
-                    {validationSteps[c.validationStep] || 'Processing…'}
-                    <span className="inline-block w-1 h-1 rounded-full bg-violet-400 ml-1 animate-ping" />
-                  </span>
-                </div>
-                {/* Progress bar for validation steps */}
-                <div className="w-full bg-slate-800 rounded-full h-1 overflow-hidden">
-                  <div className="bg-gradient-to-r from-violet-500 to-green-500 h-full rounded-full transition-all duration-700"
-                    style={{ width: `${((c.validationStep + 1) / validationSteps.length) * 100}%` }} />
-                </div>
-                <p className="text-[8px] text-gray-500 mt-1 text-center">Step {c.validationStep + 1} of {validationSteps.length}</p>
-              </div>
-            )}
-            {/* Bounce results summary */}
-            {c.bounceResults && !c.checkingBounce && (
-              <div className="mt-1.5 space-y-1">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[10px] text-green-300 bg-green-500/10 px-2 py-1 rounded-md border border-green-500/20 flex items-center gap-1"><Icon.CheckCircle className="w-3 h-3" /> {c.bounceResults.valid.length} valid</span>
-                  {c.bounceResults.bounced.length > 0 && (
-                    <span className="text-[10px] text-red-300 bg-red-500/10 px-2 py-1 rounded-md border border-red-500/20 flex items-center gap-1"><Icon.XCircle className="w-3 h-3" /> {c.bounceResults.bounced.length} bounced</span>
-                  )}
-                  {c.bounceResults.duplicates && c.bounceResults.duplicates.length > 0 && (
-                    <span className="text-[10px] text-amber-300 bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/20 flex items-center gap-1"><Icon.Copy className="w-3 h-3" /> {c.bounceResults.duplicates.length} dupes</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => openBounceResult(c.id)} className="flex-1 text-[9px] text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 px-2 py-1 rounded-md border border-cyan-500/20 flex items-center justify-center gap-1 font-medium transition">
-                    <Icon.Eye className="w-2.5 h-2.5" /> View Result
-                  </button>
-                  {c.bounceResults.bounced.length > 0 && (
-                    <button onClick={() => onReplaceBounced(c.id)} className="flex-1 text-[9px] text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-1 rounded-md border border-amber-500/20 flex items-center justify-center gap-1 font-medium transition">
-                      <Icon.Refresh className="w-2.5 h-2.5" /> Replace
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* V7 P9.7 — Trust Score card (5-step validator ring + breakdown).
-                Server numbers only; never invents its own. Renders after a
-                bounce check completes OR when spam preview is available. */}
-            {(c.bounceResults || c.spamPreview) && !c.checkingBounce && (
-              <div className="mt-2">
-                <TrustScore
-                  bounceResults={c.bounceResults}
-                  spamPreview={c.spamPreview}
-                  validationStep={c.validationStep}
-                  steps={validationSteps}
-                />
-              </div>
-            )}
-          </div>
-          {/* Recipient list view */}
-          <div className="flex-1 overflow-y-auto min-h-0 pr-1 -mr-1">
-            {parsedEmails.length === 0 ? (
-              <div className="text-center py-6">
-                <Icon.Users className="w-6 h-6 text-gray-700 mx-auto mb-1.5" />
-                <p className="text-[10px] text-gray-600">Paste or import emails to begin</p>
-              </div>
-            ) : (
-              <div className="space-y-0.5">
-                {parsedEmails.slice(0, 120).map((em, i) => {
-                  const v = c.emailValidation[em];
-                  const sr = c.sendResults[em];
-                  return (
-                    <div key={i} className="flex items-center gap-1.5 px-1.5 py-1 rounded-md bg-white/[0.02] border border-white/5">
-                      <span className="text-[8px] text-gray-600 w-4 flex-shrink-0 tabular-nums">{i + 1}</span>
-                      {c.loading || c.progress ? (
-                        sr === 'sent' ? (
-                          <Icon.Check className="w-2.5 h-2.5 text-blue-400 flex-shrink-0" />
-                        ) : sr === 'failed' ? (
-                          <Icon.Close className="w-2.5 h-2.5 text-red-400 flex-shrink-0" />
-                        ) : (
-                          <span className="w-2.5 h-2.5 rounded-full bg-amber-400/50 flex-shrink-0 animate-pulse" />
-                        )
-                      ) : v && v.checking ? (
-                        <Spinner size={9} />
-                      ) : v && v.valid ? (
-                        <Icon.CheckCircle className="w-2.5 h-2.5 text-green-400 flex-shrink-0" />
-                      ) : v && !v.valid ? (
-                        <Icon.XCircle className="w-2.5 h-2.5 text-red-400 flex-shrink-0" />
-                      ) : (
-                        <span className="w-2.5 h-2.5 rounded-full bg-gray-600 flex-shrink-0" />
-                      )}
-                      <span className={`text-[9px] truncate flex-1 ${(v && !v.valid) || sr === 'failed' ? 'text-red-400' : sr === 'sent' ? 'text-blue-300' : 'text-gray-300'}`} title={em}>{em}</span>
-                    </div>
-                  );
-                })}
-                {parsedEmails.length > 120 && (
-                  <p className="text-[9px] text-gray-600 text-center pt-1">+{parsedEmails.length - 120} more</p>
-                )}
-              </div>
-            )}
-          </div>
-          {/* Count summary + Send/Stop */}
-          <div className="flex-shrink-0 pt-2 mt-2 border-t border-white/5 space-y-1.5">
-            <div className="flex items-center justify-between text-[9px]">
-              <span className="text-gray-500">{parsedEmails.length} total</span>
-              <span className="text-green-400">{Object.values(c.emailValidation).filter(v => v && v.valid).length} valid</span>
-              <span className="text-blue-400">{Object.values(c.sendResults).filter(s => s === 'sent').length} sent</span>
-            </div>
-            {!c.loading && !c.progress && (
-              <button onClick={() => setMissionControlOpen(true)}
-                disabled={remaining <= 0 || parsedEmails.length === 0}
-                className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-[12px] font-bold transition shadow-lg shadow-violet-600/30">
-                <Icon.Rocket className="w-4 h-4" /> Start Campaign
-              </button>
-            )}
-            {(c.loading || c.progress) && (
-              <div className="space-y-1">
-                <button onClick={() => onStop(c.id)}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-lg text-[12px] font-bold transition shadow-lg shadow-red-600/30">
-                  <Icon.Stop className="w-4 h-4" /> Stop
-                </button>
-                <button onClick={() => onPause(c.id)}
-                  className={`w-full flex items-center justify-center gap-1 px-3 py-1.5 rounded-md text-[11px] font-bold transition ${c.paused ? 'bg-green-600 hover:bg-green-500 text-white' : 'bg-amber-600 hover:bg-amber-500 text-white'}`}>
-                  {c.paused ? <><Icon.Play className="w-3 h-3" /> Resume</> : <><Icon.Pause className="w-3 h-3" /> Pause</>}
-                </button>
-                {c.paused && (
-                  <p className="text-[9px] text-amber-300 text-center">⏸ Paused at {c.progress?.totalSent || 0} sent — press Resume to continue</p>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* V7 P9.3 — Mission Control cinematic send modal */}
-      <MissionControl
-        open={missionControlOpen}
-        onClose={() => setMissionControlOpen(false)}
-        campaign={c}
-        onSend={() => { onSend(c.id); }}
-        onPause={() => onPause(c.id)}
-        onResume={() => onPause(c.id)}
-        senderAccounts={senderAccounts}
-        remaining={remaining}
-        speedModes={speedModes}
-        thresholdStatus={thresholdStatus}
-        agreedTerms={agreedTerms}
-      />
-
-      {/* V7 P9.7 — Double-confirm dialog for destructive actions.
-          Type-to-confirm gate prevents accidental deletes. */}
-      <ConfirmDialog
-        open={confirmState.open}
-        title="Delete Campaign"
-        message={`This will permanently delete campaign "${confirmState.name}" and all its data. This action cannot be undone.`}
-        confirmWord="DELETE"
-        confirmLabel="Delete Campaign"
-        onConfirm={handleConfirm}
-        onCancel={handleCancelConfirm}
-        danger={true}
-      />
-    </div>
+    <SendStudio
+      campaign={campaign}
+      updateCampaign={updateCampaign}
+      onBack={onBack}
+      onSend={onSend}
+      onStop={onStop}
+      onPause={onPause}
+      onTestMail={onTestMail}
+      onCheckBounce={onCheckBounce}
+      onReplaceBounced={onReplaceBounced}
+      onPasteEmails={onPasteEmails}
+      onBulkImport={onBulkImport}
+      onConnectGmail={onConnectGmail}
+      onSpamCheck={onSpamCheck}
+      onGenerateAiNames={onGenerateAiNames}
+      onPickSubject={onPickSubject}
+      onLoadBodyTemplate={onLoadBodyTemplate}
+      onDeleteCampaign={onDeleteCampaign}
+      openNameModal={openNameModal}
+      openSubjectCatModal={openSubjectCatModal}
+      openBodyModal={openBodyModal}
+      openPreview={openPreview}
+      openTagPicker={openTagPicker}
+      openBounceResult={openBounceResult}
+      Icon={Icon}
+      Spinner={Spinner}
+      MiniToggle={MiniToggle}
+      contentTypes={contentTypes}
+      speedModes={speedModes}
+      campaignStatusColors={campaignStatusColors}
+      subjectCategories={subjectCategories}
+      subjectTemplates={subjectTemplates}
+      bodyTemplates={bodyTemplates}
+      senderAccounts={senderAccounts}
+      remaining={remaining}
+      stats={stats}
+      validationSteps={validationSteps}
+      allCampaigns={allCampaigns}
+      onSelectCampaign={onSelectCampaign}
+      thresholdStatus={thresholdStatus}
+      thresholdLoading={thresholdLoading}
+      resumeLoading={resumeLoading}
+      onRefreshThreshold={onRefreshThreshold}
+      onResumePaused={onResumePaused}
+      onAcknowledgeCredential={onAcknowledgeCredential}
+      agreedTerms={agreedTerms}
+      MissionControl={MissionControl}
+      ConfirmDialog={ConfirmDialog}
+      QuotaNotice={QuotaNotice}
+      toggleOn={toggleOn}
+    />
   );
 }
 

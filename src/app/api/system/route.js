@@ -1299,7 +1299,7 @@ export async function POST(req) {
       await newUser.save();
       const displayId = newUser.userId || newUser.email;
       await logActivity(newUser._id.toString(), 'user', displayId, 'register', 'New user registered: ' + displayId, clientIP);
-      const token = await createToken({ userId: newUser._id.toString(), role: 'user', loginId: displayId });
+      const token = await createToken({ userId: newUser._id.toString(), role: 'user', loginId: displayId, packageTier: newUser.packageTier || 0 });
       const res = jsonResponse({ success: true, role: 'user', limit: newUser.sendingLimit, sent: newUser.sentCount, loginId: displayId, email: newUser.email || '' });
       res.headers.set('Set-Cookie', `token=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=86400`);
       return res;
@@ -1343,7 +1343,7 @@ export async function POST(req) {
       await user.save();
       const displayId = user.userId || user.email;
       await logActivity(user._id.toString(), 'user', displayId, 'login', 'User logged in', clientIP);
-      const token = await createToken({ userId: user._id.toString(), role: 'user', loginId: displayId });
+      const token = await createToken({ userId: user._id.toString(), role: 'user', loginId: displayId, packageTier: user.packageTier || 0 });
       const res = jsonResponse({
         success: true, role: 'user', loginId: displayId, email: user.email || '',
         limit: user.sendingLimit, sent: user.sentCount,

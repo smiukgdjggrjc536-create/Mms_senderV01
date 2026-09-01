@@ -325,6 +325,8 @@ const userSchema = new mongoose.Schema({
   email: { type: String, unique: true, sparse: true, lowercase: true },
   password: { type: String, required: true },
   role: { type: String, enum: ['admin', 'user'], default: 'user' },
+  // V7 God-Mode: package tier gates feature-toggle visibility (0=free,1=basic,2=pro,3=enterprise)
+  packageTier: { type: Number, default: 0, min: 0, max: 3 },
   sendingLimit: { type: Number, default: 100 },
   sentCount: { type: Number, default: 0 },
   status: { type: String, enum: ['active', 'suspended'], default: 'active' },

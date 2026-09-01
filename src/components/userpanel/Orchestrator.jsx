@@ -285,15 +285,15 @@ export default function Orchestrator({
   useEffect(() => { setBodyB(''); }, [c.id]);
 
   return (
-    <div className={cx('grid gap-3', compact ? 'grid-cols-1' : 'grid-cols-1 xl:grid-cols-3')}>
+    <div className={cx('grid gap-3 flex-1 min-h-0', compact ? 'grid-cols-1' : 'grid-cols-1 xl:grid-cols-3')}>
       {/* Zone 1: Audience */}
-      <StaggerItem index={0} className="rounded-2xl bg-white/[0.02] border border-white/5 p-3">
+      <StaggerItem index={0} className="rounded-2xl bg-white/[0.02] border border-white/5 p-3 flex flex-col min-h-0 overflow-y-auto">
         <ZoneHeader icon="Users" title="Audience" subtitle="Recipients & targeting" accent="cyan" />
         <div className="space-y-2">{audienceZone}</div>
       </StaggerItem>
 
       {/* Zone 2: Message Studio */}
-      <StaggerItem index={1} className="rounded-2xl bg-white/[0.02] border border-white/5 p-3 xl:col-span-1">
+      <StaggerItem index={1} className="rounded-2xl bg-white/[0.02] border border-white/5 p-3 xl:col-span-1 flex flex-col min-h-0 overflow-y-auto">
         <ZoneHeader icon="Edit" title="Message Studio" subtitle="Subject + body + tags" accent="violet" />
         <div className="space-y-2">
           {messageZone}
@@ -303,9 +303,9 @@ export default function Orchestrator({
       </StaggerItem>
 
       {/* Zone 3: Live Intelligence */}
-      <StaggerItem index={2} className="rounded-2xl bg-white/[0.02] border border-white/5 p-3">
+      <StaggerItem index={2} className="rounded-2xl bg-white/[0.02] border border-white/5 p-3 flex flex-col min-h-0 overflow-y-auto">
         <ZoneHeader icon="Activity" title="Live Intel" subtitle="Send stats & controls" accent="emerald" />
-        <div className="space-y-2">{intelZone}</div>
+        <div className="space-y-2 flex-1 flex flex-col">{intelZone}</div>
       </StaggerItem>
     </div>
   );
