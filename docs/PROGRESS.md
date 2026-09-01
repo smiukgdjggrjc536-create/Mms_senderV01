@@ -12,7 +12,7 @@
 | P1 | Security Fortress + Redis-Atomic Core | Account 1 | DONE | exit 0 | Vault, auth hardening, atomic core, Redis swap, headers |
 | P2 | Dynamic Tag & Regex Mapping Engine (backend) | Account 1 | DONE | exit 0 | Registry, generators, mapping, applier, API |
 | P3 | Smart Routing & Auto-Rotation Engine (backend) | Account 1 | DONE | exit 0 | Parser, probe, rotation strategy, API |
-| P4 | Background AI Engine v2 (never-starve) | Account 2 | PENDING | — | |
+| P4 | Background AI Engine v2 (never-starve) | Account 2 | DONE | exit 0 | P4.1 engine+aiPool 19/19, P4.2 restock 26/26, P4.3 autoFill 26/26, commit eff7f92 |
 | P5 | God-Mode Matrix v2 + Package Manager | Account 2 | PENDING | — | |
 | P6 | Completeness Sweep (validator, sandboxes, zero-crash) | Account 2 | PENDING | — | |
 | P7 | Performance & Reliability Hardening | Account 2 | PENDING | — | |
@@ -44,7 +44,14 @@ Status legend: PENDING → PARTIAL → DONE. A phase is DONE only when its BUILD
 - P3.3 — Rotation Strategy (ROTATE_POOL/LOCK_MAIN, anti-repeat, jitter, audit) — 26/26 tests
 - P3.4 — Routing API Routes (/api/routing/config, /api/routing/test) — build exit 0
 
-### Account 2 (P4–P7) — PENDING
+### Account 2 (P4–P7) — IN PROGRESS
+- P4.1 — Redis pool model (engine.js + aiPool.js facade) — DONE 19/19 tests
+- P4.2 — Restock worker (restockWorker.js, singleton, key rotation) — DONE 26/26 tests
+- P4.3 — Sender auto-fill + auto-rotate + AI quota (autoFill.js) — DONE 26/26 tests
+- P4.4 — Build gate PASSED, commit eff7f92, pushed v7-dev
+- P5 — God-Mode Matrix v2 + Package Manager — IN PROGRESS
+- P6 — Completeness Sweep — PENDING
+- P7 — Performance & Reliability — PENDING
 ### Account 3 (P8–P9) — PENDING
 ### Account 4 (P10) — PENDING
 

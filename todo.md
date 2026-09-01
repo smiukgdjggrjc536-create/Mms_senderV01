@@ -3,8 +3,8 @@
 ## P4 — Background AI Engine v2 (never-starve)
 - [x] P4.1 Pool model on Redis (engine.js + aiPool.js facade + test-aipool.js) — 19/19 pass
 - [x] P4.2 Restock worker (restockWorker.js + test-restock.js) — 26/26 pass
-- [ ] P4.3 Sender auto-rotate + auto-fill + God-Mode AI quota wiring
-- [ ] P4.4 Build gate + commit P4 + push v7-dev + update docs
+- [x] P4.3 Sender auto-rotate + auto-fill + God-Mode AI quota (autoFill.js + test-autofill.js) — 26/26 pass
+- [x] P4.4 Build gate PASSED + commit eff7f92 + push v7-dev
 
 ## P5 — God-Mode Matrix v2 + Package Manager
 - [ ] P5.1 Toggle registry (src/lib/toggles/registry.js)
