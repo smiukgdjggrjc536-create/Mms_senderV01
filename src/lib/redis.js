@@ -20,6 +20,7 @@
 // ============================================================================
 
 import IORedis from 'ioredis';
+import crypto from 'crypto';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -201,7 +202,7 @@ export function isRedisLive() {
 export async function acquireMutex(key, ttlMs = 10000) {
   const redis = getRedis();
   const lockKey = `lock:${key}`;
-  const token = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const token = `${Date.now()}-${crypto.randomBytes(16).toString('hex')}`;
   const ttlSeconds = Math.ceil(ttlMs / 1000);
 
   if (_isRedis) {

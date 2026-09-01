@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react';
+// V7 P8.5 — visual consistency: shared design tokens + glassmorphic classes.
+import { SURFACE, ACCENT, RADIUS, cx } from '@/lib/ui/theme.js';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Global Loading Context — enterprise overlay
@@ -277,7 +279,7 @@ function AdminLogin({ onLoginSuccess }) {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-950 flex">
+    <div className="min-h-screen v7-mesh-bg flex" style={{ backgroundColor: SURFACE.base }}>
       {/* ── Left brand panel (hidden on mobile) ── */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-sky-950">
         {/* Animated gradient orbs */}
@@ -501,9 +503,9 @@ function AdminDashboard({ user, onLogout, onRefresh }) {
 
   return (
     <LoadingCtx.Provider value={withLoading}>
-    <div className="min-h-screen bg-slate-950 text-gray-200">
+    <div className="min-h-screen v7-mesh-bg text-gray-200" style={{ backgroundColor: SURFACE.base }}>
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 w-64 bg-slate-900 border-r border-slate-800 transform transition-transform z-40 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
+      <div className={`fixed inset-y-0 left-0 w-64 v7-glass-inset border-r border-white/10 transform transition-transform z-40 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`} style={{ backgroundColor: SURFACE.panel }}>
         <div className="p-5 border-b border-slate-800">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center"><Icon.Shield /></div>
@@ -548,7 +550,7 @@ function AdminDashboard({ user, onLogout, onRefresh }) {
       {/* Main content */}
       <div className="lg:ml-64">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/60 px-6 py-3.5 flex items-center justify-between">
+        <header className="sticky top-0 z-30 v7-glass-card border-b border-white/10 px-6 py-3.5 flex items-center justify-between" style={{ backgroundColor: 'rgba(11,15,25,0.8)' }}>
           <div className="flex items-center gap-3">
             <button onClick={() => setSidebarOpen(!sidebarOpen)} className="lg:hidden text-slate-400 hover:text-white">
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" /></svg>

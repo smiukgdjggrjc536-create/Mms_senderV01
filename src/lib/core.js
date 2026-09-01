@@ -32,6 +32,44 @@ import { featureToggleSchema } from '../../models/featureToggle.js';
 import { aiPoolItemSchema } from '../../models/aiPool.js';
 
 // ============================================================================
+// V7 P1.2 — Hardened auth primitives (NON-DESTRUCTIVE additive import).
+// The existing createToken/verifyToken/hashPassword/comparePassword/
+// verifyAdminLogin functions below are PRESERVED (L6). These hardened
+// equivalents (issuer/audience JWT, Redis lockout, timing-safe compare,
+// requireAdmin middleware) are re-exported so routes may opt in.
+// ============================================================================
+import {
+  createHardenedToken,
+  verifyHardenedToken,
+  hardenedLogin,
+  recordFailedLogin,
+  isLockedOut,
+  clearFailedLogins,
+  lockoutTtlSeconds,
+  checkLoginRateLimit,
+  timingSafeComparePassword,
+  requireAdmin,
+  authFailResponse,
+  AUTH_CONFIG as AUTH_CONFIG_V7,
+} from './auth.js';
+
+// ============================================================================
+// V7 P1.4 — Redis-backed threshold state (NON-DESTRUCTIVE additive import).
+// The existing pauseCredentialAtThreshold / resetCredentialThreshold /
+// getThresholdStatusForUser functions below are PRESERVED (L6). These
+// Redis mirror functions add crash-recovery: threshold pause/resume state
+// is saved atomically in Redis so it survives process restart.
+// ============================================================================
+import {
+  pauseThreshold as _redisPauseThreshold,
+  resumeThreshold as _redisResumeThreshold,
+  resetThreshold as _redisResetThreshold,
+  incrThresholdSent as _redisIncrThresholdSent,
+  getThresholdState as _redisGetThresholdState,
+  syncThresholdFromMongo as _redisSyncThreshold,
+} from './redis/threshold.js';
+
+// ============================================================================
 // Headless Enterprise Email-to-MMS Gateway Engine — service imports
 // ============================================================================
 // Re-exported from core.js so the rest of the app (routes, admin panel) can
@@ -1361,8 +1399,8 @@ async function bulkSendEngine(opts) {
     apisUsed.add(apiDoc.name);
     senderApiUsed = apiDoc.name;
 
-    // Enforce rate limits (wait if needed)
-    const rate = checkRateLimit(apiId, perMinute, perHour);
+    // Enforce rate limits (wait if needed) — P1.4: now async (Redis-backed)
+    const rate = await checkRateLimit(apiId, perMinute, perHour);
     if (!rate.allowed) {
       await sleep(rate.waitMs);
     }
@@ -1387,7 +1425,7 @@ async function bulkSendEngine(opts) {
         }
       }
 
-      recordRateHit(apiId);
+      await recordRateHit(apiId);
 
       // ── Enterprise Anti-Spam: AI Polymorphism ──────────────────────────
       // When polymorph is enabled, rewrite the message for THIS recipient so
@@ -2449,6 +2487,7 @@ async function checkCredentialThreshold(accountId) {
 
 // Auto-pause a credential when it hits the threshold (NO crash — graceful pause)
 // Sets thresholdPaused=true, status=COOLDOWN, and records the paused index/campaign
+// P1.4: ALSO saves to Redis hash atomically for crash recovery (zero data loss)
 async function pauseCredentialAtThreshold(accountId, pausedIndex, campaignId) {
   try {
     await connectDB();
@@ -2462,6 +2501,12 @@ async function pauseCredentialAtThreshold(accountId, pausedIndex, campaignId) {
         cooldownUntil: null, // threshold pause is not time-based; manual resume or daily reset
       },
     });
+    // P1.4: Mirror to Redis atomically (crash recovery — exact resume index saved)
+    try {
+      await _redisPauseThreshold(accountId, pausedIndex, campaignId);
+    } catch (_redisErr) {
+      console.warn('[core] Redis threshold pause mirror failed (Mongo still updated):', _redisErr.message);
+    }
     return { success: true, paused: true, pausedIndex, accountId };
   } catch (e) {
     return { error: e.message };
@@ -2469,6 +2514,7 @@ async function pauseCredentialAtThreshold(accountId, pausedIndex, campaignId) {
 }
 
 // Reset a credential's threshold pause (either manually or after daily reset)
+// P1.4: ALSO clears the Redis threshold state for crash-recovery consistency
 async function resetCredentialThreshold(accountId) {
   try {
     await connectDB();
@@ -2483,6 +2529,12 @@ async function resetCredentialThreshold(accountId) {
         sentToday: 0,
       },
     });
+    // P1.4: Clear Redis threshold state too
+    try {
+      await _redisResetThreshold(accountId);
+    } catch (_redisErr) {
+      console.warn('[core] Redis threshold reset mirror failed (Mongo still updated):', _redisErr.message);
+    }
     return { success: true, reset: true, accountId };
   } catch (e) {
     return { error: e.message };
@@ -2568,6 +2620,19 @@ export {
   // Password
   hashPassword,
   comparePassword,
+  // V7 P1.2 — hardened auth (additive re-export; existing funcs above preserved)
+  createHardenedToken,
+  verifyHardenedToken,
+  hardenedLogin,
+  recordFailedLogin,
+  isLockedOut,
+  clearFailedLogins,
+  lockoutTtlSeconds,
+  checkLoginRateLimit,
+  timingSafeComparePassword,
+  requireAdmin,
+  authFailResponse,
+  AUTH_CONFIG_V7,
   // Random generators
   generateRandomUsername,
   generateRandomPassword,
@@ -2748,4 +2813,8 @@ export {
   resetCredentialThreshold,
   acknowledgeNewCredential,
   getThresholdStatusForUser,
+  // V7 P1.4 — Redis threshold state (crash recovery)
+  _redisResumeThreshold,
+  _redisGetThresholdState,
+  _redisSyncThreshold,
 };

@@ -7,39 +7,22 @@
 // rate limiting, retry with backoff, and batching utilities.
 // ============================================================================
 
+// ---------------------------------------------------------------------------// Rate limiting — P1.4: now Redis-backed via src/services/rateLimiter.js
 // ---------------------------------------------------------------------------
-// Rate limiting — in-memory sliding window per sender API
-// ---------------------------------------------------------------------------
-const rateWindows = new Map(); // apiId -> { minute: [], hour: [] }
+// The in-memory `rateWindows` Map has been replaced by a Redis-atomic
+// fixed-window limiter (src/services/rateLimiter.js). When Redis is live
+// the state survives process restarts and is shared across all workers.
+// When Redis is unavailable it falls back to an in-memory sliding window
+// with a LOUD warning. The function signatures are PRESERVED but are now
+// async — all call sites in core.js have been updated to `await`.
+import { checkRateLimit as _rlCheck, recordRateHit as _rlRecord } from '../services/rateLimiter.js';
 
-export function checkRateLimit(apiId, perMinute, perHour) {
-  const now = Date.now();
-  if (!rateWindows.has(apiId.toString())) {
-    rateWindows.set(apiId.toString(), { minute: [], hour: [] });
-  }
-  const w = rateWindows.get(apiId.toString());
-  // Clean expired
-  w.minute = w.minute.filter((t) => now - t < 60000);
-  w.hour = w.hour.filter((t) => now - t < 3600000);
-
-  if (perMinute > 0 && w.minute.length >= perMinute) {
-    const waitMs = 60000 - (now - w.minute[0]);
-    return { allowed: false, waitMs: Math.max(waitMs, 1000), reason: 'per_minute' };
-  }
-  if (perHour > 0 && w.hour.length >= perHour) {
-    const waitMs = 3600000 - (now - w.hour[0]);
-    return { allowed: false, waitMs: Math.max(waitMs, 1000), reason: 'per_hour' };
-  }
-  return { allowed: true, waitMs: 0 };
+export async function checkRateLimit(apiId, perMinute, perHour) {
+  return _rlCheck(apiId, perMinute, perHour);
 }
 
-export function recordRateHit(apiId) {
-  const key = apiId.toString();
-  if (!rateWindows.has(key)) rateWindows.set(key, { minute: [], hour: [] });
-  const w = rateWindows.get(key);
-  const now = Date.now();
-  w.minute.push(now);
-  w.hour.push(now);
+export async function recordRateHit(apiId) {
+  return _rlRecord(apiId);
 }
 
 // ---------------------------------------------------------------------------

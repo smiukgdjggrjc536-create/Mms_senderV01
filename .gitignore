@@ -55,3 +55,7 @@ config-gemini.js
 config-sending.js
 *.bak
 node_modules/
+
+# V7 P1.1 — encrypted credentials vault (never commit; regenerate via scripts/vault-cli.js)
+.credentials.enc
+.credentials.plaintext*

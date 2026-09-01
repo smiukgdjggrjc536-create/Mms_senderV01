@@ -1,38 +1,29 @@
-# User Panel UPGRADE — Preserve Existing UI, Add Features
+# MMS SENDER V7 — Account 2 Execution Plan (P4–P7)
 
-## Phase 0: Restore + Deploy (DONE)
-- [x] Restore original UserPanel.jsx from backup
-- [x] Set up new Vercel account + project
-- [x] Set env vars + fix Node 20.x
-- [x] Deploy to Vercel (mms-sender-v01-ten.vercel.app)
+## P4 — Background AI Engine v2 (never-starve)
+- [x] P4.1 Pool model on Redis (engine.js + aiPool.js facade + test-aipool.js) — 19/19 pass
+- [x] P4.2 Restock worker (restockWorker.js + test-restock.js) — 26/26 pass
+- [x] P4.3 Sender auto-rotate + auto-fill + God-Mode AI quota (autoFill.js + test-autofill.js) — 26/26 pass
+- [x] P4.4 Build gate PASSED + commit eff7f92 + push v7-dev
 
-## Phase 1: UPGRADE SendTab (keep existing UI, add features)
-- [x] Subject line at TOP of send form
-- [x] Recipient email list on RIGHT side with Paste button
-- [x] Remove: Task Status, Task Log, Task Report, Open, Open Task tabs
-- [x] Remove: Render Mail, Auto Send, Random Test, Scheduled Task, Random HTML, Page Format
-- [x] Start Campaign button on RIGHT, Stop = pause/resume
-- [x] Email preview overlay (in-page, close + fullscreen)
-- [x] Check Bounce at top (results + Replace button)
-- [x] Sending limit + expiry compact in corner
-- [x] Connect Email small button in top corner
-- [x] Anti-spam config behind toggle (show/hide + Save)
-- [x] State persistence via localStorage (no refresh loss)
-- [x] Auto-change name interval selector
-- [x] Millisecond delay input (min 100ms)
-- [x] Recipient list live results (green check / red cross)
-- [x] Multi-campaign (up to 4, auto-named)
-- [x] Live monitoring (sent/delivered/bounced/invalid/inbox rate)
+## P5 — God-Mode Matrix v2 + Package Manager
+- [x] P5.1 Toggle registry (src/lib/toggles/registry.js) + API
+- [x] P5.2 Package manager (src/lib/packages/manager.js) + API
+- [x] P5.3 Performance (Redis-atomic, zero N+1, force-dynamic)
+- [x] P5.4 Build gate PASSED + commit e99029c + push v7-dev — 56/56 tests
 
-## Phase 2: New Features
-- [x] Terms of Agreement screen on login
-- [x] Email validator with loading animation
-- [x] No scroll fix (single screen fit - h-[calc(100vh-220px)])
+## P6 — Completeness Sweep
+- [x] P6.1 Validator pipeline (src/lib/validate/pipeline.js) — 63/63 pass, 1000-addr recount matches
+- [x] P6.2 4 sandbox isolation verification — 70/70 pass, zero cross-talk
+- [x] P6.3 Zero-crash (zero TODO/FIXME/placeholder/stub) verification — 100/100 pass, sendGuard
+- [x] P6.4 Small things sweep + build gate + commit 6562502 — 86/86 pass, ledger complete
 
-## Phase 3: Build + Deploy
-- [x] Build test — zero errors (17 routes, 0 errors)
-- [ ] Commit to GitHub
-- [ ] Deploy to Vercel (user panel)
-- [ ] Deploy to Netlify (admin panel)
-- [ ] Deploy to Render (API gateway — auto from GitHub)
-- [ ] Verify all 3 platforms live
+## P7 — Performance & Reliability
+- [x] P7.1 Observability (/api/system/health + /api/system/metrics) — 66/66 pass, build gate PASSED
+- [x] P7.2 Indexes audit (docs/INDEX_REPORT.md) — 26 indexes/11 collections/3 TTL, 0 missing, commit 0aa5720
+- [x] P7.3 Load smoke test (scripts/smoke-load.js) — 200 seq + 50 concurrent, p95<500ms, commit 442e90b
+- [x] P7.4 Build gate + final commit + push v7-dev — commit d8ea372, pushed
+
+## Final
+- [x] Update PROGRESS.md + HANDOFF.md (Account 3 handoff) — commit 2b9adfb, pushed
+- [x] Tell operator: next = ACCOUNT_3_MASTERPOLISH_V7.txt
