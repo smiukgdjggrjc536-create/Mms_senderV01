@@ -40,6 +40,9 @@ export async function resolve(specifier, context, nextResolve) {
     mapped = withExtension(pathToFileURL(pathResolve(ROOT, 'src', specifier.slice(2))));
   } else if (specifier.startsWith('@/')) {
     mapped = withExtension(pathToFileURL(pathResolve(ROOT, 'src', specifier.slice(2))));
+  } else if (specifier === 'next/server') {
+    // next/server resolves to next/server.js in plain Node (no webpack)
+    mapped = pathToFileURL(pathResolve(ROOT, 'node_modules', 'next', 'server.js'));
   }
   if (mapped !== specifier) {
     return nextResolve(String(mapped), { ...context, parentURL: undefined });

@@ -16,10 +16,10 @@
 - [x] P6.1 Validator pipeline (src/lib/validate/pipeline.js) — 63/63 pass, 1000-addr recount matches
 - [x] P6.2 4 sandbox isolation verification — 70/70 pass, zero cross-talk
 - [x] P6.3 Zero-crash (zero TODO/FIXME/placeholder/stub) verification — 100/100 pass, sendGuard
-- [ ] P6.4 Small things sweep + build gate + commit
+- [x] P6.4 Small things sweep + build gate + commit 6562502 — 86/86 pass, ledger complete
 
 ## P7 — Performance & Reliability
-- [ ] P7.1 Observability (/api/system/health + /api/system/metrics)
+- [x] P7.1 Observability (/api/system/health + /api/system/metrics) — 66/66 pass, build gate PASSED
 - [ ] P7.2 Indexes audit (docs/INDEX_REPORT.md)
 - [ ] P7.3 Load smoke test (scripts/smoke-load.js)
 - [ ] P7.4 Build gate + final commit + push v7-dev
