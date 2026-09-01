@@ -1854,7 +1854,7 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
             </label>
             <div className="flex gap-2.5">
               <button onClick={() => setShowTerms(false)} className="flex-1 px-4 py-2.5 bg-white/5 hover:bg-white/10 text-gray-400 rounded-lg text-sm font-medium transition">Cancel</button>
-              <button onClick={() => { if (termsChecked) { setAgreedTerms(true); setShowTerms(false); } }} disabled={!termsChecked}
+              <button onClick={() => { if (termsChecked) { setAgreedTerms(true); setShowTerms(false); setShowCreateBox(true); } }} disabled={!termsChecked}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-sm font-bold transition shadow-lg shadow-violet-600/30">
                 <Icon.Rocket className="w-4 h-4" /> Create Campaign
               </button>
