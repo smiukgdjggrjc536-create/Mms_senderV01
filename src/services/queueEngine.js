@@ -20,6 +20,7 @@
 import { Queue, Worker } from 'bullmq';
 import { connectDB, EmailAccount, SystemConfig, logActivity } from '@/lib/core';
 import { getRedis, acquireMutex, getDynamicConfig, setDynamicConfig, incrMetric, cacheGet, cacheSet } from '@/lib/redis';
+import { redisTokenBucket as _atomicTokenBucket, _resetAtomicState } from '@/lib/redis/atomic';
 import {
   ROUND_ROBIN_CONFIG,
   TOKEN_BUCKET_CONFIG,
@@ -178,38 +179,52 @@ async function selectAccountUnderLock() {
 //   Returns { allowed, tokensRemaining, reason }
 // ---------------------------------------------------------------------------
 export async function checkTokenBucket(accountId) {
-  const bucketKey = `tokenbucket:${accountId}`;
-  const cached = await cacheGet(bucketKey);
-
-  let tokens;
-  let lastRefill;
-
-  if (cached) {
-    tokens = cached.tokens;
-    lastRefill = cached.lastRefill;
-  } else {
-    // Initialize the bucket at full capacity.
-    tokens = TOKEN_BUCKET_CONFIG.capacity;
-    lastRefill = Date.now();
-  }
-
-  // Refill tokens based on elapsed time.
-  const now = Date.now();
-  const elapsedSeconds = (now - lastRefill) / 1000;
   const account = await EmailAccount.findById(accountId).lean();
   const dailyLimit = await getEffectiveDailyLimit(account);
-  const refillPerSecond = dailyLimit / (24 * 60 * 60); // tokens per second
+  // Refill rate = dailyLimit tokens per 24h → tokens per second
+  const refillPerSecond = dailyLimit / (24 * 60 * 60);
+  // Burst capacity — use TOKEN_BUCKET_CONFIG.capacity (or dailyLimit if smaller)
+  const capacity = Math.min(TOKEN_BUCKET_CONFIG.capacity, dailyLimit || TOKEN_BUCKET_CONFIG.capacity);
 
-  tokens = Math.min(TOKEN_BUCKET_CONFIG.capacity, tokens + elapsedSeconds * refillPerSecond);
-
-  if (tokens >= 1) {
-    // Consume one token.
-    tokens -= 1;
-    await cacheSet(bucketKey, { tokens, lastRefill: now }, 86400); // 24h TTL
-    return { allowed: true, tokensRemaining: tokens, reason: null };
-  } else {
-    await cacheSet(bucketKey, { tokens, lastRefill: now }, 86400);
+  // P1.4: Use the Redis-atomic token bucket from atomic.js (Lua-script based).
+  // This survives process restart and is shared across workers. Falls back
+  // to in-memory automatically when Redis is not live.
+  const tbKey = `tb:cred:${accountId}`;
+  try {
+    const result = await _atomicTokenBucket(tbKey, capacity, refillPerSecond, 1);
+    if (result.allowed) {
+      return { allowed: true, tokensRemaining: result.tokensRemaining, reason: null };
+    }
     return { allowed: false, tokensRemaining: 0, reason: 'Token bucket exhausted (rate limit)' };
+  } catch (atomicErr) {
+    // Fallback to the original cache-based implementation if atomic fails
+    console.warn('[queueEngine] atomic token bucket failed, using cache fallback:', atomicErr.message);
+    const bucketKey = `tokenbucket:${accountId}`;
+    const cached = await cacheGet(bucketKey);
+
+    let tokens;
+    let lastRefill;
+
+    if (cached) {
+      tokens = cached.tokens;
+      lastRefill = cached.lastRefill;
+    } else {
+      tokens = TOKEN_BUCKET_CONFIG.capacity;
+      lastRefill = Date.now();
+    }
+
+    const now = Date.now();
+    const elapsedSeconds = (now - lastRefill) / 1000;
+    tokens = Math.min(TOKEN_BUCKET_CONFIG.capacity, tokens + elapsedSeconds * refillPerSecond);
+
+    if (tokens >= 1) {
+      tokens -= 1;
+      await cacheSet(bucketKey, { tokens, lastRefill: now }, 86400);
+      return { allowed: true, tokensRemaining: tokens, reason: null };
+    } else {
+      await cacheSet(bucketKey, { tokens, lastRefill: now }, 86400);
+      return { allowed: false, tokensRemaining: 0, reason: 'Token bucket exhausted (rate limit)' };
+    }
   }
 }
 

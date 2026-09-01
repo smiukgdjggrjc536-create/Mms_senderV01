@@ -172,12 +172,12 @@
 - ব্র্যাঞ্চ: `main`
 
 ## Netlify (অ্যাডমিন প্যানেল)
-- অথ টোকেন: `nfp_yCR9PcKcTLArRQ3vHv1hswBLdJs1Bsji34b7`
+- অথ টোকেন: `nfp_•••••••••••••••••••••••••••••••••••••••`
 - সাইট ID: `d96d1fdf-4a29-47d1-bc38-9bf324ecba5f`
 - লাইভ URL: `https://mmsadminpanellogin.netlify.app`
 
 ## Vercel (ইউজার প্যানেল)
-- টোকেন: `vcp_648G6pYs2WjdZedhcqCC4ornQUxnDiTKAEJBKyUkihHqNg9atd1o6P0rV`
+- টোকেন: `vcp_•••••••••••••••••••••••••••••••••••••••••••••••••••`
 - লাইভ URL: `https://mms-sender-v01.vercel.app`
 
 ## Render (হেডলেস API)
@@ -207,7 +207,7 @@ git push origin main   # Render অটো-ডিপ্লয় (git push থে
 ## নেটলিফাই ডিপ্লয় (অ্যাডমিন প্যানেল)
 ```bash
 cd /workspace/repos/Mms_senderV01
-NETLIFY_AUTH_TOKEN="nfp_yCR9PcKcTLArRQ3vHv1hswBLdJs1Bsji34b7" \
+NETLIFY_AUTH_TOKEN="nfp_•••••••••••••••••••••••••••••••••••••••" \
 npx netlify deploy --site "d96d1fdf-4a29-47d1-bc38-9bf324ecba5f" --dir .next --prod
 ```
 
@@ -215,7 +215,7 @@ npx netlify deploy --site "d96d1fdf-4a29-47d1-bc38-9bf324ecba5f" --dir .next --p
 ভার্সেল সাধারণত GitHub ইন্টিগ্রেশন থেকে অটো-ডিপ্লয় করে। ম্যানুয়াল:
 ```bash
 cd /workspace/repos/Mms_senderV01
-npx vercel --prod --token "vcp_648G6pYs2WjdZedhcqCC4ornQUxnDiTKAEJBKyUkihHqNg9atd1o6P0rV"
+npx vercel --prod --token "vcp_•••••••••••••••••••••••••••••••••••••••••••••••••••"
 ```
 
 ## রেন্ডার (হেডলেস API)

@@ -30,6 +30,7 @@ import {
   GeminiApi,
   Campaign,
 } from '@/lib/core';
+import { isRedisLive as _isRedisLiveV7 } from '@/lib/redis/client.js';
 
 // ---------------------------------------------------------------------------
 // Auth helpers (mirrors /api/admin/gateway/route.js)
@@ -138,6 +139,12 @@ function computeGrade(probes) {
     deductions.push('High spam-block rate >10% (-10)');
   }
 
+  // Redis / BullMQ in-memory fallback (P1.4)
+  if (probes.redis && !probes.redis.isRedisLive) {
+    score -= 10;
+    deductions.push('Redis in-memory fallback — state not crash-safe (-10)');
+  }
+
   const grade = score >= 90 ? 'A' : score >= 75 ? 'B' : score >= 60 ? 'C' : score >= 40 ? 'D' : 'F';
 
   return { grade, score, deductions };
@@ -183,6 +190,11 @@ function generateRecommendations(probes) {
   }
   if (probes.users.expired > 0) {
     recs.push({ priority: 'low', text: `${probes.users.expired} user(s) have expired accounts. Consider cleaning up or renewing.` });
+  }
+
+  // Redis / BullMQ fallback (P1.4)
+  if (probes.redis && !probes.redis.isRedisLive) {
+    recs.push({ priority: 'high', text: 'Set REDIS_URL in environment variables. Without Redis, BullMQ queue, rate limiter, token bucket, and threshold pause/resume use in-memory fallback — state is lost on restart.' });
   }
 
   if (recs.length === 0) {
@@ -327,6 +339,23 @@ export async function GET(req) {
       spamRatePct: deliveryTotal > 0 ? Math.round((spamBlocked24h / deliveryTotal) * 10000) / 100 : 0,
     };
 
+    // ── 7b. Redis / BullMQ probe (P1.4) ──────────────────────────────
+    // Detect if BullMQ + Redis-atomic ops are running on real Redis or
+    // silently falling back to in-memory. A silent fallback is a RISK because
+    // rate limits, token buckets, and threshold state become process-local
+    // and do NOT survive restarts. We flag this loudly.
+    const redisProbe = {
+      isRedisLive: _isRedisLiveV7(),
+      redisUrlConfigured: Boolean(process.env.REDIS_URL || process.env.REDISCLOUD_URL),
+      status: _isRedisLiveV7() ? 'healthy' : 'in_memory_fallback',
+      message: _isRedisLiveV7()
+        ? 'Redis connected — BullMQ, rate limiter, token bucket, and threshold state are shared + crash-safe.'
+        : (process.env.REDIS_URL || process.env.REDISCLOUD_URL)
+          ? 'Redis URL set but connection failed — BullMQ + atomic ops using IN-MEMORY fallback. State will NOT survive restart.'
+          : 'No REDIS_URL configured — BullMQ + atomic ops using IN-MEMORY fallback. Set REDIS_URL in production for crash-safe state.',
+      warning: !_isRedisLiveV7(),
+    };
+
     // ── 8. Assemble probes ────────────────────────────────────────────
     const probes = {
       database: dbProbe,
@@ -336,6 +365,7 @@ export async function GET(req) {
       config: configProbe,
       users: usersProbe,
       delivery: deliveryProbe,
+      redis: redisProbe,
     };
 
     // ── 9. Compute grade + recommendations ───────────────────────────

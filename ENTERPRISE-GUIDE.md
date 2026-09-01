@@ -16,7 +16,7 @@ Both panels share the same MongoDB database and same GitHub repository. The pane
 ```
 Username:  admin_7f8bbcf9
 Password:  kFMPNauew5d@%RhH
-API Key:   sk_5b7286cc8a7c51bba69276359bc25854f77a0300
+API Key:   sk_•••••••••••••••••••••••••••••••••••••••••••••
 ```
 
 Open https://mms-sender-v01.netlify.app and enter all three fields, then click "Secure Login".

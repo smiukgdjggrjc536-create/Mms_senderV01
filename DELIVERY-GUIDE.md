@@ -21,7 +21,7 @@ You need ALL THREE to login:
 |-------|-------|
 | **Username** | `admin_7f8bbcf9` |
 | **Password** | `kFMPNauew5d@%RhH` |
-| **API Key** | `sk_5b7286cc8a7c51bba69276359bc25854f77a0300` |
+| **API Key** | `sk_•••••••••••••••••••••••••••••••••••••••••••••` |
 
 **How to login:**
 1. Open the admin URL
