@@ -13,7 +13,7 @@
 | P2 | Dynamic Tag & Regex Mapping Engine (backend) | Account 1 | DONE | exit 0 | Registry, generators, mapping, applier, API |
 | P3 | Smart Routing & Auto-Rotation Engine (backend) | Account 1 | DONE | exit 0 | Parser, probe, rotation strategy, API |
 | P4 | Background AI Engine v2 (never-starve) | Account 2 | DONE | exit 0 | P4.1 engine+aiPool 19/19, P4.2 restock 26/26, P4.3 autoFill 26/26, commit eff7f92 |
-| P5 | God-Mode Matrix v2 + Package Manager | Account 2 | PENDING | — | |
+| P5 | God-Mode Matrix v2 + Package Manager | Account 2 | DONE | exit 0 | P5.1 toggles 56/56, P5.2 packages 56/56, commit e99029c |
 | P6 | Completeness Sweep (validator, sandboxes, zero-crash) | Account 2 | PENDING | — | |
 | P7 | Performance & Reliability Hardening | Account 2 | PENDING | — | |
 | P8 | VIP UI Max Polish | Account 3 | PENDING | — | |

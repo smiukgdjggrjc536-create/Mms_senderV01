@@ -34,6 +34,7 @@ class MemoryFallback {
   constructor() {
     this._store = new Map();  // key -> { value, expiresAt }
     this._zsets = new Map();  // key -> Map(member -> { score, addedAt })
+    this._sets = new Map();   // key -> Set(member) — for sadd/srem/scard
     this._locks = new Map();  // key -> { token, expiresAt }
   }
 
@@ -65,8 +66,44 @@ class MemoryFallback {
   }
   async del(...keys) {
     let n = 0;
-    for (const k of keys) { const full = this._raw(k); if (this._store.delete(full)) n++; }
+    for (const k of keys) {
+      const full = this._raw(k);
+      if (this._store.delete(full)) n++;
+      if (this._zsets.delete(full)) n++;
+      if (this._sets && this._sets.delete(full)) n++;
+    }
     return n;
+  }
+  // --- set ops (dedup, pipeline) ---
+  async sadd(key, ...members) {
+    const full = this._raw(key);
+    if (!this._sets) this._sets = new Map();
+    if (!this._sets.has(full)) this._sets.set(full, new Set());
+    const set = this._sets.get(full);
+    let added = 0;
+    for (const m of members) {
+      const s = String(m);
+      if (!set.has(s)) { set.add(s); added++; }
+    }
+    return added;
+  }
+  async srem(key, ...members) {
+    const full = this._raw(key);
+    if (!this._sets || !this._sets.has(full)) return 0;
+    const set = this._sets.get(full);
+    let removed = 0;
+    for (const m of members) { if (set.delete(String(m))) removed++; }
+    return removed;
+  }
+  async scard(key) {
+    const full = this._raw(key);
+    if (!this._sets || !this._sets.has(full)) return 0;
+    return this._sets.get(full).size;
+  }
+  async smembers(key) {
+    const full = this._raw(key);
+    if (!this._sets || !this._sets.has(full)) return [];
+    return Array.from(this._sets.get(full));
   }
   async incr(key) {
     const full = this._raw(key);
