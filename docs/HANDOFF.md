@@ -1,40 +1,85 @@
-# V7 HANDOFF — Account 1 → Account 2
+# V7 HANDOFF — Account 2 → Account 3
 
-> The bible for the next account. Read this BEFORE touching anything. Also read `docs/PROGRESS.md` (phase table + acceptance evidence) and `ACCOUNT_2_ENGINE_V7.txt` (your script).
+> The bible for the next account. Read this BEFORE touching anything. Also read `docs/PROGRESS.md` (phase table + acceptance evidence), `docs/INDEX_REPORT.md` (index audit), and `ACCOUNT_3_MASTERPOLISH_V7.txt` (your script).
 
 ---
 
 ## Current state
-- Branch: `v7-dev` (created from `main`; pushed to origin). `main` untouched. An old `v6-dev` branch exists — ignore, do not merge/delete.
-- Account 1 completed **P0–P3**: Foundation, Security Fortress, Redis-Atomic Core, Tag Engine core, Routing core. All pushed to `v7-dev`.
-- Build gate passes: `node init-configs.js && next build --webpack` (use `npx next` / `npm run build` in sandboxes where `next` is not on PATH) → exit 0.
-- Baseline build (untouched tree) was exit 0 — recorded as the reference truth.
+- Branch: `v7-dev` (pushed to origin). `main` untouched. Old `v6-dev` exists — ignore.
+- Account 1 completed **P0–P3**: Foundation, Security Fortress, Redis-Atomic Core, Tag Engine, Routing Engine.
+- Account 2 completed **P4–P7**: Background AI Engine v2 (never-starve), God-Mode Matrix v2 + Package Manager, Completeness Sweep, Performance & Reliability Hardening.
+- All pushed to `v7-dev`. Latest commit: `d8ea372`.
+- Build gate passes: `node init-configs.js && npx next build --webpack` → exit 0.
 
-## Decisions made
-1. **Redis client singleton**: a new shared client lives at `src/lib/redis/client.js` (P1.3). The legacy `src/lib/redis.js` (with its in-memory `MemoryShim` + `getRedis`/`acquireMutex`/cache/dynamic-config/metrics helpers) is PRESERVED — existing services still import from it. New P1.3+ code imports the atomic primitives from `src/lib/redis/atomic.js` and the pool primitives from `src/lib/redis/pools.js`, which internally use the same shared connection. Do NOT delete `redis.js`; extend additively.
-2. **Threshold pause/resume**: the existing MongoDB-backed threshold system (`checkCredentialThreshold`, `pauseCredentialAtThreshold`, `resetCredentialThreshold`, `getThresholdStatusForUser` in `src/lib/core.js`) is PRESERVED. P1.4 adds a Redis-atomic mirror (`cred:{id}:sent` / `cred:{id}:window_start` / `cred:{id}:paused`) used as the live counter, with MongoDB as the durable store. The `thresholdStatus` props flow to `UserPanel.jsx` is NOT broken.
-3. **Token bucket**: `src/services/queueEngine.js` `checkTokenBucket` previously used `cacheGet/cacheSet` (Redis-backed already). P1.4 swaps it to `redisTokenBucket` (Lua atomic) from `atomic.js` for true atomicity. Signature preserved.
-4. **Rate limiter**: `src/lib/sendingEngine.js` `checkRateLimit`/`recordRateHit` were an in-memory `Map` (`rateWindows`). P1.4 swaps to `redisRateLimit` from `atomic.js`; the exported function signatures (`checkRateLimit(apiId, perMinute, perHour)`, `recordRateHit(apiId)`) are kept so `core.js:1365/1390` call sites stay unchanged.
-5. **Vault**: `src/lib/security/vault.js` + `scripts/vault-cli.js` (AES-256-GCM, scrypt KDF, master key from `CRED_MASTER_KEY` env). Provider credentials loaded at runtime via `vault.decrypt()`; plaintext never on disk unencrypted.
-6. **Auth**: `src/lib/auth.js` (new) holds the hardened login flow (timing-safe bcrypt, Redis lockout, JWT issuer/audience, login rate limit, `requireAdmin`). `src/lib/core.js` re-exports/uses these so existing routes keep working.
-7. **No new runtime deps added** except what was already in package.json. zod was NOT added (explicit validation in `sanitize.js` instead) — if Account 2 wants zod it may add it to dependencies (NOT devDependencies, per pitfall P4).
-8. **Tag engine**: 17 built-in tokens (`#NAME# #EMAIL# #INVOICE# #SNUMBER# #TFN# #DATE# #HELPDESK# #ORDERID# #TRACKING# #AMOUNT# #DUE# #CITY# #ZIP# #PHONE# #COMPANY# #RANDOM# #UUID#`). Custom tags in MongoDB `custom_tags`. Token regex `/#([A-Z0-9_]+)#/g`.
-9. **Routing**: `ROTATE_POOL` (all senders support spoofing/dynamic routing → Redis pools `route:senders:<campaignId>`, `route:names:<campaignId>`, `route:subjects:<campaignId>`) vs `LOCK_MAIN` (primary API email). Anti-repeat window K = min(poolSize-1, 20). Jitter 0–1500ms. Audit in MongoDB `routing_audit` (TTL 30d). Config in `routing_configs`.
+## Commits by Account 2 (chronological)
+- `eff7f92` — P4: Background AI Engine v2 (never-starve)
+- `e99029c` — P5: God-Mode Matrix v2 + Package Manager
+- `6562502` — P6: Completeness Sweep
+- `0eff394` — P7.1: Observability (health + metrics endpoints)
+- `0aa5720` — P7.2: Indexes + query audit (INDEX_REPORT.md)
+- `442e90b` — P7.3: Load smoke test
+- `d8ea372` — P7.4: Final build gate + push
 
-## Remaining steps (Account 2 — P4–P7)
-- **P4 — Background AI Engine v2 (never-starve)**: AI body/subject/name pools at 50k+ per pool, 60s restock cycle, key rotation. Build on `src/lib/redis/pools.js` primitives (`poolPush`, `poolPopFresh`, `poolCount`, `poolDrainRefill`). **Contract points you must wire:**
-  - Feed the name pool into Redis sorted set `route:names:<campaignId>` (consumed by `resolveSenderRoute` in `src/lib/routing/rotationStrategy.js`).
-  - Feed the subject pool into `route:subjects:<campaignId>`; final subject text resolution happens at dispatch time — `rotationStrategy.resolveSenderRoute` returns `subjectRouteId`; you resolve it to text in the send pipeline.
-  - The send pipeline hook: `mappingEngine.buildRecipientMap(recipient, campaign, sendAttemptId)` produces the per-mail token→value map; `applier.applyTags(body, map)` renders it. Wire these into the actual dispatch path so each send is unique.
-- **P5 — God-Mode Matrix v2 + Package Manager**: God-Mode toggles are server-authoritative (UI only reflects state). Package quotas enforced server-side using `atomic.incrWithCeiling(key, ceiling)` from `src/lib/redis/atomic.js` — returns false at ceiling. PRESERVE the existing God-Mode toggles and FeatureToggle model; extend additively.
-- **P6 — Completeness Sweep**: validator pipeline (RFC syntax, duplicates, bounce-risk, blacklist, grade score — server numbers FINAL), 4 sandbox isolation (zero cross-talk), zero-crash send path. PRESERVE the server-authoritative validator pipeline and the 4 Campaign Sandbox environments.
-- **P7 — Performance & Reliability Hardening**: <300ms API, Redis-atomic, zero N+1. The big queries in `src/app/api/system/route.js` (~158KB, 107 actions) already got projection+limit in P1.5 — continue auditing.
+## What Account 2 built (new files)
 
-## Known risks
-- `src/app/api/system/route.js` is a ~158KB monolith with 107 actions on ONE route. P1.5 added projection+limit to unbounded `find()`s, but it remains a hotspot. Account 2/3 should consider splitting additively (never break the existing action names).
-- `AdminPanel.jsx` (~292KB) and `UserPanel.jsx` (~256KB) are monoliths — Account 3 owns the UI hardening; do not break the `thresholdStatus` props contract or the Tag Pill / `insertAtCursor` / 480px editor lock.
-- `init-configs.js` materializes `config-database.js` / `config-gemini.js` / `config-sending.js` at build time (gitignored). It MUST run before every build (pitfall P5). The DB URI inside `config-database.js` defaults to `mongodb://localhost:27017/sms_campaign_db` — production uses `MONGODB_URI` env at runtime via `connectDB` in `core.js`.
-- Disk on the build sandbox was ~64% full at baseline (script warned ~90%). If a build OOMs or hits disk pressure: `rm -rf .next` and rebuild (pitfall P6).
+### P4 — Background AI Engine v2
+- `src/services/ai/engine.js` — AI pool model (body/subject/sender-name pools on Redis ZSET). Exports: `getStats`, `pushToPool`, `popFromPool`, `getPoolCount`, `drainRefillPool`.
+- `src/services/ai/aiPool.js` — facade over engine.js. Exports: `aiPoolPush`, `aiPoolPopFresh`, `aiPoolCount`, `aiPoolDrainRefill`.
+- `src/services/ai/restockWorker.js` — singleton restock worker (60s cycle, key rotation, per-key cooldown). Exports: `getRestockStatus`, `startRestockWorker`, `stopRestockWorker`.
+- `src/services/ai/autoFill.js` — sender auto-fill + auto-rotate + AI quota. Exports: `checkAndAutoFill`, `rotatePrimarySender`.
+- `src/services/circuitBreaker.js` — per-account circuit breaker. Exports: `getCircuitState`, `getAllCircuitStates`, `recordSuccess`, `recordFailure`, `getFailureCount`.
+- `scripts/test-aipool.js` (19/19), `scripts/test-restock.js` (26/26), `scripts/test-autofill.js` (26/26)
+
+### P5 — God-Mode Matrix v2 + Package Manager
+- `src/lib/toggles/registry.js` — server-authoritative toggle registry. Exports: `getToggle`, `setToggle`, `getAllToggles`, `TOGGLE_KEYS`.
+- `src/lib/packages/manager.js` — per-user package quota manager. Exports: `getUserPackage`, `setUserPackage`, `checkQuota`, `incrementUsage`, `PACKAGE_DEFAULTS`.
+- `src/app/api/toggles/route.js`, `src/app/api/admin/toggles/route.js` — toggle API (GET/POST, admin-gated)
+- `src/app/api/packages/route.js`, `src/app/api/admin/packages/route.js` — package API (GET/POST, admin-gated)
+- `scripts/test-toggles.js`, `scripts/test-packages.js` (56/56 combined)
+
+### P6 — Completeness Sweep
+- `src/lib/validate/pipeline.js` — validator pipeline (RFC syntax, duplicates, bounce-risk, blacklist, grade score). Exports: `validateRecipientList`, `validateSingleAddress`, `computeGrade`.
+- `src/lib/sendingEngine/sendGuard.js` — zero-crash dispatch wrapper. Exports: `sendGuard`, `withErrorBoundary`.
+- `scripts/test-validator.js` (63/63), `scripts/test-sandboxes.js` (70/70), `scripts/test-zerocrash.js` (100/100), `scripts/test-smallthings.js` (86/86)
+
+### P7 — Performance & Reliability
+- `src/lib/observability/health.js` — health aggregator (6 subsystems, 3s timeouts, graceful degradation). Exports: `getHealth`, `checkDb`, `checkRedis`, `checkQueue`, `checkAiPools`, `checkRestock`, `checkCircuitBreakers`.
+- `src/lib/observability/metrics.js` — Redis ZSET time-series metrics (24h p95 latency + throughput). Exports: `recordLatency`, `recordSendEvent`, `getThroughput24h`, `getP95Latency24h`, `resetObservability`.
+- `src/app/api/system/health/route.js` — public health endpoint (200/503)
+- `src/app/api/system/metrics/route.js` — admin-only metrics endpoint (requireAdmin)
+- `scripts/test-observability.js` (66/66), `scripts/smoke-load.js` (load smoke: 200 seq + 50 concurrent, p95<500ms)
+- `docs/INDEX_REPORT.md` — full index inventory (26 indexes, 11 collections, 3 TTL, 0 missing)
+
+## MongoDB collections added by Account 2
+- `userpackages` { userId, packageName, dailyLimit, monthlyLimit, features[], usage:{}, createdAt, updatedAt } — unique index on userId, index on packageName
+- `featuretoggles` { toggles: {}, updatedAt } — singleton document (no additional indexes needed)
+
+## Redis key namespaces added by Account 2
+- `mms_gw:ai:pool:{type}` — AI content pools (body/sender_name/subject), ZSET
+- `mms_gw:ai:restock:lock` — restock worker singleton lock
+- `mms_gw:ai:restock:keycooldown:{keyId}` — per-key cooldown (TTL)
+- `mms_gw:ai:restock:allkeys` — global key cooldown (TTL)
+- `mms_gw:cb:{accountId}` — circuit breaker state (open/closed/halfOpen + failure count)
+- `mms_gw:toggle:cache` — toggle registry cache (TTL 5s)
+- `mms_gw:package:{userId}:sent` — package usage counter (incrWithCeiling)
+- `mms_gw:obs:latency:api` — latency time-series ZSET (score=ts, member="ts:ms:route")
+- `mms_gw:obs:sends` — send event time-series ZSET (score=ts, member="ts:status:mode")
+
+## CRITICAL gotchas for Account 3
+1. **`@/services/*` alias maps to OLD directory**: jsconfig.json has `"@/services/*": ["./services/*"]` which points to the OLD `services/` dir (NOT `src/services/`). The AI modules (engine.js, restockWorker.js, circuitBreaker.js) are in `src/services/`. When importing these from `src/lib/` or `src/app/` files, use **relative paths** (e.g., `../../services/ai/engine.js`) NOT `@/services/ai/engine`. The `@/lib/*` alias works correctly for `src/lib/` imports.
+2. **`next/server` in test runner**: if you write tests that import route handlers (which import `from 'next/server'`), the alias-loader already maps `next/server` → `next/server.js`. This is set up in `scripts/alias-loader.mjs`.
+3. **MongoDB fast-fail guards**: any function that calls `Model.find()` in a test/sandbox context MUST check `mongoose.connection.readyState !== 1` first and return from cache or empty — otherwise it hangs for 10s (buffering timeout). See `tagRegistry.listCustomTags()` for the pattern.
+4. **`withTimeout` pattern**: for health checks or any DB-dependent call in a serverless context, wrap in `withTimeout(promise, 3000, label)` (Promise.race vs setTimeout) to prevent 10s MongoDB hangs. See `src/lib/observability/health.js`.
+5. **`create_file`/`str_replace` tool paths**: these tools use `/workspace` as root, NOT `/workspace/Mms_senderV01`. Always prefix file paths with `Mms_senderV01/` when using these tools (e.g., `Mms_senderV01/src/lib/foo.js`).
+
+## Remaining steps (Account 3 — P8–P9)
+- **P8 — VIP UI Max Polish**: Harden `AdminPanel.jsx` (~292KB) and `UserPanel.jsx` (~256KB). These are monoliths — extend additively, never break existing action names or props contracts. PRESERVE: Tag Pills + insertAtCursor, 480px editor lock, `thresholdStatus` props flow, PANEL_MODE switch. The new P4-P7 backend endpoints (`/api/system/health`, `/api/system/metrics`, `/api/toggles`, `/api/packages`, `/api/admin/toggles`, `/api/admin/packages`) need UI surfaces — wire them into the admin panel.
+- **P9 — USER PANEL MAX+++++++ HARDCORE UPGRADE**: User-facing panel upgrades. PRESERVE the 4 Campaign Sandbox environments (A/B/C/D), God-Mode toggles (server-authoritative — UI only reflects), server-authoritative validator pipeline (UI only displays server numbers). The AI pool status (`getStats` from engine.js), restock status (`getRestockStatus`), and circuit breaker states (`getAllCircuitStates`) are available for dashboard display.
+
+## Known risks (updated)
+- `src/app/api/system/route.js` is a ~158KB monolith with 107 actions on ONE route. P1.5 added projection+limit. Account 3 may split additively (never break existing action names).
+- `AdminPanel.jsx` (~292KB) and `UserPanel.jsx` (~256KB) are monoliths — Account 3 owns the UI hardening. Do not break the `thresholdStatus` props contract or the Tag Pill / `insertAtCursor` / 480px editor lock.
+- `init-configs.js` materializes `config-database.js` / `config-gemini.js` / `config-sending.js` at build time (gitignored). It MUST run before every build (pitfall P5).
 - Tailwind v4 + `@netlify/plugin-nextjs` + `@tailwindcss/postcss` MUST stay in `dependencies` (not devDependencies) or Netlify CI fails (pitfall P4). Do not touch `postcss.config.mjs` (pitfall P4).
 
 ## Pitfall summary (RULE 0–13 / section [2] of the Account 1 script)
@@ -55,55 +100,4 @@
   - P7: ESM — `import/export` only, never `require()`.
   - P8: React 19 — no legacy lifecycle; server components by default in `app/`.
 - **L8 LANGUAGE**: talk to the operator in Bangla; all code/commits/docs/logs in English.
-- **L9 STYLE**: mirror this account's STYLE LOG in `docs/PROGRESS.md` exactly.
-
-## Files created by Account 1 (new)
-- `docs/PROGRESS.md`, `docs/HANDOFF.md` (this file)
-- `src/lib/security/vault.js` — `export function encrypt(obj)`, `export function decrypt()`, `export function loadCredentials()`
-- `scripts/vault-cli.js` — CLI: `set <key> <value>` / `get <key>` / `list`
-- `src/lib/auth.js` — `export async function hardenedLogin(username, password, apiKey)`, `export function requireAdmin(req)`, `export async function checkLoginRateLimit(ip)`, `export async function recordFailedLogin(username)`, `export async function isLockedOut(username)`, JWT helpers
-- `src/lib/redis/client.js` — `export function getRedisClient()`, `export function isRedisLive()`
-- `src/lib/redis/atomic.js` — `export async function withLock(key, ttlMs, fn)`, `export async function incrWithCeiling(key, ceiling)`, `export async function redisRateLimit(key, limit, windowSec)`, `export async function redisTokenBucket(key, capacity, refillPerSec)`
-- `src/lib/redis/pools.js` — `export async function poolPush(pool, item, score)`, `export async function poolPopFresh(pool, maxAgeMs)`, `export async function poolCount(pool)`, `export async function poolDrainRefill(pool, source, batchSize)`
-- `src/lib/validate/sanitize.js` — `export function sanitizeApiInput(schema, payload)`, `export function stripNoSqlKeys(obj)`, per-endpoint validators
-- `scripts/mongo-indexes.js` — creates indexes (users.email unique, campaigns.userId+createdAt, emails.campaignId+status, sent_logs.credentialId+ts TTL, tag_maps TTL, routing_audit TTL, custom_tags)
-- `scripts/test-atomic.js`, `scripts/test-pools.js`, `scripts/test-generators.js`, `scripts/test-mapping.js`, `scripts/test-applier.js`, `scripts/test-credparse.js`, `scripts/test-rotation.js`
-- `src/lib/tagEngine/tagRegistry.js` — `export const TAGS`, `export function resolveToken(body)`, `export async function registerCustomTag(...)`, `export async function listCustomTags(userId)`, `export async function deleteCustomTag(id, userId)`
-- `src/lib/tagEngine/generators/{invoice,serial,tfn,helpdesk,date,orderid,tracking,amount,random,uuid,custom}.js` — each `export function generate(context)`
-- `src/lib/tagEngine/mappingEngine.js` — `export async function buildRecipientMap(recipient, campaign, sendAttemptId)`, `export async function persistMap(sendId, map, ...)`
-- `src/lib/tagEngine/applier.js` — `export function applyTags(htmlOrText, map)`
-- `src/app/api/tags/route.js`, `src/app/api/tags/preview/route.js`
-- `src/lib/routing/credentialParser.js` — `export function parseCredentialsJson(rawText)`, `export function normalizeEntry(raw)`, `export function validateSender(entry)`, `export async function persistSenders(senders, ownerId)`, `export const Sender` (Mongoose model), `export const SENDER_PROVIDERS`
-- `src/lib/routing/capabilityProbe.js` — `export async function probeSender(sender)`, `export async function probeSenders(senders)`, `export function getCachedCapabilities(sender)`, `export function needsReprobe(sender)`, `export function registerLiveVerifier(fn)`, `export const STATIC_CAPABILITY_TABLE`, `export const CAPABILITY_PROBE_TTL_MS`
-- `src/lib/routing/rotationStrategy.js` — `export async function resolveSenderRoute(campaign, sendAttemptId, opts)`, `export async function dryRunResolve(campaign, count)`, `export function determineMode(activeSenders, config)`, `export function computeAntiRepeatK(poolSize, override)`, `export async function buildSenderPool(campaignId, activeSenders)`, `export async function refillRoutePool(ns, campaignId, source)`, `export async function getRoutingConfig(campaignId)`, `export async function setRoutingConfig(campaignId, patch)`, `export async function getPoolStats(campaignId)`, `export const RoutingAudit`, `export const RoutingConfig`, `export const POOL_NAMESPACES`
-- `src/app/api/routing/config/route.js`, `src/app/api/routing/test/route.js`
-
-## MongoDB collections created
-- `custom_tags` { token, userId, rule, createdAt } — index token+userId unique
-- `tag_maps` { sendId, campaignId, recipient, map, createdAt } — TTL 30 days on createdAt
-- `routing_audit` { sendId, campaignId, fromEmail, fromName, subjectRouteId, mode, jitterMs, createdAt } — TTL 30 days
-- `routing_configs` { campaignId, mode, antiRepeatWindow, jitterMaxMs, updatedAt }
-- `senders` { email, provider, authFields, displayName, status, capabilities, probedAt, ownerId, createdAt }
-
-## Redis key namespaces (Account 1)
-- `mms_gw:lock:{key}` — distributed locks (withLock)
-- `mms_gw:rl:{key}` — rate limit fixed windows (redisRateLimit)
-- `mms_gw:tb:{key}` — token buckets (redisTokenBucket)
-- `mms_gw:ceiling:{key}` — incrWithCeiling counters
-- `mms_gw:lockout:{username}` — auth lockout (TTL 900s)
-- `mms_gw:cred:{id}:sent` / `mms_gw:cred:{id}:window_start` / `mms_gw:cred:{id}:paused` — threshold live state
-- `mms_gw:tag:seq:{campaignId}` — per-campaign send-attempt INCR sequence
-- `mms_gw:route:senders:{campaignId}` — sender rotation pool (sorted set, LRU by score=lastUsedAt)
-- `mms_gw:route:names:{campaignId}` — sender-name rotation pool (sorted set) ← Account 2 feeds this
-- `mms_gw:route:subjects:{campaignId}` — subject rotation pool (sorted set) ← Account 2 feeds this
-- `mms_gw:route:recent:{ns}:{campaignId}` — anti-repeat window sorted set (score=monotonic seq, TTL 6h)
-- `mms_gw:route:seq:{ns}:{campaignId}` — monotonic sequence counter for anti-repeat scoring (TTL 6h)
-
-## Exact contract points Account 2 must wire
-1. **Send pipeline hook**: in the dispatch path, call `buildRecipientMap(recipient, campaign, sendAttemptId)` then `applyTags(body, map)` and `applyTags(subject, map)` so every mail is unique. `sendAttemptId` = `tag:seq:{campaignId}` INCR + `crypto.randomBytes(8).toString('hex')`. Then call `resolveSenderRoute(campaign, sendAttemptId, { config, activeSenders })` from `rotationStrategy.js` to get `{ fromEmail, fromName, subjectRouteId, mode, delayJitterMs }` — use `fromEmail`/`fromName` as the envelope From, add `delayJitterMs` to the inter-send delay.
-2. **AI pool feeds**: populate `route:names:<campaignId>` and `route:subjects:<campaignId>` sorted sets via `rotationStrategy.refillRoutePool('names', campaignId, source)` / `refillRoutePool('subjects', campaignId, source)` where `source` is an async fn returning an array of strings. `resolveSenderRoute` already pops from these with anti-repeat + jitter.
-3. **Subject final resolution**: `resolveSenderRoute` returns `subjectRouteId` (the member string from `route:subjects:<campaignId>`); resolve it to final subject text in the dispatch path (Account 2 owns the subject pool text mapping).
-4. **Quota ceilings**: package quotas via `atomic.incrWithCeiling('package:{userId}:sent', ceiling)` — returns `{ allowed: false }` at ceiling.
-5. **Validator pipeline**: keep server-authoritative; UI only displays server numbers.
-6. **Sender auto-fill**: when a user uploads `credentials.json`, call `credentialParser.parseCredentialsJson(rawText)` then `credentialParser.persistSenders(senders, ownerId)` — returns the normalized sender docs so the UI populates the sender mailbox list instantly (Account 3 wires the UI hook).
-7. **Capability probing**: before routing, call `capabilityProbe.probeSenders(activeSenders)` (7-day cache, re-probes only stale). The `capabilities` field on each sender drives `determineMode` → ROTATE_POOL vs LOCK_MAIN.
+- **L9 STYLE**: mirror the STYLE LOG in `docs/PROGRESS.md` exactly (Account 1 + Account 2 entries).
