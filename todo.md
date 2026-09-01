@@ -25,5 +25,5 @@
 - [x] P7.4 Build gate + final commit + push v7-dev — commit d8ea372, pushed
 
 ## Final
-- [ ] Update PROGRESS.md + HANDOFF.md (Account 3 handoff)
+- [x] Update PROGRESS.md + HANDOFF.md (Account 3 handoff) — commit 2b9adfb, pushed
 - [ ] Tell operator: next = ACCOUNT_3_MASTERPOLISH_V7.txt
