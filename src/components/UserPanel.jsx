@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { COUNTRY_SUPPORT, getCountryStats } from '@/lib/countrySupport';
 // SmsTab removed — SMS module deleted from user panel per owner request.
 
@@ -15,6 +15,18 @@ import EditorArea from '@/components/userpanel/EditorArea.jsx';
 import ToastStack, { useToastStack } from '@/components/userpanel/Toast.jsx';
 import { Skeleton, SkeletonText, SkeletonList, SkeletonStatGrid } from '@/components/userpanel/Skeleton.jsx';
 import { PageTransition, StaggerList, StaggerItem } from '@/components/userpanel/PageTransition.jsx';
+// V7 P9.1 — Orchestrator 3-zone campaign composer command deck.
+import Orchestrator from '@/components/userpanel/Orchestrator.jsx';
+// V7 P9.2 — LivingDashboard real-time animated counters.
+import LivingDashboard, { LiveCounter, useCountUp, useLivePoll } from '@/components/userpanel/LivingDashboard.jsx';
+// V7 P9.3 — Mission Control cinematic send experience.
+import MissionControl from '@/components/userpanel/MissionControl.jsx';
+import DeliveryCenter from '@/components/userpanel/DeliveryCenter.jsx';
+import EmptyState from '@/components/userpanel/EmptyState.jsx';
+import CommandPalette from '@/components/userpanel/CommandPalette.jsx';
+import BottomNav from '@/components/userpanel/BottomNav.jsx';
+import { useKeyboardShortcuts } from '@/components/userpanel/useKeyboardShortcuts.js';
+import { TrustScore, ConfirmDialog, QuotaNotice } from '@/components/userpanel/TrustScore.jsx';
 
 
 // ================================================================
@@ -307,6 +319,64 @@ function UserDashboard({ user, onLogout, onRefresh }) {
   const [loadingStats, setLoadingStats] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // V7 P9.6 — Command palette command registry
+  const paletteCommands = useMemo(() => {
+    const cmds = [
+      ...tabs.map(({ k, l, I }) => ({
+        id: `tab-${k}`,
+        label: l,
+        group: 'Navigate',
+        icon: I,
+        hint: k === 'dashboard' ? '1' : k === 'send' ? '2' : k === 'inbox' ? '3' : k === 'reports' ? '4' : '',
+        action: () => setActiveTab(k),
+      })),
+      {
+        id: 'new-campaign',
+        label: 'New Campaign',
+        group: 'Actions',
+        icon: Icon.Plus,
+        hint: 'N',
+        action: () => setActiveTab('send'),
+      },
+      {
+        id: 'refresh',
+        label: 'Refresh Panel',
+        group: 'Actions',
+        icon: Icon.Refresh,
+        action: () => { onRefresh ? onRefresh() : fetchAll(); show('Panel refreshed', 'success'); },
+      },
+    ];
+    // Add campaigns to the registry for jump-to
+    for (const c of campaigns.slice(0, 20)) {
+      cmds.push({
+        id: `camp-${c._id}`,
+        label: c.name || `Campaign ${c._id?.slice(-6) || ''}`,
+        group: 'Campaigns',
+        icon: Icon.Layers,
+        action: () => { setActiveTab('reports'); },
+      });
+    }
+    return cmds;
+  }, [tabs, campaigns, onRefresh, show]);
+
+  // V7 P9.6 — Global keyboard shortcuts
+  useKeyboardShortcuts({
+    onPalette: () => setPaletteOpen((o) => !o),
+    onNewCampaign: () => setActiveTab('send'),
+    onTab: (k) => setActiveTab(k),
+    onPauseToggle: () => {
+      // Pause/resume the first running campaign if any
+      const running = campaigns.find((c) => c.status === 'running');
+      if (running) {
+        show('Use Mission Control to pause/resume the active send.', 'info');
+      } else {
+        show('No active send to pause.', 'info');
+      }
+    },
+    onSearch: () => setPaletteOpen(true),
+  });
 
   // Live clock
   const [now, setNow] = useState(Date.now());
@@ -375,6 +445,9 @@ function UserDashboard({ user, onLogout, onRefresh }) {
 
       {/* Toast stack — V7 P8.4 hardened (auto-dismiss, stack, exit animation) */}
       <ToastStack toasts={toasts} dismiss={dismiss} />
+
+      {/* V7 P9.6 — Command Palette (Ctrl+K) */}
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={paletteCommands} />
 
       {/* ── Desktop flex row: sidebar (flex child, width collapses) + main (fills rest) ── */}
       <div className="flex-1 flex relative z-10 min-h-0">
@@ -492,23 +565,14 @@ function UserDashboard({ user, onLogout, onRefresh }) {
             </button>
           </div>
 
-          {/* Mobile tab bar (fixed height, horizontal scroll) */}
-          <div className="lg:hidden flex gap-1.5 px-4 py-2 overflow-x-auto border-b border-white/5 flex-shrink-0">
-            {tabs.map(({ k, l, I }) => (
-              <button
-                key={k}
-                onClick={() => setActiveTab(k)}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium whitespace-nowrap transition ${
-                  activeTab === k ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20' : 'bg-white/5 text-gray-400'
-                }`}
-              >
-                <I className="w-4 h-4" /> {l}
-              </button>
-            ))}
-          </div>
+          {/* V7 P9.6 — Mobile bottom-nav replaces horizontal scroll tab-bar
+              for a native app feel on small screens (375px+). The BottomNav
+              is fixed at the bottom; content gets pb-20 on mobile so it
+              never hides behind the nav. */}
+          <BottomNav tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
           {/* Content — flex-1 fills remaining height, internal scroll only */}
-          <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-5 lg:px-6 py-4 lg:py-5">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-5 lg:px-6 py-4 lg:py-5 pb-24 lg:pb-5">
             <PageTransition transitionKey={activeTab}>
               {activeTab === 'dashboard' && <DashboardTab stats={stats} loading={loadingStats} now={now} language={language} />}
               {activeTab === 'send' && (
@@ -522,7 +586,7 @@ function UserDashboard({ user, onLogout, onRefresh }) {
                 />
               )}
               {activeTab === 'countries' && <CountrySupportTab />}
-              {activeTab === 'reports' && <ReportsTab campaigns={campaigns} deliveryReports={deliveryReports} onCampaignClick={fetchDeliveryReports} />}
+              {activeTab === 'reports' && <DeliveryCenter campaigns={campaigns} deliveryReports={deliveryReports} onCampaignClick={fetchDeliveryReports} thresholdStatus={thresholdStatus} onResumePaused={handleResumePaused} resumeLoading={resumeLoading} />}
               {activeTab === 'inbox' && <InboxAutoReplyTab language={language} onToast={show} loginId={stats?.loginId || user?.loginId} />}
               {activeTab === 'info' && <InfoTab settings={settings} />}
             </PageTransition>
@@ -576,6 +640,8 @@ function DashboardTab({ stats, loading, now, language }) {
 
   return (
     <div className="space-y-6">
+      {/* V7 P9.2 — Living Dashboard: real-time animated counters */}
+      <LivingDashboard stats={stats} live={true} />
       {/* Top row: quota ring + key stats */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Quota ring card */}
@@ -673,10 +739,7 @@ function DashboardTab({ stats, loading, now, language }) {
             ))}
           </div>
         ) : (
-          <div className="text-center py-8 text-gray-500">
-            <Icon.Send className="w-12 h-12 mx-auto mb-2 opacity-20" />
-            <p className="text-sm">No campaigns yet. Head to the Send Email tab to start your first campaign.</p>
-          </div>
+          <EmptyState preset="campaigns" className="py-8" />
         )}
       </div>
     </div>
@@ -2161,6 +2224,27 @@ function CampaignEditor({
   // Connect Gmail file input ref
   const fileInputRef = useRef(null);
 
+  // V7 P9.1 — Orchestrator view mode toggle ('classic' | 'orchestrator')
+  const [viewMode, setViewMode] = useState('orchestrator');
+
+  // V7 P9.7 — Confirm dialog state for destructive actions
+  const [confirmState, setConfirmState] = useState({ open: false, action: null, name: '' });
+
+  const requestDelete = () => {
+    setConfirmState({ open: true, action: () => onDeleteCampaign(c.id), name: c.name });
+  };
+
+  const handleConfirm = () => {
+    try {
+      if (typeof confirmState.action === 'function') confirmState.action();
+    } catch { /* ignore */ }
+    setConfirmState({ open: false, action: null, name: '' });
+  };
+
+  const handleCancelConfirm = () => {
+    setConfirmState({ open: false, action: null, name: '' });
+  };
+
   return (
     <div className="flex flex-col gap-2">
       {/* HEADER: Back + Campaign Name + Status + Quick campaign switcher */}
@@ -2176,6 +2260,12 @@ function CampaignEditor({
             className="px-2 py-1 bg-white/5 border border-white/10 rounded-lg text-gray-100 text-sm font-bold focus:outline-none focus:ring-1 focus:ring-violet-500 min-w-[120px]" />
         </div>
         <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold flex-shrink-0 ${campaignStatusColors[c.status] || ''}`}>{c.status}</span>
+        {/* V7 P9.1 — Orchestrator / Classic view toggle */}
+        <button onClick={() => setViewMode(viewMode === 'orchestrator' ? 'classic' : 'orchestrator')}
+          className={`flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-bold transition flex-shrink-0 ${viewMode === 'orchestrator' ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30' : 'bg-white/5 text-gray-400 border border-white/5 hover:text-gray-200'}`}
+          title="Toggle 3-zone Orchestrator view">
+          <Icon.Layers2 className="w-3 h-3" /> {viewMode === 'orchestrator' ? 'Orchestrator' : 'Classic'}
+        </button>
         {/* Quick switcher to other campaigns */}
         <div className="flex items-center gap-1 flex-wrap">
           {allCampaigns.filter(o => o.id !== c.id).map(o => (
@@ -2186,7 +2276,7 @@ function CampaignEditor({
             </button>
           ))}
         </div>
-        <button onClick={() => { if (confirm(`Delete campaign "${c.name}"?`)) onDeleteCampaign(c.id); }}
+        <button onClick={requestDelete}
           className="ml-auto flex items-center gap-1 px-2 py-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-md text-[10px] font-medium transition flex-shrink-0">
           <Icon.Trash className="w-3.5 h-3.5" /> Delete
         </button>
@@ -2245,8 +2335,67 @@ function CampaignEditor({
         )}
       </div>
 
+      {/* V7 P9.1 — Orchestrator 3-zone command deck overview (when viewMode='orchestrator') */}
+      {viewMode === 'orchestrator' && (
+        <Orchestrator
+          campaign={c}
+          updateCampaign={updateCampaign}
+          thresholdStatus={thresholdStatus}
+          audienceZone={
+            <div className="space-y-2">
+              <div className="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] border border-white/5">
+                <span className="text-[10px] text-gray-400">Total recipients</span>
+                <span className="text-lg font-bold text-cyan-400">{totalTarget}</span>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] border border-white/5">
+                <span className="text-[10px] text-gray-400">Sender accounts</span>
+                <span className="text-sm font-bold text-violet-400">{senderAccounts.length}</span>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] border border-white/5">
+                <span className="text-[10px] text-gray-400">Quota remaining</span>
+                <span className="text-sm font-bold text-emerald-400">{remaining}</span>
+              </div>
+            </div>
+          }
+          messageZone={
+            <div className="space-y-2">
+              <div className="p-2 rounded-lg bg-white/[0.02] border border-white/5">
+                <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1">Subject</p>
+                <p className="text-[11px] text-gray-200 font-medium truncate">{c.subject || <span className="text-gray-600 italic">Not set</span>}</p>
+              </div>
+              <div className="p-2 rounded-lg bg-white/[0.02] border border-white/5">
+                <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1">Body preview</p>
+                <p className="text-[10px] text-gray-400 font-mono line-clamp-3 max-h-12 overflow-hidden">{(c.message || '').slice(0, 150) || <span className="text-gray-600 italic">Not set</span>}</p>
+              </div>
+            </div>
+          }
+          intelZone={
+            <div className="space-y-2">
+              <div className="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] border border-white/5">
+                <span className="text-[10px] text-gray-400">Status</span>
+                <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${campaignStatusColors[c.status] || ''}`}>{c.status}</span>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] border border-white/5">
+                <span className="text-[10px] text-gray-400">Sent</span>
+                <span className="text-sm font-bold text-blue-400">{c.sentCount || 0}</span>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] border border-white/5">
+                <span className="text-[10px] text-gray-400">Delivery</span>
+                <span className="text-sm font-bold text-emerald-400">{c.deliveryRate || 0}%</span>
+              </div>
+              {thresholdStatus && thresholdStatus.length > 0 && (
+                <div className="p-2 rounded-lg bg-amber-500/5 border border-amber-500/20">
+                  <p className="text-[9px] text-amber-400 font-bold uppercase tracking-wider mb-1">Threshold Alerts</p>
+                  <p className="text-[10px] text-gray-400">{thresholdStatus.filter(t => t.paused).length} paused · {thresholdStatus.length} total</p>
+                </div>
+              )}
+            </div>
+          }
+        />
+      )}
+
       {/* MAIN GRID: Center config (left) + Receiver List (right) */}
-      <div className="grid lg:grid-cols-[1fr_280px] gap-2">
+      <div className={`grid lg:grid-cols-[1fr_280px] gap-2 ${viewMode === 'orchestrator' ? 'mt-3 pt-3 border-t border-white/5' : ''}`}>
         {/* ── CENTER CONFIG (all options visible, no hidden overflow) ── */}
         <div className="flex flex-col gap-2">
           {/* Row 1: Subject + Sender Name */}
@@ -2580,9 +2729,12 @@ function CampaignEditor({
                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${c.progress.status === 'sent' ? 'bg-green-500/20 text-green-300' : c.progress.status === 'partial' ? 'bg-amber-500/20 text-amber-300' : c.progress.status === 'failed' ? 'bg-red-500/20 text-red-300' : 'bg-blue-500/20 text-blue-300 animate-pulse'}`}>{c.progress.status === 'pending' ? 'Ready' : c.progress.status === 'running' ? 'Sending…' : c.progress.status === 'sent' ? 'Success' : c.progress.status}</span>
               </div>
               {c.limitExhausted && (
-                <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-red-500/15 border border-red-500/30 mb-1.5 animate-pulse">
-                  <Icon.Alert className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
-                  <p className="text-[10px] font-bold text-red-300">Sending Limit Exhausted — Account Sign-Out Detected. Connect another email or wait for reset.</p>
+                <div className="mb-1.5">
+                  <QuotaNotice
+                    message={c.progress?.limitMessage || c.progress?.message || 'সেন্ডিং লিমিট শেষ — অ্যাকাউন্ট সাইন-আউট হয়েছে। \nঅন্য ইমেইল কানেক্ট করুন বা রিসেট হওয়া পর্যন্ত অপেক্ষা করুন।'}
+                    onAction={onRefreshThreshold}
+                    actionLabel={thresholdLoading ? 'রিফ্রেশ হচ্ছে…' : 'ক্রেডেনশিয়াল রিফ্রেশ করুন'}
+                  />
                 </div>
               )}
               <div className="flex items-center gap-2 mb-1">
@@ -2731,6 +2883,20 @@ function CampaignEditor({
                 </div>
               </div>
             )}
+
+            {/* V7 P9.7 — Trust Score card (5-step validator ring + breakdown).
+                Server numbers only; never invents its own. Renders after a
+                bounce check completes OR when spam preview is available. */}
+            {(c.bounceResults || c.spamPreview) && !c.checkingBounce && (
+              <div className="mt-2">
+                <TrustScore
+                  bounceResults={c.bounceResults}
+                  spamPreview={c.spamPreview}
+                  validationStep={c.validationStep}
+                  steps={validationSteps}
+                />
+              </div>
+            )}
           </div>
           {/* Recipient list view */}
           <div className="flex-1 overflow-y-auto min-h-0 pr-1 -mr-1">
@@ -2806,6 +2972,34 @@ function CampaignEditor({
           </div>
         </div>
       </div>
+
+      {/* V7 P9.3 — Mission Control cinematic send modal */}
+      <MissionControl
+        open={missionControlOpen}
+        onClose={() => setMissionControlOpen(false)}
+        campaign={c}
+        onSend={() => { onSend(c.id); }}
+        onPause={() => onPause(c.id)}
+        onResume={() => onPause(c.id)}
+        senderAccounts={senderAccounts}
+        remaining={remaining}
+        speedModes={speedModes}
+        thresholdStatus={thresholdStatus}
+        agreedTerms={agreedTerms}
+      />
+
+      {/* V7 P9.7 — Double-confirm dialog for destructive actions.
+          Type-to-confirm gate prevents accidental deletes. */}
+      <ConfirmDialog
+        open={confirmState.open}
+        title="Delete Campaign"
+        message={`This will permanently delete campaign "${confirmState.name}" and all its data. This action cannot be undone.`}
+        confirmWord="DELETE"
+        confirmLabel="Delete Campaign"
+        onConfirm={handleConfirm}
+        onCancel={handleCancelConfirm}
+        danger={true}
+      />
     </div>
   );
 }
@@ -3536,10 +3730,7 @@ function InboxAutoReplyTab({ language, onToast, loginId }) {
           <button onClick={load} className="text-xs text-purple-300 hover:text-purple-200 flex items-center gap-1"><Icon.Refresh className="w-3.5 h-3.5" />Refresh</button>
         </div>
         {messages.length === 0 ? (
-          <div className="text-center py-10 text-gray-500">
-            <Icon.Inbox className="w-12 h-12 mx-auto mb-3 opacity-20" />
-            <p className="text-sm">No inbound emails yet. Once your email provider webhook is configured, received messages will appear here.</p>
-          </div>
+          <EmptyState preset="inbox" className="py-10" />
         ) : (
           <div className="space-y-2 max-h-80 overflow-y-auto">
             {messages.map((m, i) => (
