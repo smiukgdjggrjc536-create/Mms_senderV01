@@ -39,10 +39,10 @@ Status legend: PENDING → PARTIAL → DONE. A phase is DONE only when its BUILD
 - P2.3 — Mapping Engine (buildRecipientMap + persistMap, tag_maps TTL)
 - P2.4 — Tag Applier (single-pass, idempotent, unknown untouched)
 - P2.5 — Tag API Routes (/api/tags, /api/tags/preview)
-- P3.1 — Credential Parser (normalize + auto-fill + validate)
-- P3.2 — Capability Probe (supportsSpoofing/dynamicRouting/limits, 7-day cache)
-- P3.3 — Rotation Strategy (ROTATE_POOL/LOCK_MAIN, anti-repeat, jitter, audit)
-- P3.4 — Routing API Routes (/api/routing/config, /api/routing/test)
+- P3.1 — Credential Parser (normalize + auto-fill + validate) — 16/16 tests
+- P3.2 — Capability Probe (supportsSpoofing/dynamicRouting/limits, 7-day cache) — 18/18 tests
+- P3.3 — Rotation Strategy (ROTATE_POOL/LOCK_MAIN, anti-repeat, jitter, audit) — 26/26 tests
+- P3.4 — Routing API Routes (/api/routing/config, /api/routing/test) — build exit 0
 
 ### Account 2 (P4–P7) — PENDING
 ### Account 3 (P8–P9) — PENDING
@@ -99,16 +99,20 @@ Status legend: PENDING → PARTIAL → DONE. A phase is DONE only when its BUILD
 - Create custom tag → list shows it → preview returns 3 unique rendered bodies → delete works.
 
 ### P3.1 — Credential Parser
-- `node scripts/test-credparse.js`: 3 shape variants → identical normalized output; invalid entry flagged with reason.
+- `node scripts/test-credparse.js` → **16/16 PASS**. Shape 1 (array), Shape 2 ({accounts:[...]}), Shape 3 (single object) all parse to identical normalized output ({email, provider, displayName, status}). Invalid gmail (missing refresh_token), invalid smtp (missing pass), invalid email format all flagged with `status:"invalid"` + `invalidReason` — never dropped. `detectProvider` infers gmail/outlook/smtp from field shapes + email domain. `validateSender` does provider-specific sanity checks (gmail: refresh_token+client_id+client_secret or installed/web config block; outlook: client_id+client_secret+refresh_token; smtp: host+port+user+pass + port range 1-65535).
 
 ### P3.2 — Capability Probe
-- Mocked provider responses → capability object correct per provider; cache path exercised (second call reads cache).
+- `node scripts/test-capability.js` → **18/18 PASS**. Static capability table correct per provider: gmail (no spoofing, dynamic routing, 20 aliases, 500/day), outlook (no spoofing, no dynamic routing, 1 alias, 300/day), smtp (spoofing yes, dynamic routing yes, 50 aliases, 1000/day). Cache path exercised: sender with fresh `probedAt` returns `fromCache:true` without re-probing. `needsReprobe` returns true for null/missing/8-day-old probes. Live probe hook with mocked verifier overrides static caps; verifier throwing → graceful null (S5 reliability); live mode OFF → null overrides (static table stands). `probeSenders` batch resolves all. `CAPABILITY_PROBE_TTL_MS` = 7 days. MongoDB persistence guarded by connection-state check (skips when not connected → no 10s buffering timeout).
 
 ### P3.3 — Rotation Strategy
-- `node scripts/test-rotation.js`: 50 resolves vs 5-sender pool, anti-repeat K=4 → no repeat within 4 consecutive; mode correct; audit rows created. LOCK_MAIN returns primary 50/50.
+- `node scripts/test-rotation.js` → **26/26 PASS**. **ACCEPTANCE (a)**: 50 resolves against a 5-sender spoofing pool with anti-repeat window K=4 → **zero repeats within K consecutive sends** (0 violations); all 5 senders used (good distribution); mode=ROTATE_POOL. Non-spoofing pool → LOCK_MAIN mode. **ACCEPTANCE (b)**: LOCK_MAIN returns primary email 10/10 times. `computeAntiRepeatK(5)=4`, `(25)=20` (capped), `(1)=0`, honors override. `determineMode`: all-spoofing→ROTATE_POOL, non-spoofing→LOCK_MAIN, single sender→LOCK_MAIN, mixed→LOCK_MAIN (ALL must be capable), explicit mode overrides auto. Jitter always in [0,1500] (crypto-secure `secureRandomInt`). `dryRunResolve` returns 10 combos in ROTATE_POOL with ≥3 unique emails; LOCK_MAIN dry-run returns primary for all 10. `buildSenderPool` only adds new senders (preserves LRU scores). `refillRoutePool` from source generator. `getPoolStats` returns pool sizes + last 20 audit entries. `getRoutingConfig`/`setRoutingConfig` work in fallback. Audit record has sendId, campaignId, fromEmail, fromName, subjectRouteId, mode, jitterMs.
+- **Bug fix**: `MemoryFallback.incr()/incrby()` had a key-prefix mismatch (`_cleanKey(key)` vs `_raw(key)`) causing the counter to always return 1 — fixed, all P1 tests re-verified (redis-swap 30/30, atomic 18/18, mapping 9/9).
 
 ### P3.4 — Routing API Routes
-- Set config → get stats → dry-run test returns 10 unique combos in ROTATE_POOL mode.
+- `POST /api/routing/config` → validates campaignId/mode/antiRepeatWindow[0-20]/jitterMaxMs[0-5000]/primaryEmail; persists to `routing_configs` (upsert); rebuilds Redis route pools from provided senders (probes capabilities); returns saved config + pool stats. Auth-gated via `requireAdmin`.
+- `GET /api/routing/config?campaignId=` → returns current config + pool stats (pool sizes + last 20 audit entries). Auth-gated.
+- `POST /api/routing/test` → dry-run: validates count[1-100]; populates route:senders/names/subjects pools from body if provided; resolves N routes WITHOUT sending; returns combos + uniqueness analysis (uniqueEmails/names/subjects). Auth-gated.
+- Build gate: `node init-configs.js && npx next build --webpack` → **BUILD_EXIT=0**. Both routes registered (`/api/routing/config` ƒ dynamic, `/api/routing/test` ƒ dynamic).
 
 ---
 

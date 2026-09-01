@@ -73,9 +73,9 @@
 - `src/lib/tagEngine/mappingEngine.js` — `export async function buildRecipientMap(recipient, campaign, sendAttemptId)`, `export async function persistMap(sendId, map, ...)`
 - `src/lib/tagEngine/applier.js` — `export function applyTags(htmlOrText, map)`
 - `src/app/api/tags/route.js`, `src/app/api/tags/preview/route.js`
-- `src/lib/routing/credentialParser.js` — `export function parseCredentialsJson(rawText)`, `export function validateSender(entry)`, `export async function persistSenders(parsed, userId)`
-- `src/lib/routing/capabilityProbe.js` — `export async function probeSender(sender)`, `export async function getCachedCapabilities(senderId)`
-- `src/lib/routing/rotationStrategy.js` — `export async function resolveSenderRoute(campaign, sendAttemptId)`, `export async function rebuildRoutingPools(campaignId)`, `export async function emitRoutingAudit(...)`
+- `src/lib/routing/credentialParser.js` — `export function parseCredentialsJson(rawText)`, `export function normalizeEntry(raw)`, `export function validateSender(entry)`, `export async function persistSenders(senders, ownerId)`, `export const Sender` (Mongoose model), `export const SENDER_PROVIDERS`
+- `src/lib/routing/capabilityProbe.js` — `export async function probeSender(sender)`, `export async function probeSenders(senders)`, `export function getCachedCapabilities(sender)`, `export function needsReprobe(sender)`, `export function registerLiveVerifier(fn)`, `export const STATIC_CAPABILITY_TABLE`, `export const CAPABILITY_PROBE_TTL_MS`
+- `src/lib/routing/rotationStrategy.js` — `export async function resolveSenderRoute(campaign, sendAttemptId, opts)`, `export async function dryRunResolve(campaign, count)`, `export function determineMode(activeSenders, config)`, `export function computeAntiRepeatK(poolSize, override)`, `export async function buildSenderPool(campaignId, activeSenders)`, `export async function refillRoutePool(ns, campaignId, source)`, `export async function getRoutingConfig(campaignId)`, `export async function setRoutingConfig(campaignId, patch)`, `export async function getPoolStats(campaignId)`, `export const RoutingAudit`, `export const RoutingConfig`, `export const POOL_NAMESPACES`
 - `src/app/api/routing/config/route.js`, `src/app/api/routing/test/route.js`
 
 ## MongoDB collections created
@@ -93,13 +93,17 @@
 - `mms_gw:lockout:{username}` — auth lockout (TTL 900s)
 - `mms_gw:cred:{id}:sent` / `mms_gw:cred:{id}:window_start` / `mms_gw:cred:{id}:paused` — threshold live state
 - `mms_gw:tag:seq:{campaignId}` — per-campaign send-attempt INCR sequence
-- `mms_gw:route:senders:{campaignId}` — sender rotation pool (sorted set)
+- `mms_gw:route:senders:{campaignId}` — sender rotation pool (sorted set, LRU by score=lastUsedAt)
 - `mms_gw:route:names:{campaignId}` — sender-name rotation pool (sorted set) ← Account 2 feeds this
 - `mms_gw:route:subjects:{campaignId}` — subject rotation pool (sorted set) ← Account 2 feeds this
+- `mms_gw:route:recent:{ns}:{campaignId}` — anti-repeat window sorted set (score=monotonic seq, TTL 6h)
+- `mms_gw:route:seq:{ns}:{campaignId}` — monotonic sequence counter for anti-repeat scoring (TTL 6h)
 
 ## Exact contract points Account 2 must wire
-1. **Send pipeline hook**: in the dispatch path, call `buildRecipientMap(recipient, campaign, sendAttemptId)` then `applyTags(body, map)` and `applyTags(subject, map)` so every mail is unique. `sendAttemptId` = `tag:seq:{campaignId}` INCR + `crypto.randomBytes(8).toString('hex')`.
-2. **AI pool feeds**: populate `route:names:<campaignId>` and `route:subjects:<campaignId>` sorted sets via `pools.poolPush`. `rotationStrategy.resolveSenderRoute` already pops from these with anti-repeat + jitter.
-3. **Subject final resolution**: `resolveSenderRoute` returns `subjectRouteId`; resolve it to final subject text in the dispatch path (Account 2 owns the subject pool text).
+1. **Send pipeline hook**: in the dispatch path, call `buildRecipientMap(recipient, campaign, sendAttemptId)` then `applyTags(body, map)` and `applyTags(subject, map)` so every mail is unique. `sendAttemptId` = `tag:seq:{campaignId}` INCR + `crypto.randomBytes(8).toString('hex')`. Then call `resolveSenderRoute(campaign, sendAttemptId, { config, activeSenders })` from `rotationStrategy.js` to get `{ fromEmail, fromName, subjectRouteId, mode, delayJitterMs }` — use `fromEmail`/`fromName` as the envelope From, add `delayJitterMs` to the inter-send delay.
+2. **AI pool feeds**: populate `route:names:<campaignId>` and `route:subjects:<campaignId>` sorted sets via `rotationStrategy.refillRoutePool('names', campaignId, source)` / `refillRoutePool('subjects', campaignId, source)` where `source` is an async fn returning an array of strings. `resolveSenderRoute` already pops from these with anti-repeat + jitter.
+3. **Subject final resolution**: `resolveSenderRoute` returns `subjectRouteId` (the member string from `route:subjects:<campaignId>`); resolve it to final subject text in the dispatch path (Account 2 owns the subject pool text mapping).
 4. **Quota ceilings**: package quotas via `atomic.incrWithCeiling('package:{userId}:sent', ceiling)` — returns `{ allowed: false }` at ceiling.
 5. **Validator pipeline**: keep server-authoritative; UI only displays server numbers.
+6. **Sender auto-fill**: when a user uploads `credentials.json`, call `credentialParser.parseCredentialsJson(rawText)` then `credentialParser.persistSenders(senders, ownerId)` — returns the normalized sender docs so the UI populates the sender mailbox list instantly (Account 3 wires the UI hook).
+7. **Capability probing**: before routing, call `capabilityProbe.probeSenders(activeSenders)` (7-day cache, re-probes only stale). The `capabilities` field on each sender drives `determineMode` → ROTATE_POOL vs LOCK_MAIN.
