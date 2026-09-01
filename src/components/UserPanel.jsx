@@ -2061,6 +2061,7 @@ function SendTab({ stats, templates, campaigns, onSent, onCampaignClick, languag
           onRefreshThreshold={fetchThresholdStatus}
           onResumePaused={handleResumePaused}
           onAcknowledgeCredential={handleAcknowledgeCredential}
+          agreedTerms={agreedTerms}
         />
       ) : (
         /* ── CAMPAIGN SELECTOR (list of campaign cards) ── */
@@ -2221,6 +2222,7 @@ function CampaignEditor({
   subjectCategories, subjectTemplates, bodyTemplates, senderAccounts, remaining, stats,
   validationSteps, allCampaigns, onSelectCampaign,
   thresholdStatus, thresholdLoading, resumeLoading, onRefreshThreshold, onResumePaused, onAcknowledgeCredential,
+  agreedTerms,
 }) {
   const c = campaign;
   const u = (updates) => updateCampaign(c.id, updates);
