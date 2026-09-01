@@ -70,14 +70,14 @@ class MemoryFallback {
   }
   async incr(key) {
     const full = this._raw(key);
-    const e = this._cleanKey(key) || { value: '0', expiresAt: null };
+    const e = this._cleanKey(full) || { value: '0', expiresAt: null };
     const v = parseInt(e.value, 10) + 1;
     this._store.set(full, { value: String(v), expiresAt: e.expiresAt });
     return v;
   }
   async incrby(key, by) {
     const full = this._raw(key);
-    const e = this._cleanKey(key) || { value: '0', expiresAt: null };
+    const e = this._cleanKey(full) || { value: '0', expiresAt: null };
     const v = parseInt(e.value, 10) + by;
     this._store.set(full, { value: String(v), expiresAt: e.expiresAt });
     return v;
