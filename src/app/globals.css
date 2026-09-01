@@ -1,8 +1,64 @@
 @import "tailwindcss";
 
+/* ============================================================================
+   V7 P8.1 — Design System CSS layer
+   Slate/Charcoal premium dark theme + neon accent glow (electric cyan
+   #22d3ee / violet #8b5cf6). Tokens mirror src/lib/ui/theme.js so JS and CSS
+   share ONE source of truth. New components use these tokens; no hardcoded
+   hex in new files (ACCEPTANCE a).
+   ============================================================================ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Surface ladder (charcoal dark) */
+  --bg-void: #070A12;
+  --bg-base: #0B0F19;
+  --bg-panel: #0E1424;
+  --bg-panel-alt: #111827;
+  --bg-inset: #0A0E18;
+
+  /* Text ladder */
+  --text: #F1F5F9;
+  --text-muted: #94A3B8;
+  --text-faint: #64748B;
+  --text-ghost: #475569;
+
+  /* Borders */
+  --border: rgba(255,255,255,0.06);
+  --border-strong: rgba(255,255,255,0.12);
+  --border-accent: rgba(139,92,246,0.35);
+
+  /* Neon accents */
+  --accent-cyan: #22d3ee;
+  --accent-cyan-soft: rgba(34,211,238,0.16);
+  --accent-violet: #8b5cf6;
+  --accent-violet-soft: rgba(139,92,246,0.18);
+  --accent-indigo: #6366f1;
+  --accent-indigo-soft: rgba(99,102,241,0.16);
+  --accent-success: #34d399;
+  --accent-warning: #fbbf24;
+  --accent-danger: #f87171;
+  --accent-info: #38bdf8;
+
+  /* Radii */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-2xl: 22px;
+  --radius-3xl: 28px;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast: 160ms;
+  --dur-base: 240ms;
+  --dur-slow: 420ms;
+  --dur-page: 600ms;
+
+  /* Backwards-compat aliases for the original template tokens */
+  --background: var(--bg-base);
+  --foreground: var(--text);
 }
 
 @theme inline {
@@ -12,15 +68,215 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* The product is a dark-themed SaaS — default to dark surfaces. The original
+   prefers-color-scheme rule is preserved but the base palette is dark. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: var(--bg-base);
+    --foreground: var(--text);
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================================================
+   ANIMATED GRADIENT MESH BACKGROUND (GPU-cheap, respects reduced motion)
+   Applied to the app shell; uses the neon palette from theme.js.
+   ============================================================================ */
+@keyframes meshShift {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  50%  { transform: translate3d(2%, -2%, 0) scale(1.08); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+
+.v7-mesh-bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(at 20% 20%, rgba(139,92,246,0.10) 0px, transparent 50%),
+    radial-gradient(at 80% 30%, rgba(34,211,238,0.08) 0px, transparent 50%),
+    radial-gradient(at 50% 90%, rgba(99,102,241,0.07) 0px, transparent 50%);
+  animation: meshShift 18s var(--ease-in-out) infinite;
+  will-change: transform;
+}
+
+/* ============================================================================
+   KEYFRAME LIBRARY — premium micro-interactions (P8.4)
+   slideDown/slideIn were referenced by UserPanel but never defined — fixed.
+   ============================================================================ */
+@keyframes slideDown {
+  from { opacity: 0; transform: translate(-50%, -16px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes staggerIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34,211,238,0); }
+  50%      { box-shadow: 0 0 0 4px rgba(34,211,238,0.18); }
+}
+@keyframes spinReverse {
+  to { transform: rotate(-360deg); }
+}
+@keyframes drawDash {
+  to { stroke-dashoffset: 0; }
+}
+
+/* Utility animation classes (compose with Tailwind utilities) */
+.v7-anim-slide-down  { animation: slideDown var(--dur-base) var(--ease-out); }
+.v7-anim-slide-in    { animation: slideIn var(--dur-base) var(--ease-out); }
+.v7-anim-slide-up    { animation: slideUp var(--dur-base) var(--ease-out); }
+.v7-anim-fade-in     { animation: fadeIn var(--dur-base) var(--ease-out); }
+.v7-anim-scale-in    { animation: scaleIn var(--dur-base) var(--ease-spring); }
+.v7-anim-pulse-glow  { animation: pulseGlow 2.4s var(--ease-in-out) infinite; }
+.v7-anim-spin-rev    { animation: spinReverse 1s linear infinite; }
+
+/* ============================================================================
+   STAGGERED LIST — children fade/slide in with a tiny delay cascade
+   Apply .v7-stagger to the list container; children get incremental delay.
+   ============================================================================ */
+.v7-stagger > * {
+  opacity: 0;
+  animation: staggerIn var(--dur-base) var(--ease-out) forwards;
+}
+.v7-stagger > *:nth-child(1)  { animation-delay: 30ms; }
+.v7-stagger > *:nth-child(2)  { animation-delay: 60ms; }
+.v7-stagger > *:nth-child(3)  { animation-delay: 90ms; }
+.v7-stagger > *:nth-child(4)  { animation-delay: 120ms; }
+.v7-stagger > *:nth-child(5)  { animation-delay: 150ms; }
+.v7-stagger > *:nth-child(6)  { animation-delay: 180ms; }
+.v7-stagger > *:nth-child(7)  { animation-delay: 210ms; }
+.v7-stagger > *:nth-child(8)  { animation-delay: 240ms; }
+.v7-stagger > *:nth-child(9)  { animation-delay: 270ms; }
+.v7-stagger > *:nth-child(10) { animation-delay: 300ms; }
+.v7-stagger > *:nth-child(n+11) { animation-delay: 330ms; }
+
+/* ============================================================================
+   SKELETON + SHIMMER — loading placeholders (P8.4)
+   .v7-skeleton renders a shimmering dark block; no layout-shift flashes.
+   ============================================================================ */
+.v7-skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.04) 0%,
+    rgba(255,255,255,0.08) 50%,
+    rgba(255,255,255,0.04) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: var(--radius-md);
+}
+
+/* ============================================================================
+   GLASS PANELS — glassmorphic surfaces (P9.5)
+   .v7-glass-card / .v7-glass-modal / .v7-glass-inset mirror GLASS tokens.
+   ============================================================================ */
+.v7-glass-card {
+  background: rgba(14,20,36,0.55);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+.v7-glass-modal {
+  background: rgba(11,15,25,0.72);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-2xl);
+  box-shadow: 0 20px 50px rgba(0,0,0,0.55);
+}
+.v7-glass-inset {
+  background: rgba(7,10,18,0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+/* ============================================================================
+   GLOW ACCENTS — neon glow on primary actions only (P9.5)
+   .v7-glow-cyan / .v7-glow-violet / etc.
+   ============================================================================ */
+.v7-glow-cyan   { box-shadow: var(--accent-cyan-soft), 0 0 24px rgba(34,211,238,0.25); }
+.v7-glow-violet { box-shadow: var(--accent-violet-soft), 0 0 26px rgba(139,92,246,0.28); }
+.v7-glow-green  { box-shadow: rgba(52,211,153,0.16), 0 0 22px rgba(52,211,153,0.22); }
+.v7-glow-red    { box-shadow: rgba(248,113,113,0.16), 0 0 22px rgba(248,113,113,0.22); }
+.v7-glow-amber  { box-shadow: rgba(251,191,36,0.16), 0 0 22px rgba(251,191,36,0.22); }
+
+/* ============================================================================
+   CUSTOM SCROLLBARS — thin, on-brand (dark theme)
+   ============================================================================ */
+.v7-scroll::-webkit-scrollbar,
+.v7-scroll *::-webkit-scrollbar { width: 8px; height: 8px; }
+.v7-scroll::-webkit-scrollbar-track,
+.v7-scroll *::-webkit-scrollbar-track { background: transparent; }
+.v7-scroll::-webkit-scrollbar-thumb,
+.v7-scroll *::-webkit-scrollbar-thumb {
+  background: rgba(139,92,246,0.25);
+  border-radius: 9999px;
+}
+.v7-scroll::-webkit-scrollbar-thumb:hover,
+.v7-scroll *::-webkit-scrollbar-thumb:hover { background: rgba(139,92,246,0.45); }
+
+/* Firefox */
+.v7-scroll { scrollbar-width: thin; scrollbar-color: rgba(139,92,246,0.25) transparent; }
+
+/* ============================================================================
+   FOCUS RING — accessible, neon, consistent (P8.2 a11y)
+   ============================================================================ */
+.v7-focus:focus-visible {
+  outline: 2px solid var(--accent-cyan);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(34,211,238,0.18);
+}
+
+/* ============================================================================
+   PREFERS-REDUCED-MOTION — blanket disable (P8.4 / P9.5)
+   All animations/transitions are zeroed so motion-sensitive users get a
+   stable UI. This is the authoritative gate; inline durations are static.
+   ============================================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .v7-mesh-bg { animation: none !important; }
+  .v7-stagger > * { opacity: 1 !important; animation: none !important; }
+  .v7-skeleton { animation: none !important; }
 }
