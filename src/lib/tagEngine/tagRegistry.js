@@ -417,6 +417,13 @@ export async function removeCustomTag({ id, userId }) {
 export async function listCustomTags(userId) {
   if (!userId) return [];
   const uid = String(userId);
+  // Fast-fail: if MongoDB is not connected, return from cache or empty.
+  // This prevents 10s timeouts when the DB is unreachable (e.g. test env).
+  const ready = mongoose.connection.readyState;
+  if (ready !== 1) {
+    const cached = _customCache.get(uid);
+    return cached ? Array.from(cached.values()) : [];
+  }
   try {
     const docs = await CustomTag.find({ userId: uid }).lean().exec();
     const userMap = new Map();
