@@ -20,8 +20,8 @@
 
 ## P7 — Performance & Reliability
 - [x] P7.1 Observability (/api/system/health + /api/system/metrics) — 66/66 pass, build gate PASSED
-- [ ] P7.2 Indexes audit (docs/INDEX_REPORT.md)
-- [ ] P7.3 Load smoke test (scripts/smoke-load.js)
+- [x] P7.2 Indexes audit (docs/INDEX_REPORT.md) — 26 indexes/11 collections/3 TTL, 0 missing, commit 0aa5720
+- [x] P7.3 Load smoke test (scripts/smoke-load.js) — 200 seq + 50 concurrent, p95<500ms, commit 442e90b
 - [ ] P7.4 Build gate + final commit + push v7-dev
 
 ## Final
