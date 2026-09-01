@@ -115,7 +115,9 @@ function UserLogin({ onLoginSuccess }) {
   const countryStats = getCountryStats();
 
   return (
-    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4 v7-mesh-bg" style={{ backgroundColor: '#0B0F19' }}>
+    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4" style={{ backgroundColor: '#0B0F19' }}>
+      {/* Animated gradient background (separate fixed layer — does NOT move form) */}
+      <div className="v7-mesh-bg" aria-hidden="true" />
       {/* Animated gradient background */}
       <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950" />
       <div className="absolute inset-0 opacity-30">
@@ -436,7 +438,9 @@ function UserDashboard({ user, onLogout, onRefresh }) {
   ];
 
   return (
-    <div className="h-screen relative overflow-hidden flex flex-col v7-mesh-bg" style={{ backgroundColor: '#0B0F19' }}>
+    <div className="h-screen relative overflow-hidden flex flex-col" style={{ backgroundColor: '#0B0F19' }}>
+      {/* Animated mesh background (separate fixed layer — does NOT move content) */}
+      <div className="v7-mesh-bg" aria-hidden="true" />
       {/* v4.0 Slate/Charcoal ambient glow */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-0 left-1/3 w-[500px] h-[500px] bg-purple-600/5 rounded-full blur-[150px]" />

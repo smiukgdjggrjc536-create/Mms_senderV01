@@ -279,7 +279,9 @@ function AdminLogin({ onLoginSuccess }) {
   ];
 
   return (
-    <div className="min-h-screen v7-mesh-bg flex" style={{ backgroundColor: SURFACE.base }}>
+    <div className="min-h-screen flex" style={{ backgroundColor: SURFACE.base }}>
+      {/* Animated mesh background (separate fixed layer — does NOT move form) */}
+      <div className="v7-mesh-bg" aria-hidden="true" />
       {/* ── Left brand panel (hidden on mobile) ── */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-sky-950">
         {/* Animated gradient orbs */}
@@ -503,7 +505,9 @@ function AdminDashboard({ user, onLogout, onRefresh }) {
 
   return (
     <LoadingCtx.Provider value={withLoading}>
-    <div className="min-h-screen v7-mesh-bg text-gray-200" style={{ backgroundColor: SURFACE.base }}>
+    <div className="min-h-screen text-gray-200" style={{ backgroundColor: SURFACE.base }}>
+      {/* Animated mesh background (separate fixed layer — does NOT move content) */}
+      <div className="v7-mesh-bg" aria-hidden="true" />
       {/* Sidebar */}
       <div className={`fixed inset-y-0 left-0 w-64 v7-glass-inset border-r border-white/10 transform transition-transform z-40 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`} style={{ backgroundColor: SURFACE.panel }}>
         <div className="p-5 border-b border-slate-800">
