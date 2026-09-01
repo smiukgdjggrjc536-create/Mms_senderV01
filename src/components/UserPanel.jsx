@@ -323,6 +323,18 @@ function UserDashboard({ user, onLogout, onRefresh }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
+  // Tab registry — declared here (before paletteCommands) to avoid TDZ:
+  // paletteCommands useMemo references `tabs` in its deps array, and a `const`
+  // used before its declaration throws "Cannot access before initialization".
+  const tabs = [
+    { k: 'dashboard', l: 'Dashboard', I: Icon.Dashboard },
+    { k: 'send', l: 'Send Email', I: Icon.Send },
+    { k: 'countries', l: 'Deliverability', I: Icon.Shield },
+    { k: 'inbox', l: 'Inbox & Auto-Reply', I: Icon.Inbox },
+    { k: 'reports', l: 'Reports', I: Icon.Report },
+    { k: 'info', l: 'App Info', I: Icon.Info },
+  ];
+
   // V7 P9.6 — Command palette command registry
   const paletteCommands = useMemo(() => {
     const cmds = [
@@ -427,15 +439,6 @@ function UserDashboard({ user, onLogout, onRefresh }) {
   const platformName = settings?.platformName || 'Gmail Mailer';
   const logoUrl = settings?.logoUrl || '';
   const language = settings?.language || 'en';
-
-  const tabs = [
-    { k: 'dashboard', l: 'Dashboard', I: Icon.Dashboard },
-    { k: 'send', l: 'Send Email', I: Icon.Send },
-    { k: 'countries', l: 'Deliverability', I: Icon.Shield },
-    { k: 'inbox', l: 'Inbox & Auto-Reply', I: Icon.Inbox },
-    { k: 'reports', l: 'Reports', I: Icon.Report },
-    { k: 'info', l: 'App Info', I: Icon.Info },
-  ];
 
   return (
     <div className="h-screen relative overflow-hidden flex flex-col" style={{ backgroundColor: '#0B0F19' }}>
