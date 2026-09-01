@@ -292,6 +292,22 @@ export async function redisTokenBucket(key, capacity, refillPerSec, requested = 
 // ---------------------------------------------------------------------------
 // Reset helpers (mainly for tests)
 // ---------------------------------------------------------------------------
+
+/**
+ * Reset a single ceiling counter (both Redis and in-memory fallback).
+ * Used by engine.resetAiQuota to clear the daily AI quota counter.
+ */
+export async function resetCeiling(key) {
+  const counterKey = `ceiling:${key}`;
+  const redis = getRedisClient();
+  try {
+    await redis.del(counterKey);
+  } catch (err) {
+    // best-effort
+  }
+  _ceilings.delete(counterKey);
+}
+
 export async function _resetAtomicState() {
   _locks.clear();
   _ceilings.clear();
@@ -304,5 +320,6 @@ export default {
   incrWithCeiling,
   redisRateLimit,
   redisTokenBucket,
+  resetCeiling,
   _resetAtomicState,
 };
