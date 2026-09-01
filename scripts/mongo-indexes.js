@@ -184,6 +184,28 @@ const INDEXES = [
     spec: { actor: 1, action: 1, timestamp: -1 },
     options: {},
   },
+
+  // ── userpackages (P5.2 — Package Manager) ──
+  // userId already has a schema-level unique index, but we declare it here
+  // for explicit inventory visibility. packageName index supports package-
+  // distribution queries (e.g. "how many pro users?").
+  {
+    collection: 'userpackages',
+    name: 'userId_unique',
+    spec: { userId: 1 },
+    options: { unique: true },
+  },
+  {
+    collection: 'userpackages',
+    name: 'packageName',
+    spec: { packageName: 1 },
+    options: {},
+  },
+
+  // ── featuretoggles (P5.1 — Toggle Registry) ──
+  // Singleton document (one record). No query indexes needed beyond _id,
+  // but we declare the collection here for inventory completeness.
+  // No additional indexes required — getOrCreate() uses _id lookup.
 ];
 
 // ---------------------------------------------------------------------------
@@ -234,7 +256,7 @@ async function main() {
 
   // List all indexes per collection for verification
   console.log('\n=== Index Inventory ===');
-  const collections = ['users', 'campaigns', 'deliveryreports', 'emailaccounts', 'tag_maps', 'routing_audits', 'custom_tags', 'routing_configs', 'activitylogs'];
+  const collections = ['users', 'campaigns', 'deliveryreports', 'emailaccounts', 'tag_maps', 'routing_audits', 'custom_tags', 'routing_configs', 'activitylogs', 'userpackages', 'featuretoggles'];
   for (const colName of collections) {
     try {
       const indexes = await db.collection(colName).listIndexes().toArray();
