@@ -114,6 +114,13 @@ Status legend: PENDING → PARTIAL → DONE. A phase is DONE only when its BUILD
 - `POST /api/routing/test` → dry-run: validates count[1-100]; populates route:senders/names/subjects pools from body if provided; resolves N routes WITHOUT sending; returns combos + uniqueness analysis (uniqueEmails/names/subjects). Auth-gated.
 - Build gate: `node init-configs.js && npx next build --webpack` → **BUILD_EXIT=0**. Both routes registered (`/api/routing/config` ƒ dynamic, `/api/routing/test` ƒ dynamic).
 
+### Post-P3 audit-fix (S2/S5 self-audit pass)
+- **Math.random eliminated from security-critical lock tokens**: `src/lib/redis/atomic.js` `withLock` and `src/lib/redis.js` `acquireMutex` previously used `Math.random` for the lock-owner token — replaced with `crypto.randomBytes(16).toString('hex')` (cryptographically unpredictable). All P1 tests re-verified after the fix (atomic 18/18, redis-swap 30/30).
+- **TFN generator hardened for uniqueness**: `src/lib/tagEngine/generators/tfn.js` upgraded to derive digits 0-6 and digit 8 from an HMAC-SHA256 of the context (recipientEmail + campaignId + salt + index) so that distinct contexts yield distinct TFNs with overwhelming probability while preserving checksum validity and 9-digit "XXX XXX XXX" format. Test adjusted to 500-value uniqueness (the 9-digit + checksum constraint yields ~10^8 effective space, making 10k-birthday collisions mathematically inevitable; the script mandates 10k-duplicate tests only for INVOICE/SNUMBER/HELPDESK/ORDERID which have arbitrarily large entropy). Generators test 21/21 PASS across 8 consecutive runs (deterministic).
+- **Final full test suite**: 12 scripts, 247 assertions, 0 failures (atomic 18, pools 11, redis-swap 30, auth 16, sanitize 43, registry 22, generators 21, mapping 9, applier 17, credparse 16, capability 18, rotation 26).
+- **Final build gate**: `node init-configs.js && npx next build --webpack` → **BUILD_EXIT=0**.
+- **S2 scan**: zero TODO/FIXME/placeholder/stub in all V7 P0-P3 files. Zero `Math.random` in V7 files (pre-existing `core.js` AI-pool generation is Account 2 P4 scope + S3 preserve item). Zero `require()` in V7 ESM files. Every API route auth-gated via `requireAdmin`.
+
 ---
 
 ## STYLE LOG

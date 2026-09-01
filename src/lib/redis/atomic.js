@@ -15,6 +15,7 @@
 // Builds on the shared client in client.js. Never creates ad-hoc connections.
 // ============================================================================
 
+import crypto from 'crypto';
 import { getRedisClient, isRedisLive } from './client.js';
 
 let _fallbackWarned = false;
@@ -117,7 +118,7 @@ const _buckets = new Map();      // key -> { tokens, last }
  */
 export async function withLock(key, ttlMs, fn) {
   const lockKey = `lock:${key}`;
-  const token = `${Date.now()}-${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+  const token = `${Date.now()}-${crypto.randomBytes(16).toString('hex')}`;
   const redis = getRedisClient();
 
   let acquired = false;

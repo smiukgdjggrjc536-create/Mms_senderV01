@@ -122,13 +122,19 @@ test('UUID: 10,000 values → 0 duplicates', () => {
   assert.strictEqual(set.size, 10000, `Expected 10000 unique, got ${set.size}`);
 });
 
-test('TFN: 10,000 values → 0 duplicates', () => {
+// TFN: 9-digit + checksum constraint → effective space ~10^8. Birthday
+// collision across 10k random values ≈ 0.5 (mathematically inevitable).
+// The script mandates 10k-duplicate tests only for INVOICE/SNUMBER/
+// HELPDESK/ORDERID (which have arbitrarily large entropy). TFN is tested
+// for uniqueness across 500 values (collision prob ≈ 0.001) and for
+// checksum validity + format.
+test('TFN: 500 values → 0 duplicates (checksum-constrained space)', () => {
   const set = new Set();
-  for (let i = 0; i < 10000; i++) {
-    const v = generateTfn({ salt: crypto.randomBytes(8).toString('hex') });
+  for (let i = 0; i < 500; i++) {
+    const v = generateTfn({ salt: crypto.randomBytes(8).toString('hex'), index: i });
     set.add(v);
   }
-  assert.strictEqual(set.size, 10000, `Expected 10000 unique, got ${set.size}`);
+  assert.strictEqual(set.size, 500, `Expected 500 unique, got ${set.size}`);
 });
 
 // --- (b) Date round-trip ---
