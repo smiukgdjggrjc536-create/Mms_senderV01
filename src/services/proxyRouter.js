@@ -24,7 +24,7 @@
 // ============================================================================
 
 import { connectDB, logActivity } from '@/lib/core';
-import { proxyConfigSchema } from '../../models/proxyConfig.js';
+import { proxyConfigSchema } from '../models/proxyConfig.js';
 import {
   getRedis,
   cacheGet,

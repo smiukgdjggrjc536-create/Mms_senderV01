@@ -63,27 +63,12 @@ async function getSystemConfig() {
 //   - cooldownUntil is null OR cooldownUntil <= now
 // Sorted by lastUsedAt ascending (Round-Robin: least-recently-used first).
 // Accounts that have never been used (lastUsedAt null) sort first.
-// ---------------------------------------------------------------------------
-async function getAvailableAccounts() {
-  const now = new Date();
-  return EmailAccount.find({
-    status: 'ACTIVE',
-    sentToday: { $lt: '$dailyLimit' }, // placeholder, replaced below
-  })
-    .sort({ lastUsedAt: 1 })
-    .lean();
-}
-
-// We cannot use a $lt on a sibling field reference in a plain query, so we
-// fetch all ACTIVE accounts and filter by the per-doc limit in JS. This is
-// correct because the daily limit is per-account and may differ between
-// accounts (e.g. a warmed-up Gmail at 450/day vs a new one at 100/day).
 //
-// FIX (Google API): Daily auto-reset of `sentToday`. On every account fetch we
-// compare the stored `lastResetDate` (or `updatedAt` fallback) to today's
-// calendar date. If a new day has begun, we reset sentToday=0 in the DB so
-// accounts that hit their daily limit yesterday become usable again WITHOUT
-// needing an external cron scheduler (serverless-friendly).
+// NOTE (cleanup): a previous `getAvailableAccounts()` stub with a broken
+// placeholder query `{ sentToday: { $lt: '$dailyLimit' } }` (a string literal,
+// not a field reference) was removed — it was dead code, never imported or
+// called anywhere; the real implementation is `getUsableAccounts()` below.
+// ---------------------------------------------------------------------------
 async function getUsableAccounts(ownerId) {
   const now = new Date();
   const todayKey = now.toISOString().slice(0, 10); // YYYY-MM-DD

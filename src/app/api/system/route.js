@@ -1484,6 +1484,17 @@ export async function POST(req) {
           return jsonResponse({ success: false, error: 'Invalid test email: ' + (testCheck.reason || 'bad format') }, 422);
         }
         try {
+          // FIX (TDZ bug "Cannot access 'v' before initialization"):
+          // Previously this block referenced `geminiApi` via shorthand
+          // (`geminiApi,`), but the `const geminiApi` was declared ~80 lines
+          // BELOW (inside the full-send branch) in the SAME POST function
+          // scope. Accessing a `const` before its declaration line is a
+          // Temporal Dead Zone violation → ReferenceError, which in the
+          // production-minified (v4.0) build surfaced as
+          // "Cannot access 'v' before initialization" (geminiApi → 'v').
+          // We now fetch the best Gemini API HERE, in the test-mail scope,
+          // before it is used, so the binding is initialized.
+          const testGeminiApi = await getBestGeminiApi();
           const testOpts = {
             batchSize: 1, delayMs: 0, channel: 'email',
             subject: subject || (options && options.subject) || '',
@@ -1500,7 +1511,7 @@ export async function POST(req) {
           };
           const testRes = await bulkSendEngine({
             user, message, numbers: [testCheck.cleaned],
-            invalidNumbers: [], countryInfo: {}, geminiApi, appSettings: null,
+            invalidNumbers: [], countryInfo: {}, geminiApi: testGeminiApi, appSettings: null,
             campaign: null, options: testOpts,
           });
           return jsonResponse({
@@ -1515,7 +1526,16 @@ export async function POST(req) {
             spamScore: testRes.spamScore, spamReasons: testRes.spamReasons,
           });
         } catch (e) {
-          return jsonResponse({ success: false, testMail: true, error: e.message }, 500);
+          // FIX: include the error name + constructor so TDZ-class runtime
+          // errors (e.g. "Cannot access X before initialization") are fully
+          // diagnosable in the response instead of showing only the message.
+          return jsonResponse({
+            success: false,
+            testMail: true,
+            error: e.message,
+            errorName: e.name || 'Error',
+            errorStack: process.env.NODE_ENV === 'development' ? String(e.stack || '').split('\n').slice(0, 6) : undefined,
+          }, 500);
         }
       }
 
@@ -1781,10 +1801,18 @@ export async function POST(req) {
 
       // Check that the user has at least one usable sender account
       const ownerId = String(user._id);
+      // FIX (duplicate-$or key bug): the previous query object had TWO `$or`
+      // keys — in a JS object literal the second silently overwrites the first,
+      // so the ownerId multi-tenant isolation was dropped (only the cooldown
+      // $or survived). This let ANY active account be used regardless of owner.
+      // Combined into a single $and with both $or conditions (same pattern as
+      // queueRouter.getUsableAccounts).
       const usableAccounts = await EmailAccount.find({
         status: 'ACTIVE',
-        $or: [{ ownerId }, { ownerId: null, visibleToUsers: true }],
-        $or: [{ cooldownUntil: null }, { cooldownUntil: { $lte: new Date() } }],
+        $and: [
+          { $or: [{ ownerId }, { ownerId: null, visibleToUsers: true }] },
+          { $or: [{ cooldownUntil: null }, { cooldownUntil: { $lte: new Date() } }] },
+        ],
       }).lean();
       const usableFiltered = usableAccounts.filter(a => a.sentToday < (a.dailyLimit || 400));
       if (usableFiltered.length === 0) {
@@ -1997,7 +2025,7 @@ export async function POST(req) {
 
       // Try a token refresh + userinfo call to verify the API actually works
       try {
-        const { refreshAccessToken } = await import('@/services/senders/gmailSender.js');
+        const { refreshAccessToken } = await import('@/services/email/senders/gmailSender.js');
         const creds = account.credentials || {};
         const tokenJson = await refreshAccessToken({
           client_id: creds.clientId || creds.client_id,

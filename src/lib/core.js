@@ -24,12 +24,12 @@ import {
 // the project's `mongoose.models.X || mongoose.model()` pattern (see below)
 // so compiled-model caching is consistent with every other model in core.
 // No existing schema or route is modified.
-import { emailAccountSchema } from '../../models/emailAccount.js';
-import { carrierCacheSchema } from '../../models/carrierCache.js';
-import { systemConfigSchema } from '../../models/systemConfig.js';
-import { proxyConfigSchema } from '../../models/proxyConfig.js';
-import { featureToggleSchema } from '../../models/featureToggle.js';
-import { aiPoolItemSchema } from '../../models/aiPool.js';
+import { emailAccountSchema } from '../models/emailAccount.js';
+import { carrierCacheSchema } from '../models/carrierCache.js';
+import { systemConfigSchema } from '../models/systemConfig.js';
+import { proxyConfigSchema } from '../models/proxyConfig.js';
+import { featureToggleSchema } from '../models/featureToggle.js';
+import { aiPoolItemSchema } from '../models/aiPool.js';
 
 // ============================================================================
 // V7 P1.2 — Hardened auth primitives (NON-DESTRUCTIVE additive import).
@@ -1205,7 +1205,7 @@ async function bulkSendEngine(opts) {
   // APIs exist. This makes the email path the primary (not fallback) path.
   if (options.channel === 'email') {
     try {
-      const { bulkSendEngineEmailMMS } = await import('@/services/bulkSendEmailMms.js');
+      const { bulkSendEngineEmailMMS } = await import('@/services/email/bulkSendEmailMms.js');
       if (typeof bulkSendEngineEmailMMS === 'function') {
         const emailResult = await bulkSendEngineEmailMMS({
           user,
@@ -1226,8 +1226,18 @@ async function bulkSendEngine(opts) {
         });
         return emailResult;
       }
-    } catch (_emailErr) {
-      // fall through to the no_sender_api / SMS path below
+    } catch (emailErr) {
+      // FIX (TDZ-class robustness): when the caller EXPLICITLY requested the
+      // email channel, a failure in the email engine MUST be surfaced — not
+      // silently swallowed and masked by the SMS no_sender_api fallback. The
+      // previous code caught-and-dropped the error here, which hid the real
+      // root cause (e.g. "Cannot access X before initialization") behind a
+      // misleading "no_sender_api" message. We now re-throw so the
+      // /api/system sendCampaign + test-mail handler returns the true error.
+      // The NO_SENDER_ACCOUNT case (no EmailAccount configured) is the ONE
+      // legitimate "fall through" — it is NOT a thrown error, it is returned
+      // inside emailResult, so it does not reach this catch.
+      throw emailErr;
     }
   }
   if (allApis.length === 0) {
@@ -1243,7 +1253,7 @@ async function bulkSendEngine(opts) {
     // load time (bulkSendEmailMms imports sendMMS/prepareMms which themselves
     // late-import core).
     try {
-      const { bulkSendEngineEmailMMS } = await import('@/services/bulkSendEmailMms.js');
+      const { bulkSendEngineEmailMMS } = await import('@/services/email/bulkSendEmailMms.js');
       if (typeof bulkSendEngineEmailMMS === 'function') {
         const emailMmsResult = await bulkSendEngineEmailMMS({
           user,

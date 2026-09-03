@@ -48,7 +48,7 @@ import { connectDB } from '../../lib/core.js';
 
 // Lazy-load FeatureToggle to avoid circular import (featureToggle → mongoose)
 async function _getFeatureToggleModel() {
-  const mod = await import('../../../models/featureToggle.js');
+  const mod = await import('@/models/featureToggle.js');
   return mod.default;
 }
 

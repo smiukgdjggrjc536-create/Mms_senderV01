@@ -27,7 +27,7 @@ import {
   SystemConfig,
 } from '@/lib/core';
 import nodemailer from 'nodemailer';
-import { sendByProvider } from '@/services/senders/index.js';
+import { sendByProvider } from '@/services/email/senders/index.js';
 
 
 // ---------------------------------------------------------------------------

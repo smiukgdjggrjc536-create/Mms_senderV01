@@ -12,7 +12,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
 import { getThroughput24h, getP95Latency24h } from '@/lib/observability/metrics';
-import { getAllCircuitStates } from '../../../../services/circuitBreaker.js';
+import { getAllCircuitStates } from '@/services/circuitBreaker.js';
 import { getMetric } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';

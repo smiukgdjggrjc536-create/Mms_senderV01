@@ -18,7 +18,7 @@
 // ============================================================================
 
 import { connectDB, verifyToken, jsonResponse, validateEmailAddress } from '@/lib/core';
-import { prepareEmailPayload } from '@/services/prepareEmail.js';
+import { prepareEmailPayload } from '@/services/email/prepareEmail.js';
 
 // ---------------------------------------------------------------------------
 // Auth helpers (mirrors /api/admin/gateway/route.js)

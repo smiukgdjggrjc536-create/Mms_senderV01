@@ -18,7 +18,7 @@ import { sanitizeInput } from '../validate/sanitize.js';
 
 // Lazy-load FeatureToggle model
 async function _getFeatureToggleModel() {
-  const mod = await import('../../../models/featureToggle.js');
+  const mod = await import('@/models/featureToggle.js');
   return mod.default;
 }
 

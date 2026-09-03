@@ -31,7 +31,7 @@
 let _proxyRouterPromise = null;
 function getProxyRouter() {
   if (!_proxyRouterPromise) {
-    _proxyRouterPromise = import('../../src/services/proxyRouter.js');
+    _proxyRouterPromise = import('@/services/proxyRouter.js');
   }
   return _proxyRouterPromise;
 }
