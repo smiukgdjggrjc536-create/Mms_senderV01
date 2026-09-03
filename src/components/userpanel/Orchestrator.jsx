@@ -1,28 +1,35 @@
 // ============================================================================
-// V7 P9.1 — Orchestrator: 3-zone Campaign Composer command deck
+// MAX-LEVEL ORCHESTRATOR — 3-zone Campaign Composer command deck
 // ----------------------------------------------------------------------------
-// A premium "command deck" layout that re-frames the campaign editor into
-// three dedicated zones:
+// Premium "command deck" layout that frames the campaign editor into three
+// dedicated glassmorphism zones, each with a branded accent header. The
+// ComposureCoach and BodyLab are upgraded to MAX-LEVEL with bigger rings,
+// clearer typography, and "Max" AI persona voice.
 //
 //   1. AUDIENCE       — recipient targeting, email paste/import, count + health
 //   2. MESSAGE STUDIO — subject + body editor, tag pills, AI Composure Coach
 //                       live-score, Body Lab A/B variant comparison
 //   3. LIVE INTEL     — real-time send stats, delivery rate, threshold status,
-//                       validator pipeline progress, send controls
+//                       send controls
 //
 // The Orchestrator is a LAYOUT SHELL — it receives the campaign state + update
 // fn and renders the three zones, delegating the actual editor controls to
-// children passed in or rendered inline.  It PRESERVES the existing props
-// contract (thresholdStatus, updateCampaign, PANEL_MODE, God-Mode toggles).
+// children passed in. PRESERVES the existing props contract (thresholdStatus,
+// updateCampaign, PANEL_MODE, God-Mode toggles) and named exports
+// (scoreComposure, ComposureCoach, BodyLab, default Orchestrator).
 //
-// Mirror of Accounts 1-2 STYLE LOG: ESM only, try/catch, small modular file,
-// camelCase, crypto-only.
+// ESM only, camelCase, crypto-only, try/catch where meaningful.
 // ============================================================================
 
 import { useEffect, useMemo, useState } from 'react';
-import { cx, SURFACE, ACCENT, RADIUS, SHADOW, MOTION } from '@/lib/ui/theme.js';
+import { cx, ACCENT } from '@/lib/ui/theme.js';
 import Icon from '@/components/userpanel/icons.jsx';
 import { StaggerItem } from '@/components/userpanel/PageTransition.jsx';
+
+// ---------------------------------------------------------------------------
+// Max persona constant (kept in sync with SendStudio)
+// ---------------------------------------------------------------------------
+const MAX_NAME = 'Max';
 
 // ---------------------------------------------------------------------------
 // AI Composure Coach — live-scores the body text (client-side heuristic)
@@ -30,9 +37,9 @@ import { StaggerItem } from '@/components/userpanel/PageTransition.jsx';
 
 /**
  * Score a message body for "composure" — readability, length, personalization,
-// spam-risk, structure.  Returns { score, grade, tips[] }.
- * This is a FAST client-side heuristic (no API call) so it updates live as
- * the user types.  The server-side AI spam check (existing) is the authority.
+ * spam-risk, structure. Returns { score, grade, tips[] }.
+ * FAST client-side heuristic (no API call) so it updates live as the user
+ * types. The server-side AI spam check (existing) is the authority.
  *
  * @param {string} body
  * @param {string} subject
@@ -91,7 +98,7 @@ export function scoreComposure(body = '', subject = '') {
 }
 
 // ---------------------------------------------------------------------------
-// ComposureCoach — renders the live score ring + tips
+// ComposureCoach — MAX-LEVEL live score ring + tips with Max persona
 // ---------------------------------------------------------------------------
 
 function ComposureCoach({ body, subject }) {
@@ -100,47 +107,53 @@ function ComposureCoach({ body, subject }) {
     [body, subject]
   );
 
-  const ringSize = 56;
-  const ringR = (ringSize - 8) / 2;
+  // Bigger, more legible ring
+  const ringSize = 64;
+  const ringR = (ringSize - 10) / 2;
   const ringC = 2 * Math.PI * ringR;
   const dash = (score / 100) * ringC;
   const color = score >= 70 ? ACCENT.success : score >= 45 ? ACCENT.warning : ACCENT.danger;
+  const statusLabel = score >= 70 ? 'Excellent' : score >= 45 ? 'Needs work' : 'High risk';
 
   return (
-    <div className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/5">
+    <div className="flex items-start gap-3 p-3.5 rounded-xl bg-white/[0.03] border border-white/8 hover:border-white/12 transition">
       {/* Score ring */}
       <div className="relative shrink-0" style={{ width: ringSize, height: ringSize }}>
         <svg width={ringSize} height={ringSize}>
-          <circle cx={ringSize / 2} cy={ringSize / 2} r={ringR} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="4" />
+          <circle cx={ringSize / 2} cy={ringSize / 2} r={ringR} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="5" />
           <circle
-            cx={ringSize / 2} cy={ringSize / 2} r={ringR} fill="none" stroke={color} strokeWidth="4"
+            cx={ringSize / 2} cy={ringSize / 2} r={ringR} fill="none" stroke={color} strokeWidth="5"
             strokeDasharray={`${dash} ${ringC}`} strokeLinecap="round"
             transform={`rotate(-90 ${ringSize / 2} ${ringSize / 2})`}
             className="transition-all duration-700"
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-sm font-bold text-white">{score}</span>
-          <span className="text-[8px] text-gray-400 -mt-0.5">{grade}</span>
+          <span className="text-[16px] font-bold text-white leading-none tabular-nums">{score}</span>
+          <span className="text-[10px] text-gray-400 font-bold mt-0.5">{grade}</span>
         </div>
       </div>
-      {/* Tips */}
+      {/* Tips + persona */}
       <div className="flex-1 min-w-0">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-violet-400 flex items-center gap-1 mb-1">
-          <Icon.Sparkle className="w-3 h-3" /> AI Composure Coach
-        </p>
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-gradient-to-br from-violet-600 to-indigo-600">
+            <Icon.Sparkle className="w-3 h-3 text-white" />
+          </span>
+          <p className="text-[12px] font-bold uppercase tracking-wide text-violet-400">{MAX_NAME} · Composure Coach</p>
+          <span className="ml-auto text-[11px] font-semibold" style={{ color }}>{statusLabel}</span>
+        </div>
         {tips.length > 0 ? (
-          <ul className="space-y-0.5">
+          <ul className="space-y-1">
             {tips.map((t, i) => (
-              <li key={i} className="text-[10px] text-gray-400 flex items-start gap-1">
-                <span className="text-violet-500 mt-0.5">•</span>
+              <li key={i} className="text-[12px] text-gray-400 flex items-start gap-1.5 leading-relaxed">
+                <span className="text-violet-500 mt-0.5 shrink-0">•</span>
                 <span>{t}</span>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="text-[10px] text-emerald-400 flex items-center gap-1">
-            <Icon.CheckCircle className="w-3 h-3" /> Looks great — ready to send.
+          <p className="text-[12px] text-emerald-400 flex items-center gap-1.5">
+            <Icon.CheckCircle className="w-3.5 h-3.5" /> Looks great — ready to send.
           </p>
         )}
       </div>
@@ -149,7 +162,7 @@ function ComposureCoach({ body, subject }) {
 }
 
 // ---------------------------------------------------------------------------
-// BodyLab — A/B variant comparison
+// BodyLab — MAX-LEVEL A/B variant comparison
 // ---------------------------------------------------------------------------
 
 /**
@@ -169,37 +182,38 @@ function BodyLab({ bodyA, bodyB, onSetBodyB, subject }) {
     return (
       <button
         onClick={() => setShowLab(true)}
-        className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-violet-500/10 border border-violet-500/20 text-violet-300 text-[10px] font-semibold hover:bg-violet-500/20 transition"
+        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-violet-500/10 border border-violet-500/20 text-violet-300 text-[12px] font-semibold hover:bg-violet-500/20 hover:border-violet-500/30 transition"
       >
-        <Icon.Beaker className="w-3 h-3" /> Open Body Lab — A/B Test
+        <Icon.Beaker className="w-4 h-4" /> Open Body Lab — A/B Test
       </button>
     );
   }
 
   return (
-    <div className="rounded-xl bg-white/[0.02] border border-white/5 p-3 space-y-2">
+    <div className="rounded-xl bg-white/[0.03] border border-white/8 p-3.5 space-y-2.5">
       <div className="flex items-center justify-between">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-violet-400 flex items-center gap-1">
-          <Icon.Beaker className="w-3 h-3" /> Body Lab — A/B Comparison
-        </p>
-        <button onClick={() => setShowLab(false)} className="text-gray-500 hover:text-gray-300 text-[10px]">✕</button>
+        <div className="flex items-center gap-1.5">
+          <Icon.Beaker className="w-4 h-4 text-violet-400" />
+          <p className="text-[12px] font-bold uppercase tracking-wide text-violet-400">Body Lab — A/B Comparison</p>
+        </div>
+        <button onClick={() => setShowLab(false)} className="text-gray-500 hover:text-gray-300 text-[14px] w-6 h-6 flex items-center justify-center rounded-md hover:bg-white/5 transition">✕</button>
       </div>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-2.5">
         {/* Variant A */}
-        <div className={cx('rounded-lg p-2 border', winner === 'A' ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-white/5 bg-white/[0.02]')}>
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[9px] font-bold text-gray-400">A (current)</span>
-            <span className={cx('text-[9px] font-bold', winner === 'A' ? 'text-emerald-400' : 'text-gray-500')}>
+        <div className={cx('rounded-lg p-2.5 border transition', winner === 'A' ? 'border-emerald-500/40 bg-emerald-500/5 shadow-[0_0_12px_rgba(52,211,153,0.12)]' : 'border-white/8 bg-white/[0.02]')}>
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[11px] font-bold text-gray-400">A (current)</span>
+            <span className={cx('text-[11px] font-bold', winner === 'A' ? 'text-emerald-400' : 'text-gray-500')}>
               {scoreA.score} · {scoreA.grade}{winner === 'A' ? ' 👑' : ''}
             </span>
           </div>
-          <div className="text-[9px] text-gray-500 font-mono line-clamp-4 max-h-16 overflow-hidden">{bodyA.slice(0, 200) || '—'}</div>
+          <div className="text-[11px] text-gray-500 font-mono line-clamp-4 max-h-20 overflow-hidden leading-relaxed">{bodyA.slice(0, 240) || '—'}</div>
         </div>
         {/* Variant B */}
-        <div className={cx('rounded-lg p-2 border', winner === 'B' ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-white/5 bg-white/[0.02]')}>
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[9px] font-bold text-gray-400">B (variant)</span>
-            <span className={cx('text-[9px] font-bold', winner === 'B' ? 'text-emerald-400' : 'text-gray-500')}>
+        <div className={cx('rounded-lg p-2.5 border transition', winner === 'B' ? 'border-emerald-500/40 bg-emerald-500/5 shadow-[0_0_12px_rgba(52,211,153,0.12)]' : 'border-white/8 bg-white/[0.02]')}>
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[11px] font-bold text-gray-400">B (variant)</span>
+            <span className={cx('text-[11px] font-bold', winner === 'B' ? 'text-emerald-400' : 'text-gray-500')}>
               {scoreB.score} · {scoreB.grade}{winner === 'B' ? ' 👑' : ''}
             </span>
           </div>
@@ -207,14 +221,14 @@ function BodyLab({ bodyA, bodyB, onSetBodyB, subject }) {
             value={bodyB}
             onChange={(e) => onSetBodyB(e.target.value)}
             placeholder="Type variant B…"
-            className="w-full h-16 bg-transparent text-[9px] text-gray-300 font-mono resize-none focus:outline-none border border-white/5 rounded p-1"
+            className="w-full h-20 bg-white/[0.02] text-[11px] text-gray-300 font-mono resize-none focus:outline-none focus:ring-1 focus:ring-violet-500/40 border border-white/5 rounded-md p-2 transition"
           />
         </div>
       </div>
       {winner !== 'tie' && (
         <button
           onClick={() => { onSetBodyB(''); /* swap handled by parent */ }}
-          className="w-full py-1.5 rounded-lg bg-violet-500/15 border border-violet-500/20 text-violet-300 text-[9px] font-semibold hover:bg-violet-500/25 transition"
+          className="w-full py-2 rounded-lg bg-violet-500/15 border border-violet-500/20 text-violet-300 text-[12px] font-semibold hover:bg-violet-500/25 hover:border-violet-500/30 transition"
         >
           Promote variant {winner} to primary
         </button>
@@ -224,29 +238,29 @@ function BodyLab({ bodyA, bodyB, onSetBodyB, subject }) {
 }
 
 // ---------------------------------------------------------------------------
-// ZoneHeader — consistent zone title bar
+// ZoneHeader — MAX-LEVEL branded zone title bar with accent ring + glow
 // ---------------------------------------------------------------------------
 
 const ZONE_ACCENT = {
-  violet: { bg: 'bg-violet-500/15', text: 'text-violet-400' },
-  cyan:   { bg: 'bg-cyan-500/15',   text: 'text-cyan-400' },
-  emerald:{ bg: 'bg-emerald-500/15',text: 'text-emerald-400' },
-  amber:  { bg: 'bg-amber-500/15',  text: 'text-amber-400' },
-  rose:   { bg: 'bg-rose-500/15',   text: 'text-rose-400' },
+  violet:  { bg: 'bg-violet-500/15',   text: 'text-violet-400',   ring: 'ring-violet-500/30',   glow: 'shadow-[0_0_16px_rgba(139,92,246,0.15)]' },
+  cyan:    { bg: 'bg-cyan-500/15',     text: 'text-cyan-400',     ring: 'ring-cyan-500/30',     glow: 'shadow-[0_0_16px_rgba(34,211,238,0.15)]' },
+  emerald: { bg: 'bg-emerald-500/15',  text: 'text-emerald-400',  ring: 'ring-emerald-500/30',  glow: 'shadow-[0_0_16px_rgba(52,211,153,0.15)]' },
+  amber:   { bg: 'bg-amber-500/15',    text: 'text-amber-400',    ring: 'ring-amber-500/30',    glow: 'shadow-[0_0_16px_rgba(251,191,36,0.15)]' },
+  rose:    { bg: 'bg-rose-500/15',     text: 'text-rose-400',     ring: 'ring-rose-500/30',     glow: 'shadow-[0_0_16px_rgba(244,63,94,0.15)]' },
 };
 
 function ZoneHeader({ icon, title, subtitle, accent = 'violet', right }) {
   const Ic = Icon[icon] || Icon.Layers;
   const ac = ZONE_ACCENT[accent] || ZONE_ACCENT.violet;
   return (
-    <div className="flex items-center justify-between mb-2">
-      <div className="flex items-center gap-2">
-        <div className={cx('w-6 h-6 rounded-lg flex items-center justify-center', ac.bg)}>
-          <Ic className={cx('w-3.5 h-3.5', ac.text)} />
+    <div className="flex items-center justify-between mb-3 pb-3 border-b border-white/5">
+      <div className="flex items-center gap-2.5">
+        <div className={cx('w-8 h-8 rounded-xl flex items-center justify-center ring-1', ac.bg, ac.ring, ac.glow)}>
+          <Ic className={cx('w-4 h-4', ac.text)} />
         </div>
         <div>
-          <p className="text-[11px] font-bold text-gray-200">{title}</p>
-          {subtitle && <p className="text-[9px] text-gray-500">{subtitle}</p>}
+          <p className="text-[13px] font-bold text-gray-100 leading-tight">{title}</p>
+          {subtitle && <p className="text-[11px] text-gray-500 leading-tight mt-0.5">{subtitle}</p>}
         </div>
       </div>
       {right}
@@ -255,7 +269,7 @@ function ZoneHeader({ icon, title, subtitle, accent = 'violet', right }) {
 }
 
 // ---------------------------------------------------------------------------
-// Orchestrator — main 3-zone shell
+// Orchestrator — MAX-LEVEL main 3-zone shell
 // ---------------------------------------------------------------------------
 
 /**
@@ -285,17 +299,17 @@ export default function Orchestrator({
   useEffect(() => { setBodyB(''); }, [c.id]);
 
   return (
-    <div className={cx('grid gap-3 flex-1 min-h-0', compact ? 'grid-cols-1' : 'grid-cols-1 xl:grid-cols-3')}>
+    <div className={cx('grid gap-3 flex-1 min-h-0 mt-3', compact ? 'grid-cols-1' : 'grid-cols-1 xl:grid-cols-3')}>
       {/* Zone 1: Audience */}
-      <StaggerItem index={0} className="rounded-2xl bg-white/[0.02] border border-white/5 p-3 flex flex-col min-h-0 overflow-y-auto">
+      <StaggerItem index={0} className="rounded-2xl bg-white/[0.025] border border-white/8 p-4 flex flex-col min-h-0 overflow-y-auto backdrop-blur-sm hover:border-white/12 transition">
         <ZoneHeader icon="Users" title="Audience" subtitle="Recipients & targeting" accent="cyan" />
-        <div className="space-y-2">{audienceZone}</div>
+        <div className="space-y-3">{audienceZone}</div>
       </StaggerItem>
 
       {/* Zone 2: Message Studio */}
-      <StaggerItem index={1} className="rounded-2xl bg-white/[0.02] border border-white/5 p-3 xl:col-span-1 flex flex-col min-h-0 overflow-y-auto">
+      <StaggerItem index={1} className="rounded-2xl bg-white/[0.025] border border-white/8 p-4 xl:col-span-1 flex flex-col min-h-0 overflow-y-auto backdrop-blur-sm hover:border-white/12 transition">
         <ZoneHeader icon="Edit" title="Message Studio" subtitle="Subject + body + tags" accent="violet" />
-        <div className="space-y-2">
+        <div className="space-y-3">
           {messageZone}
           <ComposureCoach body={c.message || ''} subject={c.subject || ''} />
           <BodyLab bodyA={c.message || ''} bodyB={bodyB} onSetBodyB={setBodyB} subject={c.subject || ''} />
@@ -303,9 +317,9 @@ export default function Orchestrator({
       </StaggerItem>
 
       {/* Zone 3: Live Intelligence */}
-      <StaggerItem index={2} className="rounded-2xl bg-white/[0.02] border border-white/5 p-3 flex flex-col min-h-0 overflow-y-auto">
+      <StaggerItem index={2} className="rounded-2xl bg-white/[0.025] border border-white/8 p-4 flex flex-col min-h-0 overflow-y-auto backdrop-blur-sm hover:border-white/12 transition">
         <ZoneHeader icon="Activity" title="Live Intel" subtitle="Send stats & controls" accent="emerald" />
-        <div className="space-y-2 flex-1 flex flex-col">{intelZone}</div>
+        <div className="space-y-3 flex-1 flex flex-col">{intelZone}</div>
       </StaggerItem>
     </div>
   );
